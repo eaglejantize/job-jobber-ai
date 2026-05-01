@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Phone, Check, ArrowRight, Wrench, Snowflake, Zap, KeyRound, Sparkles, Scale, Building2, Droplet, HandHeart } from "lucide-react";
+import { Phone, Check, ArrowRight, Wrench, Snowflake, Zap, KeyRound, Sparkles, Scale, Building2, Droplet, HandHeart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Layout from "@/components/Layout";
 import DemoNumberCard from "@/components/DemoNumberCard";
@@ -7,6 +7,7 @@ import SampleConversation from "@/components/SampleConversation";
 import SampleLeadCard from "@/components/SampleLeadCard";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
+import { RECEPTIONIST_FLOW, RECEPTIONIST_OPENING, RECEPTIONIST_CLOSING, RECEPTIONIST_DONTS } from "@/lib/receptionistScript";
 
 const industries = [
   { name: "Appliance Repair", icon: Wrench },
@@ -105,6 +106,71 @@ export default function Index() {
           <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-8">
             <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
           </Button>
+        </div>
+      </section>
+
+      {/* WHAT IT ACTUALLY DOES */}
+      <section className="container py-16">
+        <div className="text-center max-w-2xl mx-auto mb-10">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">No fluff</p>
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Here's exactly what your receptionist does</h2>
+          <p className="mt-4 text-muted-foreground text-lg">
+            Short. Natural. Designed to capture the lead and hang up fast.
+          </p>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          {/* The flow */}
+          <div className="rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-4">The flow</p>
+            <div className="rounded-xl bg-primary/10 border border-primary/20 px-4 py-3 mb-5">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Opens with</p>
+              <p className="font-semibold">"{RECEPTIONIST_OPENING}"</p>
+            </div>
+            <ol className="space-y-3">
+              {RECEPTIONIST_FLOW.map((step, i) => (
+                <li key={step.label} className="flex items-start gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary font-bold text-sm">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">{step.label}</p>
+                    <p className="font-medium">"{step.line}"</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-5 rounded-xl bg-secondary/60 border border-border px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Closes with</p>
+              <p className="font-medium text-sm">"{RECEPTIONIST_CLOSING}"</p>
+            </div>
+          </div>
+
+          {/* What it never does */}
+          <div className="rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-4">What it never does</p>
+            <ul className="space-y-3">
+              {RECEPTIONIST_DONTS.map((d) => (
+                <li key={d} className="flex items-start gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
+                    <X className="h-4 w-4" />
+                  </span>
+                  <p className="font-medium pt-0.5">{d}</p>
+                </li>
+              ))}
+              <li className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
+                  <X className="h-4 w-4" />
+                </span>
+                <p className="font-medium pt-0.5">Waste your customer's time</p>
+              </li>
+            </ul>
+            <div className="mt-6 rounded-xl bg-primary/10 border border-primary/30 p-4">
+              <p className="text-sm font-semibold">Average call: under 90 seconds.</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                You get the lead by SMS before they hang up.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
