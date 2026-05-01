@@ -1,0 +1,53 @@
+export const DEMO_NUMBER = "(904) 555-0142";
+export const DEMO_NUMBER_AVAILABLE = false;
+
+export const INDUSTRIES = [
+  "Appliance Repair",
+  "HVAC",
+  "Plumbing",
+  "Electrical",
+  "Locksmith",
+  "Med Spa",
+  "Law Firm",
+  "Roofing",
+  "Garage Door",
+  "Pest Control",
+  "Other Local Service",
+];
+
+export const TONES = ["Friendly", "Professional", "Direct", "Warm"] as const;
+export type Tone = typeof TONES[number];
+
+export const DEFAULT_INTAKE_QUESTIONS = [
+  "Caller name",
+  "Phone number",
+  "Address",
+  "Service needed",
+  "Appliance / equipment type",
+  "Model number",
+  "Urgency",
+  "Preferred appointment window",
+  "Warranty or repeat customer",
+];
+
+export const TRANSFER_TRIGGERS = [
+  "Emergency",
+  "Angry customer",
+  "Existing customer",
+  "High-value job",
+  "Caller requests human",
+];
+
+export const FALLBACK_ACTIONS = [
+  "Take a message",
+  "Send SMS to owner",
+  "Tell customer someone will call back",
+] as const;
+
+export const REQUEST_TYPES = [
+  "Set up my assistant",
+  "Connect my phone number",
+  "Build my script",
+  "Test my demo",
+  "Other",
+];
