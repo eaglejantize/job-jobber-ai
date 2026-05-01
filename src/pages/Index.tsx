@@ -210,7 +210,7 @@ export default function Index() {
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            "Forward your business number to CallCapture",
+            "Forward your business number to TryCallCapture",
             "We set up your AI receptionist with your script",
             "Calls get answered 24/7 — even after hours",
             "Get new leads sent to your phone instantly",
@@ -287,7 +287,7 @@ export default function Index() {
           <p className="mt-3 text-muted-foreground">One plan. Pays for itself with 1–2 captured jobs.</p>
         </div>
         <div className="max-w-md mx-auto rounded-2xl border-2 border-primary bg-card p-8 shadow-glow">
-          <p className="text-xs uppercase tracking-widest text-primary font-semibold">CallCapture Pro</p>
+            <p className="text-xs uppercase tracking-widest text-primary font-semibold">TryCallCapture Pro</p>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-5xl font-bold">$197</span>
             <span className="text-muted-foreground">/month</span>

@@ -23,7 +23,7 @@ export default function SiteNav() {
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-cta text-primary-foreground shadow-glow">
             <Phone className="h-4 w-4" />
           </span>
-          <span>CallCapture</span>
+          <span>TryCallCapture</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">

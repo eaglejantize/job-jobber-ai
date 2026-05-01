@@ -286,7 +286,7 @@ export default function Setup() {
                   <Check className="h-4 w-4" /> Save to my dashboard
                 </Button>
                 <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Saves to your CallCapture account so you can access it later.
+                  Saves to your TryCallCapture account so you can access it later.
                 </p>
               </div>
             </div>

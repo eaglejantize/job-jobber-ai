@@ -9,7 +9,7 @@ export default function SiteFooter() {
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-cta text-primary-foreground">
             <Phone className="h-3.5 w-3.5" />
           </span>
-          CallCapture
+          TryCallCapture
         </div>
         <p>Turn missed calls into booked jobs.</p>
         <div className="flex gap-5">
