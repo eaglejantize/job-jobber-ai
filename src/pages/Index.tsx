@@ -172,6 +172,19 @@ export default function Index() {
             </div>
           </div>
         </div>
+
+        {/* Existing customers too */}
+        <div className="mt-6 max-w-5xl mx-auto rounded-2xl border border-primary/30 bg-primary/5 p-5 md:p-6 flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <Check className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">Existing customers calling back? Handled.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              If a caller says "I already have an appointment" or "I need a callback," the receptionist takes a quick message and flags it as an <span className="font-semibold text-foreground">Existing Customer Request</span> — high priority if they're upset or waiting.
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* COST OF MISSED CALLS */}
