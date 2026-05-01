@@ -22,7 +22,10 @@ export default function DemoNumberCard() {
         {DEMO_NUMBER}
       </a>
       <p className="text-sm text-muted-foreground mt-2">
-        Takes 30 seconds to experience. No signup required.
+        Takes 30 seconds. No signup required.
+      </p>
+      <p className="text-sm text-muted-foreground mt-1">
+        Hear exactly what your customers experience.
       </p>
       <div className="mt-5 flex flex-col sm:flex-row gap-2">
         <Button asChild className="bg-cta hover:opacity-90 shadow-glow flex-1">

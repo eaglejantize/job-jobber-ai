@@ -33,45 +33,41 @@ export default function Index() {
     <Layout>
       {/* HERO */}
       <section className="bg-hero">
-        <div className="container py-20 md:py-28 grid lg:grid-cols-2 gap-12 items-center">
+        <div className="container pt-12 pb-8 md:pt-16 md:pb-10 grid lg:grid-cols-2 gap-10 items-center">
           <div>
-            <p className="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase text-primary mb-5">
+            <p className="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase text-primary mb-4">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Turn missed calls into booked jobs
             </p>
             <h1 className="text-4xl md:text-6xl font-bold leading-[1.05] tracking-tight">
               Stop Missing Service Calls — <span className="text-primary">Even After Hours</span>
             </h1>
-            <p className="mt-5 text-base md:text-lg font-semibold text-primary">
-              Never miss another $150–$500 job because you missed a call.
+            <p className="mt-5 text-lg md:text-2xl font-semibold">
+              Answer every call. Capture details. Get booked jobs.
             </p>
-            <p className="mt-4 text-lg md:text-xl text-muted-foreground max-w-xl">
-              CallCapture answers every call, collects customer details, and sends you a ready-to-book lead instantly.
+            <p className="mt-3 text-base md:text-lg text-primary font-semibold">
+              Every missed call is a lost job.
             </p>
-            <p className="mt-5 text-base md:text-lg">
-              <span className="text-muted-foreground">Call the live demo: </span>
-              <a
-                href={`tel:${DEMO_NUMBER_TEL}`}
-                className="font-bold text-primary hover:underline tabular-nums"
-              >
-                {DEMO_NUMBER}
-              </a>
-            </p>
-            <div className="mt-8 flex flex-col sm:flex-row gap-3">
-              <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-7">
-                <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-4 w-4" /> Call the Demo</a>
+            <div className="mt-7 flex flex-col sm:flex-row gap-3">
+              <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+                <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
               </Button>
-              <Button asChild size="lg" variant="outline" className="text-base h-12 px-7 border-primary/40">
+              <Button asChild size="lg" variant="outline" className="text-base h-14 px-7 border-primary/40">
                 <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
               </Button>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">Takes 30 seconds to try • No signup required</p>
-            <div className="mt-5 flex items-center gap-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> No contracts</span>
-              <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Live in 24 hours</span>
-            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Works for appliance repair, HVAC, plumbing, and more.
+            </p>
           </div>
           <div className="lg:pl-8">
             <DemoNumberCard />
+          </div>
+        </div>
+        <div className="border-t border-border/60 bg-card/40">
+          <div className="container py-3 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> No contracts</span>
+            <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Live in 24 hours</span>
+            <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Pays for itself with 1–2 jobs</span>
           </div>
         </div>
       </section>
