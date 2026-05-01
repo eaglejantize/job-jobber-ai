@@ -5,7 +5,7 @@ export default function SampleLeadCard() {
     { icon: User, label: "Name", value: "Sarah Johnson" },
     { icon: Phone, label: "Phone", value: "(904) 555-0198" },
     { icon: MapPin, label: "Address", value: "123 Main St, Jacksonville, FL" },
-    { icon: Wrench, label: "Service Needed", value: "Refrigerator not cooling" },
+    { icon: Wrench, label: "Service", value: "Refrigerator not cooling" },
     { icon: AlertCircle, label: "Urgency", value: "High" },
     { icon: FileText, label: "Call Summary", value: "Caller needs refrigerator repair and wants a callback today." },
   ];
@@ -13,7 +13,7 @@ export default function SampleLeadCard() {
     <div className="rounded-2xl border border-border bg-card shadow-card-soft overflow-hidden">
       <div className="bg-cta px-5 py-3 flex items-center justify-between">
         <p className="text-sm font-semibold text-primary-foreground">New Lead Captured</p>
-        <span className="text-[10px] uppercase tracking-wider text-primary-foreground/80">Sample</span>
+        <span className="text-[10px] uppercase tracking-wider text-primary-foreground/80">Just now</span>
       </div>
       <div className="p-5 space-y-3">
         {rows.map((r) => (

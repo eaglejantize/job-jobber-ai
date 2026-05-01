@@ -82,22 +82,22 @@ export default function Index() {
       </section>
 
       {/* TRY IT LIVE */}
-      {/* WHAT YOU GET */}
-      <section id="what-you-get" className="container py-20 scroll-mt-20">
+      <section id="try-it-live" className="container py-20 scroll-mt-20">
         <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">After every call</p>
-          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">What You Get From Every Missed Call</h2>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Hear it for yourself</p>
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Try It Live</h2>
           <p className="mt-4 text-muted-foreground text-lg">
-            A real lead — name, phone, address, and the job — delivered to your phone the moment the call ends.
+            Call <a href={`tel:${DEMO_NUMBER_TEL}`} className="text-primary font-semibold hover:underline">{DEMO_NUMBER}</a> to hear exactly what your customers experience.
           </p>
+          <p className="mt-2 text-sm text-muted-foreground">No signup. Takes 30 seconds.</p>
         </div>
         <div className="grid lg:grid-cols-2 gap-6 items-start max-w-5xl mx-auto">
           <div>
-            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Sample conversation</p>
+            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">This is exactly how your calls are handled</p>
             <SampleConversation />
           </div>
           <div>
-            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Lead sent to your phone</p>
+            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Sent to your phone instantly</p>
             <SampleLeadCard />
           </div>
         </div>
@@ -110,11 +110,10 @@ export default function Index() {
 
       {/* COST OF MISSED CALLS */}
       <section className="container py-16">
-        <div className="grid sm:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
           {[
             { stat: "62%", label: "of calls to small businesses go unanswered" },
-            { stat: "$1,200+", label: "average value of a single missed service job" },
-            { stat: "85%", label: "of callers won't call back if you miss them" },
+            { stat: "$150–$500", label: "average value of a single service call" },
           ].map((s) => (
             <div key={s.stat} className="rounded-2xl border border-border bg-card p-6 text-center shadow-card-soft">
               <p className="text-4xl font-bold text-primary">{s.stat}</p>
@@ -174,17 +173,15 @@ export default function Index() {
           </div>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">We'll Set This Up For You</h2>
           <p className="mt-4 text-muted-foreground text-lg">
-            Don't want to mess with settings or tech?
+            Don't want to deal with setup or tech?
           </p>
-          <p className="mt-2 text-base md:text-lg">
-            We'll set up your receptionist, script, call flow, and forwarding — all for you.
-            <span className="block mt-1 text-primary font-semibold">You'll be live in 24 hours.</span>
-          </p>
+          <p className="mt-2 text-base md:text-lg font-medium">We handle everything:</p>
           <ul className="mt-6 space-y-3">
             {[
-              "We configure everything",
-              "You forward your number",
-              "You start getting leads immediately",
+              "Your call script",
+              "Your AI receptionist",
+              "Your call routing",
+              "Your SMS alerts",
             ].map((b) => (
               <li key={b} className="flex items-start gap-3">
                 <Check className="h-5 w-5 text-primary mt-0.5 shrink-0" />
@@ -192,10 +189,14 @@ export default function Index() {
               </li>
             ))}
           </ul>
+          <p className="mt-6 text-base md:text-lg text-primary font-semibold">
+            You just forward your number and start getting jobs.
+          </p>
           <div className="mt-8">
             <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
               <Link to="/support">Request Setup Help <ArrowRight className="h-4 w-4" /></Link>
             </Button>
+            <p className="mt-2 text-sm text-muted-foreground">Live in 24 hours.</p>
           </div>
         </div>
       </section>
