@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Phone, Check, ArrowRight, Wrench, Snowflake, Zap, KeyRound, Sparkles, Scale, Building2, Droplet } from "lucide-react";
+import { Phone, Check, ArrowRight, Wrench, Snowflake, Zap, KeyRound, Sparkles, Scale, Building2, Droplet, HandHeart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Layout from "@/components/Layout";
 import DemoNumberCard from "@/components/DemoNumberCard";
@@ -20,12 +20,12 @@ const industries = [
 ];
 
 const features = [
-  "24/7 AI call answering",
-  "Lead capture",
+  "24/7 call answering — never miss another call",
+  "Lead capture (name, phone, address, job)",
   "SMS lead notifications",
-  "Call forwarding",
-  "Custom business script",
-  "After-hours handling",
+  "Call forwarding from your existing number",
+  "Custom script for your business",
+  "After-hours handling — nights & weekends",
 ];
 
 export default function Index() {
@@ -45,23 +45,26 @@ export default function Index() {
               Answer every call. Capture details. Get booked jobs.
             </p>
             <p className="mt-3 text-base md:text-lg text-primary font-semibold">
-              Every missed call is a lost job.
+              Every missed call is a lost $150–$500 job.
             </p>
-            <p className="mt-3 text-sm md:text-base text-muted-foreground">
-              Most service calls are worth <span className="text-foreground font-semibold">$150–$500</span>. Missing just one per day costs you <span className="text-foreground font-semibold">thousands per month</span>.
+            <p className="mt-2 text-sm md:text-base text-foreground font-semibold">
+              Miss just 2 calls a day = $6,000–$15,000/month lost.
             </p>
-            <div className="mt-7 flex flex-col sm:flex-row gap-3">
-              <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
-                <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="text-base h-14 px-7 border-primary/40">
-                <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
-              </Button>
+            <div className="mt-7 flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col">
+                <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+                  <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
+                </Button>
+                <p className="mt-1.5 text-xs text-muted-foreground text-center">Takes 30 seconds</p>
+              </div>
+              <div className="flex flex-col">
+                <Button asChild size="lg" variant="outline" className="text-base h-14 px-7 border-primary/40">
+                  <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
+                </Button>
+                <p className="mt-1.5 text-xs text-muted-foreground text-center">We'll handle everything for you</p>
+              </div>
             </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Takes 30 seconds to try • No signup. No setup. Just call.
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-4 text-xs text-muted-foreground">
               Built for appliance repair, HVAC, plumbing, electrical, and local service businesses.
             </p>
           </div>
@@ -160,6 +163,43 @@ export default function Index() {
         </div>
       </section>
 
+      {/* DONE FOR YOU */}
+      <section className="container py-20">
+        <div className="rounded-3xl border-2 border-primary/40 bg-gradient-to-br from-primary/10 via-card to-card p-8 md:p-12 shadow-glow max-w-4xl mx-auto">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cta text-primary-foreground shadow-glow">
+              <HandHeart className="h-6 w-6" />
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">Done for you</p>
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">We'll Set This Up For You</h2>
+          <p className="mt-4 text-muted-foreground text-lg">
+            Don't want to mess with settings or tech?
+          </p>
+          <p className="mt-2 text-base md:text-lg">
+            We'll set up your receptionist, script, call flow, and forwarding — all for you.
+            <span className="block mt-1 text-primary font-semibold">You'll be live in 24 hours.</span>
+          </p>
+          <ul className="mt-6 space-y-3">
+            {[
+              "We configure everything",
+              "You forward your number",
+              "You start getting leads immediately",
+            ].map((b) => (
+              <li key={b} className="flex items-start gap-3">
+                <Check className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                <span className="font-medium">{b}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8">
+            <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+              <Link to="/support">Request Setup Help <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* PRICING */}
       <section className="container py-20">
         <div className="text-center max-w-2xl mx-auto mb-10">
@@ -181,10 +221,37 @@ export default function Index() {
               </li>
             ))}
           </ul>
-          <Button asChild size="lg" className="w-full mt-8 bg-cta hover:opacity-90 shadow-glow h-12">
+          <div className="mt-6 rounded-xl bg-primary/10 border border-primary/30 p-4 space-y-1.5">
+            <p className="text-sm font-semibold">Most customers recover their cost with the first 1–2 calls.</p>
+            <p className="text-sm text-muted-foreground">If you miss even one job per day, this pays for itself fast.</p>
+          </div>
+          <Button asChild size="lg" className="w-full mt-6 bg-cta hover:opacity-90 shadow-glow h-12">
             <Link to="/support">Get Set Up in 24 Hours</Link>
           </Button>
           <p className="text-xs text-center text-muted-foreground mt-3">Cancel anytime. No contracts.</p>
+        </div>
+      </section>
+
+      {/* FINAL CTA */}
+      <section className="bg-hero border-t border-border/60">
+        <div className="container py-20 text-center max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">
+            Stop Missing Calls <span className="text-primary">Starting Today</span>
+          </h2>
+          <p className="mt-5 text-lg md:text-xl font-semibold">
+            Your customers are calling. Right now.
+          </p>
+          <p className="mt-2 text-base md:text-lg text-muted-foreground">
+            If you don't answer, someone else will.
+          </p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+              <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="text-base h-14 px-7 border-primary/40">
+              <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+          </div>
         </div>
       </section>
 
