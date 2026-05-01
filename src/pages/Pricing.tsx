@@ -6,10 +6,10 @@ import RequestSetupBanner from "@/components/RequestSetupBanner";
 
 const features = [
   "24/7 AI call answering",
-  "Lead capture (name, phone, address, issue)",
-  "SMS notifications",
+  "Lead capture",
+  "SMS lead notifications",
   "Call forwarding",
-  "Custom script",
+  "Custom business script",
   "After-hours handling",
 ];
 
@@ -19,7 +19,7 @@ export default function Pricing() {
       <section className="bg-hero">
         <div className="container py-16 md:py-20 text-center max-w-2xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">One simple plan</h1>
-          <p className="mt-4 text-muted-foreground text-lg">Pays for itself with 1–2 captured jobs.</p>
+          <p className="mt-4 text-primary text-lg font-semibold">Pays for itself with 1–2 captured jobs.</p>
         </div>
       </section>
 

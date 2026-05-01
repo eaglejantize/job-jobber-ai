@@ -6,6 +6,7 @@ import DemoNumberCard from "@/components/DemoNumberCard";
 import SampleConversation from "@/components/SampleConversation";
 import SampleLeadCard from "@/components/SampleLeadCard";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
+import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
 
 const industries = [
   { name: "Appliance Repair", icon: Wrench },
@@ -20,10 +21,10 @@ const industries = [
 
 const features = [
   "24/7 AI call answering",
-  "Lead capture (name, phone, address, issue)",
-  "SMS notifications",
+  "Lead capture",
+  "SMS lead notifications",
   "Call forwarding",
-  "Custom script",
+  "Custom business script",
   "After-hours handling",
 ];
 
@@ -43,9 +44,18 @@ export default function Index() {
             <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-xl">
               CallCapture answers every call, captures customer details, and turns missed calls into booked jobs — automatically.
             </p>
+            <p className="mt-5 text-base md:text-lg">
+              <span className="text-muted-foreground">Call the live demo: </span>
+              <a
+                href={`tel:${DEMO_NUMBER_TEL}`}
+                className="font-bold text-primary hover:underline tabular-nums"
+              >
+                {DEMO_NUMBER}
+              </a>
+            </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-7">
-                <a href="#try-it-live"><Phone className="h-4 w-4" /> Call the Demo</a>
+                <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-4 w-4" /> Call the Demo</a>
               </Button>
               <Button asChild size="lg" variant="outline" className="text-base h-12 px-7 border-primary/40">
                 <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
@@ -58,6 +68,38 @@ export default function Index() {
           </div>
           <div className="lg:pl-8">
             <DemoNumberCard />
+          </div>
+        </div>
+      </section>
+
+      {/* TRY IT LIVE */}
+      <section id="try-it-live" className="container py-20 scroll-mt-20">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Try It Live</p>
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Try It Live</h2>
+          <p className="mt-4 text-muted-foreground text-lg">
+            Call <a href={`tel:${DEMO_NUMBER_TEL}`} className="font-semibold text-primary hover:underline tabular-nums">{DEMO_NUMBER}</a> to hear exactly what your customers experience.
+          </p>
+          <p className="mt-3 text-muted-foreground">
+            The AI receptionist answers the call, collects service details, and prepares the lead for the business owner.
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-7">
+              <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-4 w-4" /> Call Demo</a>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="text-base h-12 px-7 border-primary/40">
+              <Link to="/support">Get Set Up in 24 Hours</Link>
+            </Button>
+          </div>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-6 items-start">
+          <div className="space-y-6">
+            <DemoNumberCard />
+            <SampleConversation />
+          </div>
+          <div>
+            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">What you receive after a call</p>
+            <SampleLeadCard />
           </div>
         </div>
       </section>
@@ -75,27 +117,6 @@ export default function Index() {
               <p className="mt-2 text-sm text-muted-foreground">{s.label}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* TRY IT LIVE */}
-      <section id="try-it-live" className="container py-20 scroll-mt-20">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Try It Live</p>
-          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Hear it for yourself</h2>
-          <p className="mt-4 text-muted-foreground text-lg">
-            Call the demo number. Talk to it like a real customer would. See what your business gets back.
-          </p>
-        </div>
-        <div className="grid lg:grid-cols-2 gap-6 items-start">
-          <div className="space-y-6">
-            <DemoNumberCard />
-            <SampleConversation />
-          </div>
-          <div>
-            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">What you receive after a call</p>
-            <SampleLeadCard />
-          </div>
         </div>
       </section>
 

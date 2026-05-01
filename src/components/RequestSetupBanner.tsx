@@ -11,8 +11,8 @@ export default function RequestSetupBanner({
         <div className="flex items-start gap-3">
           <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold">Don't want to do this yourself?</p>
-            <p className="text-sm text-muted-foreground">We'll set it up for you in 24 hours.</p>
+            <p className="font-semibold">Want us to set this up for you?</p>
+            <p className="text-sm text-muted-foreground">We'll do it in 24 hours.</p>
           </div>
         </div>
         <Button asChild className="bg-cta hover:opacity-90 shadow-glow shrink-0">
@@ -29,7 +29,7 @@ export default function RequestSetupBanner({
           Want us to set this up for you?
         </h3>
         <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
-          We'll build, configure, and connect your AI receptionist in 24 hours. You don't lift a finger.
+          We'll do it in 24 hours. You don't lift a finger.
         </p>
         <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-8">
           <Link to="/support">Request Setup Help</Link>

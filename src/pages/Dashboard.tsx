@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, Phone } from "lucide-react";
 import { VAPI_INSTRUCTIONS } from "@/lib/generatePrompt";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
+import DemoNumberCard from "@/components/DemoNumberCard";
 import { toast } from "@/hooks/use-toast";
 
 type Config = {
@@ -94,9 +95,15 @@ export default function Dashboard() {
               )}
             </div>
             {config?.generated_prompt ? (
+              <>
               <pre className="max-h-[420px] overflow-auto rounded-xl bg-secondary/40 p-4 text-xs font-mono whitespace-pre-wrap">
 {config.generated_prompt}
               </pre>
+              <details className="mt-4 rounded-xl border border-border bg-secondary/20 p-4">
+                <summary className="cursor-pointer text-sm font-semibold">How to connect this to Vapi</summary>
+                <pre className="mt-3 text-xs whitespace-pre-wrap text-muted-foreground">{VAPI_INSTRUCTIONS}</pre>
+              </details>
+              </>
             ) : (
               <div className="rounded-xl border border-dashed border-border p-8 text-center">
                 <Phone className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
@@ -108,10 +115,9 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Demo Instructions */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft">
-            <h2 className="text-lg font-semibold mb-3">Connect to Vapi</h2>
-            <pre className="text-xs whitespace-pre-wrap text-muted-foreground">{VAPI_INSTRUCTIONS}</pre>
+          {/* Demo Number */}
+          <div className="space-y-4">
+            <DemoNumberCard />
           </div>
         </div>
 

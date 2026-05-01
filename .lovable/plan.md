@@ -1,129 +1,93 @@
+## CallCapture — Activate Live Demo Number
 
-# CallCapture — Revised Plan (Conversion-First)
+The live demo number `(904) 892-7004` is now active. Update the app to surface it everywhere, simplify pricing, refine wizard tone, and ensure the "Request Setup Help" CTA is consistent.
 
-Reposition CallCapture from a configurator into a **done-for-you revenue tool**. Every page pushes toward two actions: **Call the Demo** or **Request Setup Help**. Setup wizard stays, but framed as "we'll do it for you if you want."
+### 1. Activate the demo number
 
----
+**`src/lib/constants.ts`**
+- `DEMO_NUMBER = "(904) 892-7004"`
+- `DEMO_NUMBER_AVAILABLE = true`
+- Add `DEMO_NUMBER_TEL = "+19048927004"` for `tel:` links.
 
-## Design
+**`src/components/DemoNumberCard.tsx`**
+- Use `DEMO_NUMBER_TEL` for the `tel:` href (currently strips formatting, but a hard constant is safer).
+- Update subtext to "Tap to call — live now".
 
-Dark navy theme, bright green CTAs (oversized, obvious), white/light-gray text. Money-focused, plain-English copy throughout. No "AI platform" or technical jargon.
+### 2. Hero: prominent clickable number
 
-Color tokens (HSL, in `index.css`): deep navy background, lighter navy surfaces, bright green accent, soft green glow on primary buttons.
+**`src/pages/Index.tsx` — Hero section**
+- Under the subheadline, add a bright accent line:
+  > "Call the live demo: **(904) 892-7004**" — clickable on mobile via `tel:+19048927004`.
+- Primary CTA "Call the Demo" becomes a real `tel:` link (not just a scroll anchor) on mobile; keep the in-page anchor as a secondary route on desktop. Simplest unified solution: button is an `<a href="tel:+19048927004">`. Works on desktop too (no-op or system handler).
+- Keep secondary CTA "Get Set Up in 24 Hours" → `/support`.
 
----
+### 3. "Try It Live" section near the top
 
-## Pages
+Move the existing `#try-it-live` section so it sits **immediately after the hero** (before the "cost of missed calls" stats). Update copy:
 
-### 1. `/` — Landing (the workhorse)
+- Title: **Try It Live**
+- Text: "Call **(904) 892-7004** to hear exactly what your customers experience."
+- Subtext: "The AI receptionist answers the call, collects service details, and prepares the lead for the business owner."
+- CTAs: **Call Demo** (`tel:+19048927004`) and **Get Set Up in 24 Hours** (`/support`).
+- Keep `DemoNumberCard`, `SampleConversation`, and `SampleLeadCard` below.
 
-**Sticky nav:** Home · Demo · Pricing · Setup · Dashboard · Support — plus green **Get Set Up in 24 Hours** button.
+### 4. Pricing page — single plan only
 
-**Hero**
-- H1: "Stop Missing Service Calls"
-- Sub: "CallCapture answers every call, captures customer details, and turns missed calls into booked jobs — automatically."
-- Primary CTA (green, large): **Call the Demo** → scrolls to demo section
-- Secondary CTA: **Get Set Up in 24 Hours** → `/support`
-- Prominent demo number panel: large monospaced number placeholder + "Demo number coming soon" badge + tap-to-copy
+**`src/pages/Pricing.tsx`** is already a single plan. Tighten copy to match the brief exactly:
+- Plan: **CallCapture Pro** — $197/month + $99 setup
+- Features list (replace current):
+  - 24/7 AI call answering
+  - Lead capture
+  - SMS lead notifications
+  - Call forwarding
+  - Custom business script
+  - After-hours handling
+- Add tagline above the card: **"Pays for itself with 1–2 captured jobs."**
+- Keep "Cancel anytime. No contracts." under the CTA.
+- Keep `RequestSetupBanner` at bottom.
+- Mirror the same simplified feature list inside the homepage pricing block (`src/pages/Index.tsx`) for consistency.
 
-**Try It Live (demo section, on landing)**
-- Big phone-number card: "Call this number to hear exactly what your customers will experience."
-- Sample transcript (chat bubbles, customer ↔ receptionist)
-- "What you receive after a call" — sample lead card (Sarah Johnson, fridge repair, urgency High, summary)
+### 5. Setup wizard — tone polish
 
-**The Cost of Missed Calls** (short trust band)
-- 3 stat cards reinforcing money lost per missed call
+**`src/pages/Setup.tsx`**
+- Step labels array: rename `"Receptionist Behavior"` → `"Receptionist Behavior"` (keep), but ensure all hero/header copy says "Set up your AI receptionist" (already close — confirm wording).
+- Final step header already says "Your AI Receptionist Is Ready" ✓.
+- Final step buttons: keep **Copy Instructions** and **Request Setup Help** as the two primary actions (already present). Move the "Save to my dashboard" button below them as a secondary action (already secondary — keep).
+- Sweep any remaining "configure assistant" phrasing → "set up your AI receptionist". (Quick rg confirms none present, but verify during edit.)
 
-**Who It's For**
-- Industry chips: Appliance Repair, HVAC, Plumbing, Electrical, Locksmiths, Med Spas, Law Firms, Local Service
+### 6. Dashboard — keep simple
 
-**How It Works** — 4 plain steps (forward your number → we set up your receptionist → calls get answered 24/7 → leads sent to your phone)
+**`src/pages/Dashboard.tsx`** already shows: Setup Status, Assistant Instructions, Vapi connect block, Request Setup banner. Adjustments:
+- Replace the "Connect to Vapi" side card with a **Demo Number** card (uses `DemoNumberCard` content — phone number prominent, tappable). Move the Vapi instructions into a collapsible `<details>` below the assistant instructions so the dashboard stays uncluttered.
+- No CRM, invoices, job boards, or lead lists. Confirmed not present.
 
-**Pricing** (single plan, see below)
+### 7. "Want us to set this up?" CTA everywhere
 
-**Final CTA band:** "Want us to set this up for you? We'll do it in 24 hours." + green **Request Setup Help** button.
+The `RequestSetupBanner` already appears on Home, Pricing, Setup, Dashboard, Support. Update the default banner copy to the exact line:
 
-Footer.
+> "Want us to set this up for you? We'll do it in 24 hours."
+> Button: **Request Setup Help**
 
-### 2. `/demo`
-Standalone version of the Try It Live section with more breathing room — same demo number card, transcript, lead card preview, and a closing **Get Set Up in 24 Hours** CTA. No technical explanation.
+Keep `variant="compact"` for sidebar/inline use.
 
-### 3. `/pricing` — One plan only
-Single centered card: **CallCapture Pro — $197/month** + **$99 one-time setup**.
-Features bulleted exactly per spec. Tagline: *"Pays for itself with 1–2 captured jobs."* Footnote: *"Cancel anytime. No contracts."* CTA: **Get Set Up in 24 Hours**.
+### 8. Theme
 
-Below the card, a softer secondary block: "Prefer to set it up yourself? Use our free setup wizard." → `/setup`.
-
-### 4. `/setup` — Wizard, repositioned
-Header copy: **"Let's set up your AI receptionist"** with progress indicator "Step X of 6".
-
-On every step, a persistent right-side (or bottom on mobile) callout:
-> "Don't want to do this yourself? We'll set it up for you in 24 hours." → **Request Setup Help**
-
-Steps unchanged in content (Business Info → Receptionist Behavior → Intake Questions → Call Handling → Notifications → Review), but copy softened and de-jargoned.
-
-**Final step (Review):**
-- Title: **"Your AI Receptionist Is Ready"**
-- Show generated prompt (template-based, deterministic) in a clean copy block
-- Helper line: "Copy this into your Vapi assistant — or let us set it up for you."
-- Two buttons side-by-side:
-  - **Copy Instructions** (green)
-  - **Request Setup Help** (green outline) → `/support` prefilled
-- Saves config to Lovable Cloud if signed in
-
-### 5. `/dashboard` — Simplified (auth-gated)
-Four sections only:
-1. **Setup Status** — single badge: Not Started / In Progress / Ready
-2. **Your Assistant Instructions** — shows saved generated prompt with copy button (or empty state linking to `/setup`)
-3. **Demo Instructions** — short numbered checklist for connecting to Vapi
-4. **Support / Request Setup** — green button to `/support`
-
-No leads list. No CRM. No "configuration" panel.
-
-### 6. `/support`
-Form: name, business name, email, phone, request type (Setup my assistant / Connect my phone number / Build my script / Test my demo / Other), message. Headline: **"We'll set up your AI receptionist in 24 hours."** Submits to Lovable Cloud, toast confirmation.
-
-### 7. `/auth`
-Email + password (Lovable Cloud, auto-confirm on). Required only for `/dashboard` and saving wizard progress; the wizard works unauthenticated using local state and prompts to sign in at the final save.
-
-### 8. `/*` NotFound — restyled to dark theme.
+Already dark navy + bright green. No design system changes.
 
 ---
 
-## Persistent Conversion Lever
+### Files to edit
 
-A reusable `<RequestSetupBanner />` placed on:
-- Landing (final band)
-- Demo page (footer)
-- Every wizard step (sidebar/bottom)
-- Pricing page (under the card)
-- Dashboard (its own section)
+- `src/lib/constants.ts` — number, availability flag, tel constant
+- `src/components/DemoNumberCard.tsx` — tel link + "live now" subtext
+- `src/components/RequestSetupBanner.tsx` — exact CTA copy
+- `src/pages/Index.tsx` — hero number line, hero CTA → tel:, reorder Try-It-Live above stats, simplified pricing features
+- `src/pages/Pricing.tsx` — "Pays for itself…" tagline, exact feature list
+- `src/pages/Setup.tsx` — verify wording sweep
+- `src/pages/Dashboard.tsx` — swap Vapi card for Demo Number card; collapse Vapi instructions
 
-Single message: *"Want us to set this up for you? We'll do it in 24 hours."* + green **Request Setup Help** button.
+### Out of scope
 
----
-
-## Backend (Lovable Cloud)
-
-Tables (RLS, owner-scoped):
-- **callcapture_businesses** — id, user_id, business_name, industry, phone, email, service_area, business_hours, created_at
-- **callcapture_assistant_configs** — id, business_id, assistant_name, greeting, tone, after_hours_enabled, transfer_enabled, transfer_phone, intake_questions jsonb, call_rules jsonb, notification_settings jsonb, generated_prompt, created_at, updated_at
-- **callcapture_support_requests** — id, name, business_name, email, phone, request_type, message, created_at (public insert; user can read their own)
-
-Setup status on dashboard derived from presence/completeness of these rows.
-
----
-
-## Tone rules baked into copy
-- Talk about **missed calls and money**, not "AI" or "configuration"
-- Short sentences, action verbs
-- Every page ends with a CTA toward demo or setup help
-- No feature dumps; benefits only
-
----
-
-## Out of scope
-- Real telephony / Vapi calls
-- Real lead inbox / CRM
-- Multi-tier pricing
-- Stripe billing
+- No new database tables or auth changes.
+- No new routes.
+- No CRM/lead management features.
