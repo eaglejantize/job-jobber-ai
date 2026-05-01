@@ -46,10 +46,16 @@ export default function Support() {
     setSubmitting(true);
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
-    const { error } = await supabase.from("callcapture_support_requests").insert({
-      ...parsed.data,
-      ...(userId ? { user_id: userId } : {}),
-    });
+    const payload = {
+      name: parsed.data.name,
+      business_name: parsed.data.business_name || null,
+      email: parsed.data.email,
+      phone: parsed.data.phone || null,
+      request_type: parsed.data.request_type,
+      message: parsed.data.message || null,
+      user_id: userId ?? null,
+    };
+    const { error } = await supabase.from("callcapture_support_requests").insert(payload);
     setSubmitting(false);
     if (error) {
       toast({ title: "Couldn't send", description: error.message, variant: "destructive" });
