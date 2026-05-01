@@ -47,6 +47,9 @@ export default function Index() {
             <p className="mt-3 text-base md:text-lg text-primary font-semibold">
               Every missed call is a lost job.
             </p>
+            <p className="mt-3 text-sm md:text-base text-muted-foreground">
+              Most service calls are worth <span className="text-foreground font-semibold">$150–$500</span>. Missing just one per day costs you <span className="text-foreground font-semibold">thousands per month</span>.
+            </p>
             <div className="mt-7 flex flex-col sm:flex-row gap-3">
               <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
                 <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
@@ -55,8 +58,11 @@ export default function Index() {
                 <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
               </Button>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Works for appliance repair, HVAC, plumbing, and more.
+            <p className="mt-3 text-sm text-muted-foreground">
+              Takes 30 seconds to try • No signup. No setup. Just call.
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Built for appliance repair, HVAC, plumbing, electrical, and local service businesses.
             </p>
           </div>
           <div className="lg:pl-8">
@@ -73,35 +79,29 @@ export default function Index() {
       </section>
 
       {/* TRY IT LIVE */}
-      <section id="try-it-live" className="container py-20 scroll-mt-20">
+      {/* WHAT YOU GET */}
+      <section id="what-you-get" className="container py-20 scroll-mt-20">
         <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Try It Live</p>
-          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Try It Live</h2>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">After every call</p>
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight">What You Get From Every Missed Call</h2>
           <p className="mt-4 text-muted-foreground text-lg">
-            Call <a href={`tel:${DEMO_NUMBER_TEL}`} className="font-semibold text-primary hover:underline tabular-nums">{DEMO_NUMBER}</a> to hear exactly what your customers experience.
+            A real lead — name, phone, address, and the job — delivered to your phone the moment the call ends.
           </p>
-          <p className="mt-3 text-muted-foreground">
-            The AI receptionist answers the call, collects service details, and prepares the lead for the business owner.
-          </p>
-          <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-            <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-7">
-              <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-4 w-4" /> Call Demo</a>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="text-base h-12 px-7 border-primary/40">
-              <Link to="/support">Get Set Up in 24 Hours</Link>
-            </Button>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground text-center">Takes 30 seconds to try • No signup required</p>
         </div>
-        <div className="grid lg:grid-cols-2 gap-6 items-start">
-          <div className="space-y-6">
-            <DemoNumberCard />
+        <div className="grid lg:grid-cols-2 gap-6 items-start max-w-5xl mx-auto">
+          <div>
+            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Sample conversation</p>
             <SampleConversation />
           </div>
           <div>
-            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">What you receive after a call</p>
+            <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Lead sent to your phone</p>
             <SampleLeadCard />
           </div>
+        </div>
+        <div className="mt-10 flex justify-center">
+          <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-8">
+            <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
+          </Button>
         </div>
       </section>
 

@@ -24,6 +24,9 @@ export default function DemoNumberCard() {
       <p className="text-sm text-muted-foreground mt-2">
         Takes 30 seconds. No signup required.
       </p>
+      <p className="text-sm text-muted-foreground italic mt-2">
+        Call now and pretend you're a customer — it takes 30 seconds.
+      </p>
       <p className="text-sm text-muted-foreground mt-1">
         Hear exactly what your customers experience.
       </p>
@@ -31,8 +34,8 @@ export default function DemoNumberCard() {
         <Button asChild className="bg-cta hover:opacity-90 shadow-glow flex-1">
           <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-4 w-4" /> Call the Demo</a>
         </Button>
-        <Button variant="outline" onClick={copy} className="border-primary/40">
-          <Copy className="h-4 w-4" /> Copy number
+        <Button variant="outline" size="sm" onClick={copy} className="border-primary/40">
+          <Copy className="h-4 w-4" /> Copy Number
         </Button>
       </div>
     </div>
