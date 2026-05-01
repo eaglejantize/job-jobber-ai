@@ -1,59 +1,57 @@
-# Final Conversion Pass — CallCapture
+# Wire the CallCapture receptionist script into the product
 
-Most of this brief is already live. This pass only closes small gaps. No layout changes, no new components.
+Make this exact receptionist script the source of truth for both the Setup wizard's generated prompt and what visitors see on the homepage. Plus give you copy-paste Vapi setup steps for (904) 892-7004.
 
-## 1. Hero (`src/pages/Index.tsx`)
-Already matches: headline, subheadline, $150–$500 line, $6K–$15K line, CTAs with microcopy. **No change.**
+## 1. Save the canonical script
 
-## 2. Demo Card (`src/components/DemoNumberCard.tsx`)
-Already matches the brief (badge, number, "act like a real customer", "30 seconds", "No signup. No setup. No commitment.", Call/Copy buttons). **No change.**
+Create `src/lib/receptionistScript.ts` exporting:
+- `RECEPTIONIST_SYSTEM_PROMPT` — the full script you provided (verbatim), parameterized only with `{businessName}` placeholder.
+- `RECEPTIONIST_FLOW` — a structured array used by the homepage section (greeting + the 5 questions: Name, Phone, Address, Issue, Urgency + closing line).
+- `RECEPTIONIST_GOALS`, `RECEPTIONIST_TONE`, `RECEPTIONIST_DONTS` — used in the homepage display.
 
-## 3. Stats section (`src/pages/Index.tsx`)
-Currently shows three stats. Brief asks to keep the 62% stat and add "Average service call value: $150–$500".
+This keeps one source of truth so future copy edits update both places.
 
-Replace the three-stat grid with two cards (keeps spacing tidy):
-- 62% — of calls to small businesses go unanswered
-- $150–$500 — average value of a single service call
+## 2. Update the Setup wizard generator
 
-Switch grid to `sm:grid-cols-2 max-w-2xl mx-auto`.
+Edit `src/lib/generatePrompt.ts` so `generateAssistantPrompt(state)` returns a prompt built from the new script, with the user's business info merged in. Replaces the current generic prompt structure.
 
-## 4. "What You Get" section (`src/pages/Index.tsx`)
-Rename section heading to **"Try It Live"** with body: *"Call (904) 892-7004 to hear exactly what your customers experience."* and small line *"No signup. Takes 30 seconds."*
+Wizard fields still drive personalization (business name, phone, transfer rules, intake questions, notification settings), but the **flow, tone, do-nots, and closing** come from your script verbatim. The "Information to Collect" section is pre-seeded with your 5 fields (Name, Phone, Address, Issue, Urgency) and any custom intake questions the user adds get appended.
 
-Replace the two small column labels:
-- Left ("Sample conversation") → **"This is exactly how your calls are handled"**
-- Right ("Lead sent to your phone") → **"Sent to your phone instantly"**
+The Setup wizard UI itself (`src/pages/Setup.tsx`) doesn't need changes — it'll automatically generate the new prompt on the final step.
 
-Keep the `SampleConversation` + `SampleLeadCard` grid and the "Get Set Up in 24 Hours" CTA below it.
+## 3. Add a "What your receptionist actually says" section to the homepage
 
-## 5. Sample Lead Card (`src/components/SampleLeadCard.tsx`)
-Change the top-right "Sample" tag text to **"Just now"** so it reads as a real lead, not a demo. Header label "New Lead Captured" stays.
+Insert a new section in `src/pages/Index.tsx` between the existing "Try It Live" section and "Cost of missed calls" stats. It will render:
 
-Rename the "Service Needed" row label to just **"Service"** to match the brief.
+- **Heading:** "Here's exactly what your receptionist does"
+- **Sub:** "Short. Natural. Designed to capture the lead and hang up fast."
+- A two-column card layout:
+  - **Left card — "The flow"**: numbered list of the 5 questions with the example wording from your script ("Can I get your name?", "What's the best number to reach you?", etc.) plus the opening line and closing line.
+  - **Right card — "What it never does"**: the DO NOT list rendered as red-tinted bullets (Over-explain, Sound technical, Mention AI, Try to fully solve problems).
+- Footer line: "Average call: under 90 seconds. You get the lead by SMS before they hang up."
 
-## 6. "Done For You" section (`src/pages/Index.tsx`)
-Currently titled "We'll Set This Up For You" with 3 bullets. Update to match brief:
-- Keep title.
-- Body: *"Don't want to deal with setup or tech? We handle everything:"*
-- Bullets:
-  - Your call script
-  - Your AI receptionist
-  - Your call routing
-  - Your SMS alerts
-- Closer line: *"You just forward your number and start getting jobs."*
-- Keep CTA "Request Setup Help" + add subtext under button: *"Live in 24 hours."*
+Uses existing card / typography styles — no new design system pieces.
 
-## 7. Pricing, How It Works, Final CTA, Pricing page
-All already match the brief. **No change.**
+## 4. Vapi setup steps (delivered in chat after approval)
 
-## 8. Tone scan
-Ripgrep confirms no remaining "AI assistant", "platform", or "system" copy in the affected files. **No change.**
+I'll give you a copy-paste-ready block containing:
+- The exact system prompt (your script with `[Business Name]` placeholder filled in for the demo line)
+- Recommended Vapi settings: voice (clear/friendly), model (GPT-5 mini or Gemini 2.5 Flash), max call duration 120s, end-call phrases
+- Steps to attach to (904) 892-7004 and forward your business line
+- A test-call checklist (greeting fires, all 5 fields collected, ends with the closing line, lead SMS arrives)
 
----
+This is documentation only — no code changes needed for the demo number itself, since Vapi is configured outside the codebase.
 
-## Files to Edit
-- `src/pages/Index.tsx` — stats grid (2 cards), Try It Live heading + column labels, Done For You bullets/copy/subtext
-- `src/components/SampleLeadCard.tsx` — "Sample" → "Just now"; "Service Needed" → "Service"
+## Technical details
 
-## Out of Scope
-No new routes, components, dependencies, schema, or layout changes.
+- New file: `src/lib/receptionistScript.ts` (constants only, no logic).
+- Edited: `src/lib/generatePrompt.ts` — `generateAssistantPrompt` rewritten to compose from `RECEPTIONIST_SYSTEM_PROMPT` + business state. `VAPI_INSTRUCTIONS` updated to reference the new script structure.
+- Edited: `src/pages/Index.tsx` — adds one new `<section>` block; no layout reshuffling of existing sections.
+- No DB, no edge functions, no new dependencies.
+- Tone rules (no "AI assistant" → "AI receptionist", no "platform"/"system") are preserved.
+
+## Out of scope
+
+- No changes to Vapi itself (you'll paste the script in via their dashboard using the steps I provide).
+- No changes to the Setup wizard form fields or step order.
+- No changes to pricing, footer, or other marketing sections.
