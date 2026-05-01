@@ -1,57 +1,64 @@
-# Wire the CallCapture receptionist script into the product
+## Plan: Build `send-demo-sms` edge function
 
-Make this exact receptionist script the source of truth for both the Setup wizard's generated prompt and what visitors see on the homepage. Plus give you copy-paste Vapi setup steps for (904) 892-7004.
+### 1. Add 3 runtime secrets
+- `TWILIO_FROM_NUMBER` = `+13027473683`
+- `DEMO_OWNER_PHONE` = `+19048927004`
+- `VAPI_WEBHOOK_SECRET` = `callcapture_secret_2026`
 
-## 1. Save the canonical script
+(Twilio connector is already linked → `TWILIO_API_KEY` and `LOVABLE_API_KEY` are available.)
 
-Create `src/lib/receptionistScript.ts` exporting:
-- `RECEPTIONIST_SYSTEM_PROMPT` — the full script you provided (verbatim), parameterized only with `{businessName}` placeholder.
-- `RECEPTIONIST_FLOW` — a structured array used by the homepage section (greeting + the 5 questions: Name, Phone, Address, Issue, Urgency + closing line).
-- `RECEPTIONIST_GOALS`, `RECEPTIONIST_TONE`, `RECEPTIONIST_DONTS` — used in the homepage display.
+### 2. Create `supabase/functions/send-demo-sms/index.ts`
+- Public webhook endpoint (no JWT) called by Vapi end-of-call reports
+- CORS headers on every response (incl. errors), OPTIONS preflight
+- **Auth:** require header `x-webhook-secret` == `VAPI_WEBHOOK_SECRET`; return 401 otherwise
+- **Parse Vapi payload** flexibly — extract from any of:
+  - `message.analysis.structuredData.{name, phone, issue, urgency, type}`
+  - `message.artifact.structuredData.*`
+  - `analysis.structuredData.*`
+  - top-level `{name, phone, issue}` (for manual tests)
+  - fallback: `message.summary` / `summary` for the issue field
+- **Validate** with Zod: `name` (string, 1–120), `phone` (string, 5–25), `issue` (string, 1–800), optional `urgency`, optional `type` (e.g. "Existing Customer Request")
+- **Compose SMS** (≤ 480 chars, single MMS-safe):
+  ```
+  📞 New CallCapture Lead
+  Name: {name}
+  Phone: {phone}
+  {type ? "Type: "+type+"\n" : ""}{urgency ? "⚠️ URGENT\n" : ""}Issue: {issue}
+  ```
+- **Send via Twilio gateway** (`https://connector-gateway.lovable.dev/twilio/Messages.json`, form-urlencoded, From=`TWILIO_FROM_NUMBER`, To=`DEMO_OWNER_PHONE`)
+- Return `{ success: true, sid }` on 2xx, otherwise 502 with the Twilio error body
+- Wrap everything in try/catch; log `console.error` on failures (no secret values logged)
 
-This keeps one source of truth so future copy edits update both places.
+### 3. `supabase/config.toml`
+Leave unchanged — default `verify_jwt = false` for new functions is what we need; no project-level edits.
 
-## 2. Update the Setup wizard generator
+### 4. After deploy — what you do in Vapi
+1. Server URL → `https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/send-demo-sms`
+2. Server URL Headers → add `x-webhook-secret: callcapture_secret_2026`
+3. Server Messages → enable `end-of-call-report` (and optionally `status-update`)
+4. Assistant → Analysis → **Structured Data** schema:
+   ```
+   { name: string, phone: string, issue: string,
+     urgency: boolean, type: string }
+   ```
+   So Vapi populates `message.analysis.structuredData`.
 
-Edit `src/lib/generatePrompt.ts` so `generateAssistantPrompt(state)` returns a prompt built from the new script, with the user's business info merged in. Replaces the current generic prompt structure.
+### 5. Test after deploy
+Curl from my side:
+```
+POST /functions/v1/send-demo-sms
+x-webhook-secret: callcapture_secret_2026
+{ "name":"Test User","phone":"+15555550123","issue":"AC not cooling","urgency":true }
+```
+Expect `200 { success:true, sid:"SM..." }` and a real SMS to `+19048927004`.
 
-Wizard fields still drive personalization (business name, phone, transfer rules, intake questions, notification settings), but the **flow, tone, do-nots, and closing** come from your script verbatim. The "Information to Collect" section is pre-seeded with your 5 fields (Name, Phone, Address, Issue, Urgency) and any custom intake questions the user adds get appended.
+### Security recommendations (do after first successful test)
+- In Twilio Console: enable **SMS Pumping Protection**
+- Twilio **Messaging Geo Permissions** → enable only US (and CA if needed)
+- Rotate `VAPI_WEBHOOK_SECRET` if it ever gets pasted publicly
 
-The Setup wizard UI itself (`src/pages/Setup.tsx`) doesn't need changes — it'll automatically generate the new prompt on the final step.
+### Out of scope
+- No DB writes (lead persistence) — easy to add later if you want a leads table + dashboard
+- No retry queue — Vapi will retry the webhook on non-2xx, which is sufficient
 
-## 3. Add a "What your receptionist actually says" section to the homepage
-
-Insert a new section in `src/pages/Index.tsx` between the existing "Try It Live" section and "Cost of missed calls" stats. It will render:
-
-- **Heading:** "Here's exactly what your receptionist does"
-- **Sub:** "Short. Natural. Designed to capture the lead and hang up fast."
-- A two-column card layout:
-  - **Left card — "The flow"**: numbered list of the 5 questions with the example wording from your script ("Can I get your name?", "What's the best number to reach you?", etc.) plus the opening line and closing line.
-  - **Right card — "What it never does"**: the DO NOT list rendered as red-tinted bullets (Over-explain, Sound technical, Mention AI, Try to fully solve problems).
-- Footer line: "Average call: under 90 seconds. You get the lead by SMS before they hang up."
-
-Uses existing card / typography styles — no new design system pieces.
-
-## 4. Vapi setup steps (delivered in chat after approval)
-
-I'll give you a copy-paste-ready block containing:
-- The exact system prompt (your script with `[Business Name]` placeholder filled in for the demo line)
-- Recommended Vapi settings: voice (clear/friendly), model (GPT-5 mini or Gemini 2.5 Flash), max call duration 120s, end-call phrases
-- Steps to attach to (904) 892-7004 and forward your business line
-- A test-call checklist (greeting fires, all 5 fields collected, ends with the closing line, lead SMS arrives)
-
-This is documentation only — no code changes needed for the demo number itself, since Vapi is configured outside the codebase.
-
-## Technical details
-
-- New file: `src/lib/receptionistScript.ts` (constants only, no logic).
-- Edited: `src/lib/generatePrompt.ts` — `generateAssistantPrompt` rewritten to compose from `RECEPTIONIST_SYSTEM_PROMPT` + business state. `VAPI_INSTRUCTIONS` updated to reference the new script structure.
-- Edited: `src/pages/Index.tsx` — adds one new `<section>` block; no layout reshuffling of existing sections.
-- No DB, no edge functions, no new dependencies.
-- Tone rules (no "AI assistant" → "AI receptionist", no "platform"/"system") are preserved.
-
-## Out of scope
-
-- No changes to Vapi itself (you'll paste the script in via their dashboard using the steps I provide).
-- No changes to the Setup wizard form fields or step order.
-- No changes to pricing, footer, or other marketing sections.
+Approve and I'll add the 3 secrets, write the function, deploy it, and run the test call.
