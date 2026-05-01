@@ -1,93 +1,53 @@
-## CallCapture — Activate Live Demo Number
+## CallCapture — Tighten hero, make the demo the star
 
-The live demo number `(904) 892-7004` is now active. Update the app to surface it everywhere, simplify pricing, refine wizard tone, and ensure the "Request Setup Help" CTA is consistent.
+Most of this round is already done from the prior pass: the live number `(904) 892-7004` is wired with `tel:` links, pricing is a single Pro plan with the exact feature list and "Pays for itself…" tagline, the setup wizard uses "AI receptionist" wording with "Your AI Receptionist Is Ready" + Copy Instructions / Request Setup Help, the dashboard is minimal (status + instructions + demo number + setup help), the support CTA banner appears globally, and the dark-navy + green-CTA theme is in place.
 
-### 1. Activate the demo number
+The remaining changes sharpen the hero, make the demo block visually dominant, and add desktop click-to-copy.
 
-**`src/lib/constants.ts`**
-- `DEMO_NUMBER = "(904) 892-7004"`
-- `DEMO_NUMBER_AVAILABLE = true`
-- Add `DEMO_NUMBER_TEL = "+19048927004"` for `tel:` links.
+### 1. Hero copy (`src/pages/Index.tsx`)
 
-**`src/components/DemoNumberCard.tsx`**
-- Use `DEMO_NUMBER_TEL` for the `tel:` href (currently strips formatting, but a hard constant is safer).
-- Update subtext to "Tap to call — live now".
+- Headline: **"Stop Missing Service Calls — Even After Hours"** (two lines on desktop, single block on mobile).
+- Trust line directly under the headline, in muted/accent color: **"Never miss another $150–$500 job because you missed a call."**
+- Subheadline: **"CallCapture answers every call, collects customer details, and sends you a ready-to-book lead instantly."**
+- Keep the "Call the live demo: (904) 892-7004" line (clickable `tel:` link).
+- CTAs unchanged in order — primary **Call the Demo** (`tel:+19048927004`, bright green, slightly larger), secondary **Get Set Up in 24 Hours** (`/support`).
+- New microcopy under CTAs: **"Takes 30 seconds to try • No signup required"**.
 
-### 2. Hero: prominent clickable number
+### 2. Demo number card — make it the star (`src/components/DemoNumberCard.tsx`)
 
-**`src/pages/Index.tsx` — Hero section**
-- Under the subheadline, add a bright accent line:
-  > "Call the live demo: **(904) 892-7004**" — clickable on mobile via `tel:+19048927004`.
-- Primary CTA "Call the Demo" becomes a real `tel:` link (not just a scroll anchor) on mobile; keep the in-page anchor as a secondary route on desktop. Simplest unified solution: button is an `<a href="tel:+19048927004">`. Works on desktop too (no-op or system handler).
-- Keep secondary CTA "Get Set Up in 24 Hours" → `/support`.
+- Badge above the number: **"LIVE — CALL NOW"** (solid green pill, not the current dotted "Live Demo — Live Now" label). Remove any "coming soon" branch entirely since the number is live.
+- Number stays large and tappable; bump size on the hero instance.
+- Subtext under the number: **"Takes 30 seconds to experience. No signup required."**
+- Add a **Copy number** button next to the call action for desktop users — uses `navigator.clipboard.writeText(DEMO_NUMBER_TEL)` and shows a toast "Number copied".
+- On mobile the primary action remains a `tel:` tap on the number/CTA.
 
-### 3. "Try It Live" section near the top
+### 3. Try It Live section (`src/pages/Index.tsx`)
 
-Move the existing `#try-it-live` section so it sits **immediately after the hero** (before the "cost of missed calls" stats). Update copy:
+- Already positioned right after the hero. Tighten copy to match the brief's emphasis: keep the title, the "Call (904) 892-7004…" line, and the dual CTAs (Call Demo / Get Set Up in 24 Hours).
+- Add the same "Takes 30 seconds to try" microcopy under the buttons.
 
-- Title: **Try It Live**
-- Text: "Call **(904) 892-7004** to hear exactly what your customers experience."
-- Subtext: "The AI receptionist answers the call, collects service details, and prepares the lead for the business owner."
-- CTAs: **Call Demo** (`tel:+19048927004`) and **Get Set Up in 24 Hours** (`/support`).
-- Keep `DemoNumberCard`, `SampleConversation`, and `SampleLeadCard` below.
+### 4. How It Works (`src/pages/Index.tsx`)
 
-### 4. Pricing page — single plan only
+Replace the four step strings with the exact wording from the brief:
+1. Forward your number to CallCapture
+2. We set up your AI receptionist
+3. Calls get answered 24/7 — even after hours
+4. Get new leads sent to your phone instantly
 
-**`src/pages/Pricing.tsx`** is already a single plan. Tighten copy to match the brief exactly:
-- Plan: **CallCapture Pro** — $197/month + $99 setup
-- Features list (replace current):
-  - 24/7 AI call answering
-  - Lead capture
-  - SMS lead notifications
-  - Call forwarding
-  - Custom business script
-  - After-hours handling
-- Add tagline above the card: **"Pays for itself with 1–2 captured jobs."**
-- Keep "Cancel anytime. No contracts." under the CTA.
-- Keep `RequestSetupBanner` at bottom.
-- Mirror the same simplified feature list inside the homepage pricing block (`src/pages/Index.tsx`) for consistency.
+### 5. Already in place — no changes needed
 
-### 5. Setup wizard — tone polish
-
-**`src/pages/Setup.tsx`**
-- Step labels array: rename `"Receptionist Behavior"` → `"Receptionist Behavior"` (keep), but ensure all hero/header copy says "Set up your AI receptionist" (already close — confirm wording).
-- Final step header already says "Your AI Receptionist Is Ready" ✓.
-- Final step buttons: keep **Copy Instructions** and **Request Setup Help** as the two primary actions (already present). Move the "Save to my dashboard" button below them as a secondary action (already secondary — keep).
-- Sweep any remaining "configure assistant" phrasing → "set up your AI receptionist". (Quick rg confirms none present, but verify during edit.)
-
-### 6. Dashboard — keep simple
-
-**`src/pages/Dashboard.tsx`** already shows: Setup Status, Assistant Instructions, Vapi connect block, Request Setup banner. Adjustments:
-- Replace the "Connect to Vapi" side card with a **Demo Number** card (uses `DemoNumberCard` content — phone number prominent, tappable). Move the Vapi instructions into a collapsible `<details>` below the assistant instructions so the dashboard stays uncluttered.
-- No CRM, invoices, job boards, or lead lists. Confirmed not present.
-
-### 7. "Want us to set this up?" CTA everywhere
-
-The `RequestSetupBanner` already appears on Home, Pricing, Setup, Dashboard, Support. Update the default banner copy to the exact line:
-
-> "Want us to set this up for you? We'll do it in 24 hours."
-> Button: **Request Setup Help**
-
-Keep `variant="compact"` for sidebar/inline use.
-
-### 8. Theme
-
-Already dark navy + bright green. No design system changes.
-
----
+- Pricing (homepage block + `/pricing`): single CallCapture Pro plan, $197/mo + $99 setup, exact feature list, "Pays for itself with 1–2 captured jobs", "Cancel anytime. No contracts.", CTA "Get Set Up in 24 Hours".
+- Setup wizard (`src/pages/Setup.tsx`): all "AI receptionist" wording; final step "Your AI Receptionist Is Ready" with Copy Instructions + Request Setup Help.
+- Dashboard (`src/pages/Dashboard.tsx`): Setup Status, Assistant Instructions, Demo Number card, Request Setup banner — no CRM/job tracking.
+- `RequestSetupBanner`: exact copy "Want us to set this up for you? We'll do it in 24 hours." + Request Setup Help button, mounted on home/pricing/setup/dashboard/support.
+- Theme: dark navy + bright green CTAs.
 
 ### Files to edit
 
-- `src/lib/constants.ts` — number, availability flag, tel constant
-- `src/components/DemoNumberCard.tsx` — tel link + "live now" subtext
-- `src/components/RequestSetupBanner.tsx` — exact CTA copy
-- `src/pages/Index.tsx` — hero number line, hero CTA → tel:, reorder Try-It-Live above stats, simplified pricing features
-- `src/pages/Pricing.tsx` — "Pays for itself…" tagline, exact feature list
-- `src/pages/Setup.tsx` — verify wording sweep
-- `src/pages/Dashboard.tsx` — swap Vapi card for Demo Number card; collapse Vapi instructions
+- `src/pages/Index.tsx` — hero headline, trust line, subheadline, CTA microcopy, How It Works step text.
+- `src/components/DemoNumberCard.tsx` — solid "LIVE — CALL NOW" badge, 30-second subtext, desktop Copy-number button with toast.
 
 ### Out of scope
 
-- No new database tables or auth changes.
-- No new routes.
-- No CRM/lead management features.
+- No new pages, routes, tables, or auth changes.
+- No CRM, job board, or lead-management features.
