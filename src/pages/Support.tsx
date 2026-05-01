@@ -45,9 +45,10 @@ export default function Support() {
     setErrors({});
     setSubmitting(true);
     const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
     const { error } = await supabase.from("callcapture_support_requests").insert({
       ...parsed.data,
-      user_id: userData.user?.id ?? null,
+      ...(userId ? { user_id: userId } : {}),
     });
     setSubmitting(false);
     if (error) {
