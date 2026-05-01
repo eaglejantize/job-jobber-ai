@@ -1,5 +1,6 @@
-export const DEMO_NUMBER = "(904) 555-0142";
-export const DEMO_NUMBER_AVAILABLE = false;
+export const DEMO_NUMBER = "(904) 892-7004";
+export const DEMO_NUMBER_TEL = "+19048927004";
+export const DEMO_NUMBER_AVAILABLE = true;
 
 export const INDUSTRIES = [
   "Appliance Repair",
