@@ -39,10 +39,13 @@ export default function Index() {
               <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Turn missed calls into booked jobs
             </p>
             <h1 className="text-4xl md:text-6xl font-bold leading-[1.05] tracking-tight">
-              Stop Missing<br />Service Calls
+              Stop Missing Service Calls — <span className="text-primary">Even After Hours</span>
             </h1>
-            <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-xl">
-              CallCapture answers every call, captures customer details, and turns missed calls into booked jobs — automatically.
+            <p className="mt-5 text-base md:text-lg font-semibold text-primary">
+              Never miss another $150–$500 job because you missed a call.
+            </p>
+            <p className="mt-4 text-lg md:text-xl text-muted-foreground max-w-xl">
+              CallCapture answers every call, collects customer details, and sends you a ready-to-book lead instantly.
             </p>
             <p className="mt-5 text-base md:text-lg">
               <span className="text-muted-foreground">Call the live demo: </span>
@@ -61,7 +64,8 @@ export default function Index() {
                 <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
               </Button>
             </div>
-            <div className="mt-6 flex items-center gap-4 text-sm text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">Takes 30 seconds to try • No signup required</p>
+            <div className="mt-5 flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> No contracts</span>
               <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Live in 24 hours</span>
             </div>
@@ -91,6 +95,7 @@ export default function Index() {
               <Link to="/support">Get Set Up in 24 Hours</Link>
             </Button>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground text-center">Takes 30 seconds to try • No signup required</p>
         </div>
         <div className="grid lg:grid-cols-2 gap-6 items-start">
           <div className="space-y-6">
@@ -131,7 +136,7 @@ export default function Index() {
             "Forward your business number to CallCapture",
             "We set up your AI receptionist with your script",
             "Calls get answered 24/7 — even after hours",
-            "Leads sent straight to your phone via SMS",
+            "Get new leads sent to your phone instantly",
           ].map((step, i) => (
             <div key={i} className="rounded-2xl border border-border bg-card p-6 shadow-card-soft">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary font-bold mb-4">
