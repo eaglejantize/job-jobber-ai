@@ -14,7 +14,140 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      callcapture_assistant_configs: {
+        Row: {
+          after_hours_enabled: boolean | null
+          assistant_name: string | null
+          business_id: string
+          call_rules: Json | null
+          created_at: string
+          generated_prompt: string | null
+          greeting: string | null
+          id: string
+          intake_questions: Json | null
+          notification_settings: Json | null
+          tone: string | null
+          transfer_enabled: boolean | null
+          transfer_phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          after_hours_enabled?: boolean | null
+          assistant_name?: string | null
+          business_id: string
+          call_rules?: Json | null
+          created_at?: string
+          generated_prompt?: string | null
+          greeting?: string | null
+          id?: string
+          intake_questions?: Json | null
+          notification_settings?: Json | null
+          tone?: string | null
+          transfer_enabled?: boolean | null
+          transfer_phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          after_hours_enabled?: boolean | null
+          assistant_name?: string | null
+          business_id?: string
+          call_rules?: Json | null
+          created_at?: string
+          generated_prompt?: string | null
+          greeting?: string | null
+          id?: string
+          intake_questions?: Json | null
+          notification_settings?: Json | null
+          tone?: string | null
+          transfer_enabled?: boolean | null
+          transfer_phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_assistant_configs_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      callcapture_businesses: {
+        Row: {
+          business_hours: string | null
+          business_name: string
+          created_at: string
+          email: string | null
+          id: string
+          industry: string | null
+          phone: string | null
+          service_area: string | null
+          user_id: string
+        }
+        Insert: {
+          business_hours?: string | null
+          business_name: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          industry?: string | null
+          phone?: string | null
+          service_area?: string | null
+          user_id: string
+        }
+        Update: {
+          business_hours?: string | null
+          business_name?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          industry?: string | null
+          phone?: string | null
+          service_area?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      callcapture_support_requests: {
+        Row: {
+          business_name: string | null
+          created_at: string
+          email: string
+          id: string
+          message: string | null
+          name: string
+          phone: string | null
+          request_type: string
+          user_id: string | null
+        }
+        Insert: {
+          business_name?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          message?: string | null
+          name: string
+          phone?: string | null
+          request_type: string
+          user_id?: string | null
+        }
+        Update: {
+          business_name?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string | null
+          name?: string
+          phone?: string | null
+          request_type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
