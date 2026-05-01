@@ -20,7 +20,7 @@ const STEPS = [
   "Intake Questions",
   "Call Handling",
   "Notifications",
-  "Your AI Receptionist",
+  "Your AI Receptionist Is Ready",
 ];
 
 export default function Setup() {
