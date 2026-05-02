@@ -26,6 +26,9 @@ export const wizardSchema = z.object({
   ownerEmail: z.string().trim().max(160).optional().or(z.literal("")),
   sendSms: z.boolean(),
   sendEmail: z.boolean(),
+  // Phone setup
+  phoneMode: z.enum(["new", "existing", "test"]).default("new"),
+  phoneNumber: z.string().trim().max(30).optional().or(z.literal("")),
 });
 
 export type WizardState = z.infer<typeof wizardSchema>;
@@ -51,6 +54,8 @@ export const defaultWizardState: WizardState = {
   ownerEmail: "",
   sendSms: true,
   sendEmail: true,
+  phoneMode: "new",
+  phoneNumber: "",
 };
 
 const STORAGE_KEY = "callcapture.wizard";
