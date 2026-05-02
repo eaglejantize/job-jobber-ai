@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Play, Pause, Check } from "lucide-react";
 import { VOICES, type VoicePersona } from "@/lib/voices";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type Props = {
   value: string;
@@ -13,10 +14,8 @@ type Props = {
 export default function VoicePicker({ value, onChange }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [errorIds, setErrorIds] = useState<Set<string>>(new Set());
 
   function play(v: VoicePersona) {
-    if (errorIds.has(v.id)) return;
     if (audioRef.current) {
       audioRef.current.pause();
     }
@@ -28,12 +27,12 @@ export default function VoicePicker({ value, onChange }: Props) {
     audioRef.current = audio;
     audio.onended = () => setPlayingId((p) => (p === v.id ? null : p));
     audio.onerror = () => {
-      setErrorIds((s) => new Set(s).add(v.id));
       setPlayingId(null);
+      toast("Preview audio not uploaded yet.");
     };
     audio.play().then(() => setPlayingId(v.id)).catch(() => {
-      setErrorIds((s) => new Set(s).add(v.id));
       setPlayingId(null);
+      toast("Preview audio not uploaded yet.");
     });
   }
 
@@ -42,7 +41,6 @@ export default function VoicePicker({ value, onChange }: Props) {
       {VOICES.map((v) => {
         const selected = value === v.id;
         const isPlaying = playingId === v.id;
-        const missing = errorIds.has(v.id);
         return (
           <div
             key={v.id}
@@ -63,26 +61,21 @@ export default function VoicePicker({ value, onChange }: Props) {
               )}
             </div>
             <p className="text-sm text-muted-foreground flex-1">{v.description}</p>
-            {missing ? (
-              <p className="text-xs text-muted-foreground italic">Preview audio not uploaded yet.</p>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => play(v)}
-                className="w-full"
-              >
-                {isPlaying ? <><Pause className="h-4 w-4" /> Pause</> : <><Play className="h-4 w-4" /> Play Preview</>}
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => play(v)}
+              className="w-full"
+            >
+              {isPlaying ? <><Pause className="h-4 w-4" /> Pause</> : <><Play className="h-4 w-4" /> Play Preview</>}
+            </Button>
             <Button
               type="button"
               size="sm"
               variant={selected ? "default" : "secondary"}
               onClick={() => onChange(v)}
               className="w-full"
-              disabled={selected}
             >
               {selected ? <><Check className="h-4 w-4" /> Selected</> : "Select Voice"}
             </Button>

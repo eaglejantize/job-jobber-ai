@@ -1,96 +1,29 @@
-# Voice Selection Rebuild (Static Previews)
+Fix three UX issues in Settings → AI Settings voice picker.
 
-Curated voice personas with local MP3 previews. UI lives in **Settings → AI Settings**, selection saved to the database, and shown on the **Dashboard**. No ElevenLabs, no live Vapi calls.
+## 1. VoicePicker (`src/components/VoicePicker.tsx`)
+- Remove the swap that hides "Play Preview" when audio fails. Always render the button.
+- On audio error, fire `toast("Preview audio not uploaded yet.")` (sonner) and reset playing state. Button stays clickable.
+- Remove `disabled` from the Select button. Selected state shows "Selected" + check icon with primary variant; non-selected shows "Select Voice". Border highlight stays.
+- Drop the unused `errorIds` set; track only `playingId`.
 
-## What gets built
+## 2. Settings AI tab (`src/pages/Settings.tsx`)
 
-### 1. Voice catalog (new file `src/lib/voices.ts`)
-A single source of truth used by Settings + Dashboard:
+**Voice section header**
+- Add a small "Reset to Recommended" ghost button next to the "Voice" label. Calls `selectVoice(getVoiceById(DEFAULT_VOICE_ID))` (Maya).
 
-```ts
-export type VoicePersona = {
-  id: string;            // stable key, e.g. "maya"
-  label: string;         // "Maya"
-  persona: string;       // "Recommended" | "Most Human" | "Premium" | "Confident Technician" | "Fast" | "Calm" | "Calm Authority"
-  badge?: "Recommended" | "Most Human" | "Premium";
-  description: string;
-  previewUrl: string;    // "/audio/voices/maya-preview.mp3"
-  voiceId: string;       // placeholder, e.g. "placeholder-maya"
-};
-export const VOICES: VoicePersona[] = [ /* all 7 */ ];
-export const DEFAULT_VOICE_ID = "maya";
-```
+**Receptionist name field**
+- Replace the generic `Field` usage with inline JSX:
+  - Label: "What should your receptionist say their name is?"
+  - Helper text under label: "Customers may hear this name during calls. You can use the selected voice name or choose your own."
+  - Input bound to `cfg.assistant_name`. On user typing, set `nameManuallyEdited = true`.
+  - Adjacent secondary button "Use selected voice name" → sets `assistant_name` to the currently selected voice's label and clears `nameManuallyEdited`.
 
-The 7 entries match the spec exactly (Maya, Jasmine, Claire, Marcus, Leo, Ava, Noah) with badges only on Maya/Jasmine/Claire.
+**Auto-sync name with voice**
+- Add `nameManuallyEdited` state (default false; also false on initial load if name matches a known voice label or is empty).
+- In `selectVoice(v)`: update `notification_settings.voice` AND, if `!nameManuallyEdited` and current name is empty or matches any voice label (case-insensitive), set `assistant_name` to `v.label`.
 
-### 2. Database storage
-Voice fields are stored as JSON inside the existing `callcapture_assistant_configs.notification_settings` jsonb column under a `voice` key:
+## 3. Save behavior
+`saveAi` already persists `assistant_name` and `notification_settings.voice` (label, persona, preview URL, voice_id). No changes required.
 
-```json
-"voice": {
-  "voice_label": "Maya",
-  "voice_persona": "Recommended",
-  "voice_preview_url": "/audio/voices/maya-preview.mp3",
-  "voice_id": "placeholder-maya"
-}
-```
-
-This avoids a schema migration and keeps the existing types file untouched. Default = Maya when no value is saved.
-
-### 3. New component `src/components/VoicePicker.tsx`
-- Renders a responsive grid of 7 voice cards.
-- Each card: name, persona/badge pill, description, **Play Preview** button, **Select Voice** button (shows "Selected" state when active).
-- One shared `<audio>` element (ref) — clicking Play on another card stops the previous one.
-- If the audio file 404s (`onError`), the card swaps the player area for muted text: **"Preview audio not uploaded yet."**
-- Selected card visually highlighted (primary border + soft bg).
-- Props: `value: string` (voice id), `onChange: (v: VoicePersona) => void`.
-
-### 4. Settings page changes (`src/pages/Settings.tsx`)
-Inside the **AI Settings** tab, add a new section **above** the existing Tone selector:
-
-```
-Voice
-  <VoicePicker value={selectedVoiceId} onChange={...} />
-Tone (secondary)
-  <existing tone radios>
-```
-
-Reads/writes `cfg.notification_settings.voice`. The `saveAi` handler already persists `intake_questions`, `assistant_name`, etc. — extend it to also write `notification_settings` with the voice block merged in, and regenerate the prompt as it already does.
-
-### 5. Dashboard display (`src/pages/Dashboard.tsx`)
-Add a small read-only row in the existing status card (next to Business Phone):
-
-```
-AI Voice
-Maya · Recommended
-```
-
-Fetched from the same `callcapture_assistant_configs` query already running on the page (extend the select to include `notification_settings`). Falls back to "Maya · Recommended" if unset.
-
-### 6. Static audio placeholders
-Create `public/audio/voices/.gitkeep` so the folder exists. Real MP3 files are not generated by this task; until uploaded, the picker shows "Preview audio not uploaded yet." per spec.
-
-## What is NOT changing
-
-- No ElevenLabs integration, no `ELEVENLABS_API_KEY`.
-- No live Vapi voice preview calls.
-- No edge function changes.
-- No Setup wizard changes (voice picking lives in Settings, as requested).
-- No changes to auth, leads, Stripe, Twilio, or Supabase schema.
-- `src/integrations/supabase/types.ts` untouched (we use existing jsonb columns).
-
-## Files touched
-
-- **new** `src/lib/voices.ts`
-- **new** `src/components/VoicePicker.tsx`
-- **new** `public/audio/voices/.gitkeep`
-- **edit** `src/pages/Settings.tsx` — add Voice section in AI tab, persist to `notification_settings.voice`
-- **edit** `src/pages/Dashboard.tsx` — show selected voice in status card
-
-## Acceptance
-
-- AI Settings tab shows 7 voice cards with correct names, badges, descriptions.
-- Clicking Play Preview attempts to play the matching `/audio/voices/<id>-preview.mp3`; if missing, shows "Preview audio not uploaded yet."
-- Clicking Select Voice highlights that card and saves on "Save changes".
-- Dashboard status card shows the selected voice (Maya by default).
-- Tone selector still works and is positioned below Voice.
+## Out of scope
+Dashboard, Leads, Auth, Stripe, Twilio, Vapi, edge functions, DB schema, wizard, other Settings tabs.
