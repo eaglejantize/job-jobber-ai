@@ -12,7 +12,8 @@ import { Plus, X, Loader2 } from "lucide-react";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { Link } from "react-router-dom";
 import VoicePicker from "@/components/VoicePicker";
-import { DEFAULT_VOICE_ID, getVoiceById, type VoicePersona } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, VOICES, getVoiceById, type VoicePersona } from "@/lib/voices";
+import { useRef } from "react";
 
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful", "Professional", "Warm"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
@@ -49,6 +50,7 @@ export default function Settings() {
   const [cfg, setCfg] = useState<ConfigRow | null>(null);
   const [alertPhone, setAlertPhone] = useState("");
   const [customQ, setCustomQ] = useState("");
+  const nameManuallyEditedRef = useRef(false);
 
   useEffect(() => {
     if (!user) return;
@@ -61,6 +63,10 @@ export default function Settings() {
       setBiz((bRows?.[0] as BusinessRow) ?? null);
       setCfg((cRows?.[0] as ConfigRow) ?? null);
       setAlertPhone(client?.alert_phone ?? "");
+      // If the saved name doesn't match any known voice and isn't empty, treat it as user-edited.
+      const savedName = (cRows?.[0] as ConfigRow | undefined)?.assistant_name?.trim() ?? "";
+      const matchesVoice = !!savedName && VOICES.some((v) => v.label.toLowerCase() === savedName.toLowerCase());
+      nameManuallyEditedRef.current = !!savedName && !matchesVoice;
       setLoading(false);
     })();
   }, [user]);
@@ -201,6 +207,22 @@ export default function Settings() {
       },
     };
     setCfgField("notification_settings", next as ConfigRow["notification_settings"]);
+    // Auto-sync receptionist name if user hasn't manually customized it.
+    const currentName = (cfg?.assistant_name ?? "").trim();
+    const matchesVoice = !!currentName && VOICES.some((vp) => vp.label.toLowerCase() === currentName.toLowerCase());
+    if (!nameManuallyEditedRef.current && (currentName === "" || matchesVoice)) {
+      setCfgField("assistant_name", v.label);
+    }
+  }
+
+  function resetVoiceToRecommended() {
+    selectVoice(getVoiceById(DEFAULT_VOICE_ID));
+  }
+
+  function useSelectedVoiceName() {
+    const v = getVoiceById(selectedVoiceId);
+    setCfgField("assistant_name", v.label);
+    nameManuallyEditedRef.current = false;
   }
 
   function setCallRule<K extends "transferTriggers" | "fallbackAction">(k: K, v: K extends "transferTriggers" ? string[] : string) {
@@ -264,11 +286,33 @@ export default function Settings() {
 
           <TabsContent value="ai" className="rounded-2xl border border-border bg-card p-6 mt-4 shadow-card-soft space-y-6">
             <div className="grid md:grid-cols-2 gap-4">
-              <Field label="Receptionist name" value={cfg.assistant_name ?? ""} onChange={(v) => setCfgField("assistant_name", v)} />
+              <div className="space-y-2">
+                <Label>What should your receptionist say their name is?</Label>
+                <p className="text-xs text-muted-foreground">
+                  Customers may hear this name during calls. You can use the selected voice name or choose your own.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={cfg.assistant_name ?? ""}
+                    onChange={(e) => {
+                      nameManuallyEditedRef.current = true;
+                      setCfgField("assistant_name", e.target.value);
+                    }}
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={useSelectedVoiceName} className="shrink-0">
+                    Use selected voice name
+                  </Button>
+                </div>
+              </div>
               <Field label="Greeting" value={cfg.greeting ?? ""} onChange={(v) => setCfgField("greeting", v)} />
             </div>
             <div>
-              <Label>Voice</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Voice</Label>
+                <Button type="button" variant="ghost" size="sm" onClick={resetVoiceToRecommended}>
+                  Reset to Recommended
+                </Button>
+              </div>
               <p className="text-sm text-muted-foreground mt-1 mb-3">
                 Pick the voice your AI receptionist uses on calls.
               </p>
