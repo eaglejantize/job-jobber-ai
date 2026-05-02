@@ -13,8 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIONS } from "@/lib/constants";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
-import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Phone, Check, ChevronDown, CheckCircle2, PhoneCall } from "lucide-react";
-import { DEMO_NUMBER_TEL } from "@/lib/constants";
+import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Phone, Check, ChevronDown } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "@/hooks/use-toast";
@@ -28,7 +27,6 @@ const STEPS = [
   "AI Receptionist Setup",
   "Voice & Greeting",
   "Review & Launch",
-  "You're Live",
 ] as const;
 
 const CALL_GOALS = ["Capture leads", "Existing customers", "Info calls"] as const;
@@ -184,8 +182,8 @@ export default function Setup() {
       try { localStorage.removeItem(STEP_KEY); } catch { /* ignore */ }
       clearWizardState();
 
-      setStep(6);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      toast({ title: "Your AI receptionist is ready." });
+      navigate("/dashboard");
     } catch (err) {
       toast({
         title: "Couldn't finish setup",
@@ -197,27 +195,8 @@ export default function Setup() {
     }
   }
 
-  // Auto-redirect from success step after 3 seconds
-  useEffect(() => {
-    if (step !== 6) return;
-    const t = setTimeout(() => navigate("/dashboard"), 3000);
-    return () => clearTimeout(t);
-  }, [step, navigate]);
-
-  const callHandlingMode = state.transferEnabled
-    ? "Hybrid (AI + Forwarding)"
-    : state.phoneMode === "existing"
-    ? "Forwarding"
-    : "AI";
-
-  const successPhone = state.phoneNumber || state.phone || "";
-  const telHref = successPhone
-    ? `tel:${successPhone.replace(/\D/g, "")}`
-    : `tel:${DEMO_NUMBER_TEL}`;
-
   return (
     <Layout>
-      {step !== 6 && (
       <section className="bg-hero">
         <div className="container py-10 md:py-14">
           <div className="max-w-3xl mx-auto text-center">
@@ -234,15 +213,10 @@ export default function Setup() {
           </div>
         </div>
       </section>
-      )}
 
-      <section className={step === 6
-        ? "container py-16 md:py-24"
-        : "container pb-20 grid lg:grid-cols-[1fr_320px] gap-8 -mt-4"}>
-        <div className={step === 6
-          ? "max-w-xl mx-auto rounded-2xl border border-border bg-card p-8 md:p-10 shadow-card-soft text-center"
-          : "rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft"}>
-          {step !== 6 && <h2 className="text-xl font-semibold mb-6">{STEPS[step]}</h2>}
+      <section className="container pb-20 grid lg:grid-cols-[1fr_320px] gap-8 -mt-4">
+        <div className="rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft">
+          <h2 className="text-xl font-semibold mb-6">{STEPS[step]}</h2>
 
           {/* Step 1: Business Info */}
           {step === 0 && (
@@ -503,82 +477,6 @@ export default function Setup() {
             </div>
           )}
 
-          {/* Step 7: Success / You're Live */}
-          {step === 6 && (
-            <div className="space-y-6">
-              <div className="flex justify-center">
-                <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/15">
-                  <CheckCircle2 className="h-10 w-10 text-primary" />
-                </div>
-              </div>
-              <div>
-                <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-                  Your AI Receptionist is Ready
-                </h2>
-                <p className="mt-2 text-muted-foreground">
-                  You're live. Your assistant is now answering calls.
-                </p>
-              </div>
-
-              {/* Summary */}
-              <div className="rounded-xl border border-border bg-secondary/30 p-5 text-left">
-                <dl className="grid grid-cols-1 gap-3 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-muted-foreground">Business</dt>
-                    <dd className="font-medium text-right">{state.businessName || "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-muted-foreground">Phone number</dt>
-                    <dd className="font-medium text-right">{successPhone || "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-muted-foreground">Call handling</dt>
-                    <dd className="font-medium text-right">{callHandlingMode}</dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* What happens next */}
-              <div className="rounded-xl border border-border bg-card p-5 text-left">
-                <p className="font-semibold mb-3">When someone calls your number:</p>
-                <ul className="space-y-2 text-sm">
-                  {[
-                    "Your AI receptionist answers instantly",
-                    "Captures the customer's info",
-                    "Sends the lead to you",
-                    "You follow up and book the job",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-3">
-                      <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                        <Check className="h-3 w-3" />
-                      </span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button
-                  onClick={() => navigate("/dashboard")}
-                  className="bg-cta hover:opacity-90 shadow-glow h-11 px-6"
-                >
-                  Go to Dashboard <ArrowRight className="h-4 w-4" />
-                </Button>
-                <Button asChild variant="outline" className="h-11 px-6">
-                  <a href={telHref}>
-                    <PhoneCall className="h-4 w-4" /> Call Your Number to Test
-                  </a>
-                </Button>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Redirecting to your dashboard in 3 seconds…
-              </p>
-            </div>
-          )}
-
-          {step !== 6 && (
           <div className="mt-8 flex items-center justify-between">
             <Button variant="ghost" onClick={prev} disabled={step === 0}>
               <ArrowLeft className="h-4 w-4" /> Back
@@ -587,7 +485,7 @@ export default function Setup() {
               <Button onClick={next} className="bg-cta hover:opacity-90 shadow-glow h-11 px-6">
                 Continue <ArrowRight className="h-4 w-4" />
               </Button>
-            ) : step === 5 ? (
+            ) : (
               <Button
                 onClick={generateAndFinish}
                 disabled={submitting}
@@ -595,12 +493,10 @@ export default function Setup() {
               >
                 {submitting ? "Launching…" : "Launch My AI Receptionist"}
               </Button>
-            ) : null}
+            )}
           </div>
-          )}
         </div>
 
-        {step !== 6 && (
         <aside className="space-y-4">
           <RequestSetupBanner variant="compact" />
           <div className="rounded-xl border border-border bg-card p-5 text-sm">
@@ -612,7 +508,6 @@ export default function Setup() {
             </ul>
           </div>
         </aside>
-        )}
       </section>
     </Layout>
   );
