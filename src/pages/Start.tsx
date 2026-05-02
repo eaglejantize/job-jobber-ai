@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 
 const schema = z.object({
@@ -21,8 +21,14 @@ type Prefill = Partial<z.infer<typeof schema>>;
 export default function Start() {
   const location = useLocation();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const prefill = (location.state as { prefill?: Prefill } | null)?.prefill ?? {};
   const canceled = params.get("canceled") === "1";
+  const isStripeReturn =
+    !!params.get("session_id") ||
+    !!params.get("checkout_session_id") ||
+    params.get("success") === "1" ||
+    params.get("success") === "true";
 
   const [owner_name, setOwner] = useState(prefill.owner_name ?? "");
   const [business_name, setBiz] = useState(prefill.business_name ?? "");
@@ -36,6 +42,25 @@ export default function Start() {
       toast({ title: "Checkout canceled", description: "No worries — start again whenever you're ready." });
     }
   }, [canceled]);
+
+  useEffect(() => {
+    if (!isStripeReturn) return;
+    const t = setTimeout(() => {
+      navigate(`/setup${location.search}`, { replace: true });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [isStripeReturn, navigate, location.search]);
+
+  if (isStripeReturn) {
+    return (
+      <Layout>
+        <section className="container py-24 text-center">
+          <h1 className="text-2xl font-semibold">Redirecting to setup…</h1>
+          <p className="mt-3 text-muted-foreground">One moment while we take you to the next step.</p>
+        </section>
+      </Layout>
+    );
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

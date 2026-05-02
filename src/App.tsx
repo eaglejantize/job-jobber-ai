@@ -10,6 +10,7 @@ import Setup from "./pages/Setup.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Support from "./pages/Support.tsx";
 import Start from "./pages/Start.tsx";
+import Confirm from "./pages/Confirm.tsx";
 import Auth from "./pages/Auth.tsx";
 import LeadInbox from "./pages/LeadInbox.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/demo" element={<Demo />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/start" element={<Start />} />
+          <Route path="/confirm" element={<Confirm />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/leads" element={<LeadInbox />} />
