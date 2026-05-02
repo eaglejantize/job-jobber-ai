@@ -1,48 +1,61 @@
 import Layout from "@/components/Layout";
 import { useEffect, useMemo, useState } from "react";
 import {
-  defaultWizardState,
   loadWizardState,
   saveWizardState,
+  clearWizardState,
   type WizardState,
 } from "@/lib/wizardSchema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS } from "@/lib/constants";
+import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIONS } from "@/lib/constants";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
-import { ArrowRight, ArrowLeft, Plus, X, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Phone } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
 const STEPS = [
   "Business Info",
-  "Call Goals",
-  "Info to Collect",
-  "Tone",
-  "Existing Customer Handling",
-  "Generate Instructions",
+  "Phone Setup",
+  "Call Handling",
+  "AI Receptionist Setup",
+  "Voice & Greeting",
+  "Review & Launch",
 ] as const;
 
 const CALL_GOALS = ["Capture leads", "Existing customers", "Info calls"] as const;
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
 
+const STEP_KEY = "callcapture.wizard.step";
+
 export default function Setup() {
   const navigate = useNavigate();
   const [clientId, setClientId] = useState<string | null>(null);
 
   const [state, setState] = useState<WizardState>(loadWizardState);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(STEP_KEY);
+      const n = raw ? parseInt(raw, 10) : 0;
+      return Number.isFinite(n) && n >= 0 && n < STEPS.length ? n : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [customQ, setCustomQ] = useState("");
   const [callGoals, setCallGoals] = useState<string[]>(["Capture leads"]);
   const [existingCustomerForward, setExistingCustomerForward] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { saveWizardState(state); }, [state]);
+  useEffect(() => {
+    try { localStorage.setItem(STEP_KEY, String(step)); } catch { /* ignore */ }
+  }, [step]);
 
   // Prefill from the user's most recent client row, if signed in.
   useEffect(() => {
@@ -73,27 +86,32 @@ export default function Setup() {
   const set = <K extends keyof WizardState>(k: K, v: WizardState[K]) =>
     setState((s) => ({ ...s, [k]: v }));
 
-  const generated = useMemo(
-    () => generateAssistantPrompt({
-      ...state,
-      // Map wizard tone "Helpful" through generator (already in enum)
-    }),
-    [state],
-  );
+  const generated = useMemo(() => generateAssistantPrompt(state), [state]);
 
   function next() {
     if (step === 0 && (!state.businessName.trim() || !state.industry)) {
-      toast({ title: "Add business type and name", variant: "destructive" });
+      toast({ title: "Add business name and type", variant: "destructive" });
       return;
     }
-    if (step === 1 && callGoals.length === 0) {
+    if (step === 1 && !state.phone.trim()) {
+      toast({ title: "Add your business phone", variant: "destructive" });
+      return;
+    }
+    if (step === 2 && callGoals.length === 0) {
       toast({ title: "Pick at least one call goal", variant: "destructive" });
+      return;
+    }
+    if (step === 4 && !state.assistantName.trim()) {
+      toast({ title: "Give your receptionist a name", variant: "destructive" });
       return;
     }
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  function prev() { setStep((s) => Math.max(0, s - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function prev() {
+    setStep((s) => Math.max(0, s - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function generateAndFinish() {
     setSubmitting(true);
@@ -152,6 +170,9 @@ export default function Setup() {
           .eq("id", clientId);
       }
 
+      try { localStorage.removeItem(STEP_KEY); } catch { /* ignore */ }
+      clearWizardState();
+
       toast({ title: "Your AI receptionist is ready." });
       navigate("/dashboard");
     } catch (err) {
@@ -168,15 +189,17 @@ export default function Setup() {
   return (
     <Layout>
       <section className="bg-hero">
-        <div className="container py-12 md:py-16">
+        <div className="container py-10 md:py-14">
           <div className="max-w-3xl mx-auto text-center">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">
-              Step {step + 1} of {STEPS.length}
+              Step {step + 1} of {STEPS.length} — {STEPS[step]}
             </p>
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
               Let's set up your AI receptionist
             </h1>
-            <p className="mt-2 text-muted-foreground">We set this up for you. Live in 24 hours.</p>
+            <p className="mt-2 text-muted-foreground">
+              We set this up for you. Live in 24 hours.
+            </p>
             <Progress value={((step + 1) / STEPS.length) * 100} className="mt-6 h-2" />
           </div>
         </div>
@@ -186,103 +209,170 @@ export default function Setup() {
         <div className="rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft">
           <h2 className="text-xl font-semibold mb-6">{STEPS[step]}</h2>
 
+          {/* Step 1: Business Info */}
           {step === 0 && (
             <div className="grid md:grid-cols-2 gap-4">
               <Field label="Business name *" value={state.businessName} onChange={(v) => set("businessName", v)} />
               <SelectField label="Business type *" value={state.industry} onChange={(v) => set("industry", v)} options={INDUSTRIES} />
               <Field label="Service area" placeholder="e.g. Jacksonville + 30 mi" value={state.serviceArea ?? ""} onChange={(v) => set("serviceArea", v)} />
               <Field label="Hours" placeholder="Mon–Fri 8am–6pm" value={state.businessHours ?? ""} onChange={(v) => set("businessHours", v)} />
-              <Field label="Business phone" type="tel" value={state.phone} onChange={(v) => set("phone", v)} />
               <Field label="Business email" type="email" value={state.email} onChange={(v) => set("email", v)} />
             </div>
           )}
 
+          {/* Step 2: Phone Setup */}
           {step === 1 && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">What kinds of calls should the AI handle?</p>
-              <div className="grid sm:grid-cols-2 gap-2">
-                {CALL_GOALS.map((g) => (
-                  <CheckRow
-                    key={g}
-                    label={g}
-                    checked={callGoals.includes(g)}
-                    onChange={(c) =>
-                      setCallGoals(c
-                        ? [...callGoals, g]
-                        : callGoals.filter((x) => x !== g))
-                    }
-                  />
-                ))}
+            <div className="space-y-5">
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
+                <Phone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  We'll provision a CallCapture number for your business. You'll forward your existing
+                  business line to it so the AI receptionist answers when you can't.
+                </p>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="Business phone *" type="tel" placeholder="(555) 555-1234" value={state.phone} onChange={(v) => set("phone", v)} />
+                <Field label="Owner alert SMS number" type="tel" placeholder="Where new lead texts go" value={state.ownerSms ?? ""} onChange={(v) => set("ownerSms", v)} />
               </div>
             </div>
           )}
 
+          {/* Step 3: Call Handling */}
           {step === 2 && (
-            <div>
-              <p className="text-sm text-muted-foreground mb-4">
-                Pick what your receptionist should ask every caller.
-              </p>
-              <div className="grid sm:grid-cols-2 gap-2">
-                {COLLECT_OPTIONS.map((q) => (
-                  <CheckRow
-                    key={q}
-                    label={q}
-                    checked={state.intakeQuestions.includes(q)}
-                    onChange={(c) =>
-                      set("intakeQuestions", c
-                        ? [...state.intakeQuestions, q]
-                        : state.intakeQuestions.filter((x) => x !== q))
-                    }
-                  />
-                ))}
-                {DEFAULT_INTAKE_QUESTIONS.filter((q) => !COLLECT_OPTIONS.some((o) => o.toLowerCase() === q.toLowerCase())).map((q) => (
-                  <CheckRow
-                    key={q}
-                    label={q}
-                    checked={state.intakeQuestions.includes(q)}
-                    onChange={(c) =>
-                      set("intakeQuestions", c
-                        ? [...state.intakeQuestions, q]
-                        : state.intakeQuestions.filter((x) => x !== q))
-                    }
-                  />
-                ))}
-              </div>
-              <div className="mt-6">
-                <Label>Custom questions</Label>
-                <div className="flex gap-2 mt-2">
-                  <Input value={customQ} onChange={(e) => setCustomQ(e.target.value)} placeholder="e.g. Are you a returning customer?" />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const v = customQ.trim();
-                      if (!v) return;
-                      set("intakeQuestions", [...state.intakeQuestions, v]);
-                      setCustomQ("");
-                    }}
-                  >
-                    <Plus className="h-4 w-4" /> Add
-                  </Button>
+            <div className="space-y-6">
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">What kinds of calls should the AI handle?</p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {CALL_GOALS.map((g) => (
+                    <CheckRow
+                      key={g}
+                      label={g}
+                      checked={callGoals.includes(g)}
+                      onChange={(c) =>
+                        setCallGoals(c ? [...callGoals, g] : callGoals.filter((x) => x !== g))
+                      }
+                    />
+                  ))}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {state.intakeQuestions
-                    .filter((q) => ![...COLLECT_OPTIONS, ...DEFAULT_INTAKE_QUESTIONS].some((o) => o.toLowerCase() === q.toLowerCase()))
-                    .map((q) => (
-                      <span key={q} className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm">
-                        {q}
-                        <button onClick={() => set("intakeQuestions", state.intakeQuestions.filter((x) => x !== q))}>
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
+              </div>
+
+              <ToggleRow
+                label="Forward existing customer calls to my phone"
+                value={existingCustomerForward}
+                onChange={setExistingCustomerForward}
+              />
+              {existingCustomerForward && (
+                <Field
+                  label="Forward to phone number"
+                  type="tel"
+                  value={state.transferPhone ?? ""}
+                  onChange={(v) => set("transferPhone", v)}
+                />
+              )}
+
+              <ToggleRow
+                label="Answer calls after hours"
+                value={state.afterHoursEnabled}
+                onChange={(v) => set("afterHoursEnabled", v)}
+              />
+
+              <SelectField
+                label="If no one picks up the transfer"
+                value={state.fallbackAction}
+                onChange={(v) => set("fallbackAction", v)}
+                options={FALLBACK_ACTIONS as readonly string[]}
+              />
+            </div>
+          )}
+
+          {/* Step 4: AI Receptionist Setup */}
+          {step === 3 && (
+            <div className="space-y-6">
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Pick what your receptionist should ask every caller.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {COLLECT_OPTIONS.map((q) => (
+                    <CheckRow
+                      key={q}
+                      label={q}
+                      checked={state.intakeQuestions.includes(q)}
+                      onChange={(c) =>
+                        set("intakeQuestions", c
+                          ? [...state.intakeQuestions, q]
+                          : state.intakeQuestions.filter((x) => x !== q))
+                      }
+                    />
+                  ))}
+                  {DEFAULT_INTAKE_QUESTIONS.filter((q) => !COLLECT_OPTIONS.some((o) => o.toLowerCase() === q.toLowerCase())).map((q) => (
+                    <CheckRow
+                      key={q}
+                      label={q}
+                      checked={state.intakeQuestions.includes(q)}
+                      onChange={(c) =>
+                        set("intakeQuestions", c
+                          ? [...state.intakeQuestions, q]
+                          : state.intakeQuestions.filter((x) => x !== q))
+                      }
+                    />
+                  ))}
+                </div>
+                <div className="mt-6">
+                  <Label>Custom questions</Label>
+                  <div className="flex gap-2 mt-2">
+                    <Input value={customQ} onChange={(e) => setCustomQ(e.target.value)} placeholder="e.g. Are you a returning customer?" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const v = customQ.trim();
+                        if (!v) return;
+                        set("intakeQuestions", [...state.intakeQuestions, v]);
+                        setCustomQ("");
+                      }}
+                    >
+                      <Plus className="h-4 w-4" /> Add
+                    </Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {state.intakeQuestions
+                      .filter((q) => ![...COLLECT_OPTIONS, ...DEFAULT_INTAKE_QUESTIONS].some((o) => o.toLowerCase() === q.toLowerCase()))
+                      .map((q) => (
+                        <span key={q} className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm">
+                          {q}
+                          <button onClick={() => set("intakeQuestions", state.intakeQuestions.filter((x) => x !== q))}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">Transfer the call when…</p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {TRANSFER_TRIGGERS.map((t) => (
+                    <CheckRow
+                      key={t}
+                      label={t}
+                      checked={state.transferTriggers.includes(t)}
+                      onChange={(c) =>
+                        set("transferTriggers", c
+                          ? [...state.transferTriggers, t]
+                          : state.transferTriggers.filter((x) => x !== t))
+                      }
+                    />
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {step === 3 && (
-            <div className="space-y-3">
+          {/* Step 5: Voice & Greeting */}
+          {step === 4 && (
+            <div className="space-y-5">
               <p className="text-sm text-muted-foreground">How should your receptionist sound?</p>
               <div className="grid sm:grid-cols-3 gap-2">
                 {TONE_OPTIONS.map((t) => (
@@ -298,36 +388,14 @@ export default function Setup() {
                   </label>
                 ))}
               </div>
-              <div className="grid md:grid-cols-2 gap-4 mt-6">
-                <Field label="Receptionist name" value={state.assistantName} onChange={(v) => set("assistantName", v)} />
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="Receptionist name *" value={state.assistantName} onChange={(v) => set("assistantName", v)} />
                 <Field label="Greeting" value={state.greeting} onChange={(v) => set("greeting", v)} />
               </div>
             </div>
           )}
 
-          {step === 4 && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                When an existing customer calls, we'll forward the call to your line by default.
-                If your line doesn't answer, the AI takes a message and sends it to your alert number.
-              </p>
-              <ToggleRow
-                label="Forward existing customer calls to my phone"
-                value={existingCustomerForward}
-                onChange={setExistingCustomerForward}
-              />
-              {existingCustomerForward && (
-                <Field
-                  label="Forward to phone number"
-                  type="tel"
-                  value={state.transferPhone ?? ""}
-                  onChange={(v) => set("transferPhone", v)}
-                />
-              )}
-              <Field label="Owner alert SMS number" type="tel" value={state.ownerSms ?? ""} onChange={(v) => set("ownerSms", v)} />
-            </div>
-          )}
-
+          {/* Step 6: Review & Launch */}
           {step === 5 && (
             <div className="space-y-5">
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
@@ -342,14 +410,6 @@ export default function Setup() {
               <pre className="max-h-[320px] overflow-auto rounded-xl border border-border bg-secondary/40 p-4 text-xs font-mono whitespace-pre-wrap">
 {generated}
               </pre>
-              <Button
-                onClick={generateAndFinish}
-                disabled={submitting}
-                size="lg"
-                className="w-full bg-cta hover:opacity-90 shadow-glow h-12"
-              >
-                {submitting ? "Generating…" : "Generate My AI Receptionist"}
-              </Button>
             </div>
           )}
 
@@ -362,7 +422,13 @@ export default function Setup() {
                 Continue <ArrowRight className="h-4 w-4" />
               </Button>
             ) : (
-              <span />
+              <Button
+                onClick={generateAndFinish}
+                disabled={submitting}
+                className="bg-cta hover:opacity-90 shadow-glow h-11 px-6"
+              >
+                {submitting ? "Generating…" : "Generate My AI Receptionist"}
+              </Button>
             )}
           </div>
         </div>
