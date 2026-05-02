@@ -1,10 +1,10 @@
 import Layout from "@/components/Layout";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate, Link } from "react-router-dom";
+import { Navigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Copy, Phone } from "lucide-react";
+import { Copy, Phone, Loader2 } from "lucide-react";
 import { VAPI_INSTRUCTIONS } from "@/lib/generatePrompt";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import DemoNumberCard from "@/components/DemoNumberCard";
@@ -21,16 +21,32 @@ type Client = {
   id: string;
   setup_status: string;
   payment_status: string;
+  subscription_status: string | null;
   alert_phone: string;
   business_name: string;
 };
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
+  const [params, setParams] = useSearchParams();
   const [config, setConfig] = useState<Config | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [fetched, setFetched] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const toastedRef = useRef(false);
+
+  // One-time "Payment received" toast on Stripe return.
+  useEffect(() => {
+    if (params.get("checkout") === "success" && !toastedRef.current) {
+      toastedRef.current = true;
+      toast({ title: "Payment received", description: "We're finalizing your account now." });
+      const next = new URLSearchParams(params);
+      next.delete("checkout");
+      next.delete("session_id");
+      setParams(next, { replace: true });
+    }
+  }, [params, setParams]);
 
   useEffect(() => {
     if (!user) return;
@@ -41,19 +57,41 @@ export default function Dashboard() {
       .limit(1)
       .maybeSingle()
       .then(({ data }) => { setConfig(data as Config | null); setFetched(true); });
-    void supabase
-      .from("callcapture_clients")
-      .select("id, setup_status, payment_status, alert_phone, business_name")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => { setClient(data as Client | null); });
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 10; // ~30s at 3s
+    const startedAt = Date.now();
+
+    const fetchClient = async () => {
+      const { data } = await supabase
+        .from("callcapture_clients")
+        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      setClient(data as Client | null);
+      const isActive = (data?.payment_status ?? "").toLowerCase() === "active";
+      const justArrived = params.get("checkout") === "success" || Date.now() - startedAt < 1000;
+      if (!isActive && (justArrived || attempts > 0) && attempts < maxAttempts) {
+        setPolling(true);
+        attempts += 1;
+        setTimeout(fetchClient, 3000);
+      } else {
+        setPolling(false);
+      }
+    };
+    void fetchClient();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   if (loading) return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
   if (!user) return <Navigate to="/auth" replace />;
 
+  const paymentActive = (client?.payment_status ?? "").toLowerCase() === "active";
   const status: string = client?.setup_status
     ?? (!fetched ? "Not Started"
         : config?.generated_prompt ? "Live"
@@ -92,6 +130,11 @@ export default function Dashboard() {
               <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold mt-2 ${statusColor}`}>
                 {status}
               </span>
+              {polling && !paymentActive && (
+                <p className="mt-2 text-xs text-muted-foreground inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Finalizing your payment…
+                </p>
+              )}
             </div>
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Alert Phone</p>
