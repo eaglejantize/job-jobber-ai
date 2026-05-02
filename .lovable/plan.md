@@ -1,41 +1,94 @@
-# Restructure Setup Wizard into 6 Clear Steps
+# Navigation & App Structure Fix
 
-## Goal
-Reorganize `src/pages/Setup.tsx` into the exact 6-step structure requested, with a clear progress indicator, consistent Continue/Back navigation, and resumable progress — without breaking existing data persistence (Supabase saves to `callcapture_businesses` and `callcapture_assistant_configs`) or any downstream Vapi/Twilio/dashboard flows.
+Goal: cleanly separate the marketing site (logged-out) from the app shell (logged-in), restructure the dashboard, add a Settings page, and restore the Leads view.
 
-## New Step Order
-1. **Business Info** — name, industry, phone, email, service area, hours
-2. **Phone Setup** — business phone (forwarded line) + alert/owner SMS number + a short "we'll provision your CallCapture number" explainer
-3. **Call Handling** — call goals (Capture leads / Existing customers / Info calls), existing customer forwarding toggle + forward number, after-hours toggle, fallback action
-4. **AI Receptionist Setup** — info to collect (intake questions, with custom add), transfer triggers
-5. **Voice & Greeting** — receptionist name, tone (Friendly / Direct / Helpful), greeting line
-6. **Review & Launch** — generated prompt preview + "Generate My AI Receptionist" CTA (saves to DB, marks client `setup_status = 'Live'`, navigates to `/dashboard`)
+## 1. Two navbars: marketing vs app
 
-All fields currently in the wizard are preserved — just regrouped to match these step titles.
+Split the current `SiteNav` into two components and pick which one to render based on auth state.
 
-## UI Changes (per page)
-- Sticky header inside the wizard hero showing:
-  - `Step X of 6 — {Step Title}`
-  - Horizontal `<Progress />` bar (already imported)
-- Card body shows the step title (h2) + description
-- Footer of card always shows:
-  - **Back** button (ghost, disabled on Step 1)
-  - **Continue** button (Step 1–5) OR **Generate My AI Receptionist** (Step 6)
-- Per-step validation kept (e.g. Step 1 requires business name + industry; Step 3 requires at least one call goal)
+- `MarketingNav` (logged-out only) — keeps current links: Home, Demo, Pricing, Support + Login + Get Started.
+- `AppNav` (logged-in only) — new component:
+  - Left: Logo → `/dashboard`
+  - Right (desktop): Dashboard, Leads, Settings, Sign out
+  - Mobile: hamburger with the same four items
+  - Active link highlighting via `NavLink`
+  - "Sign out" calls `supabase.auth.signOut()` then navigates to `/`
 
-## Resumable Progress
-- Wizard form state already persists to `localStorage` via `saveWizardState` / `loadWizardState` (`callcapture.wizard` key).
-- Add a second key `callcapture.wizard.step` storing the current step index (0–5). Restore on mount; clear on successful "Generate" along with existing wizard state via `clearWizardState`.
-- Existing prefill from `callcapture_clients` (by `user_id`) is kept untouched so signed-in users still see their info on return.
+Update `src/components/Layout.tsx` to read `useAuth()` and render `<AppNav />` when `user` exists, otherwise `<MarketingNav />`. Show a small spinner/blank header while `loading` to avoid flicker.
 
-## Technical Notes
-- Single file edited: `src/pages/Setup.tsx`.
-- Keep existing helpers (`Field`, `SelectField`, `ToggleRow`, `CheckRow`) and reuse them.
-- Keep existing `generateAndFinish()` function and its Supabase inserts/updates exactly as-is — only the step that triggers it moves to Step 6.
-- `STEPS` array updated to the new 6 titles.
-- Add `localStorage` read/write for `callcapture.wizard.step` in a `useEffect` mirroring the existing pattern.
-- No route changes, no schema changes, no edge function changes.
+## 2. Route gating
 
-## Out of Scope
-- No changes to auth, Stripe checkout, webhook, dashboard, Vapi/Twilio, or lead capture.
-- No new DB columns (existing tables already store all wizard data).
+Create two small wrapper components in `src/components/route-guards.tsx`:
+
+- `RequireAuth` — if not logged in → `<Navigate to="/login" replace />`
+- `RedirectIfAuthed` — if logged in → `<Navigate to="/dashboard" replace />` (used to keep marketing pages out of reach once logged in)
+
+Apply in `src/App.tsx`:
+
+| Route | Guard |
+|---|---|
+| `/`, `/demo`, `/pricing`, `/support` | `RedirectIfAuthed` (logged-in users get bounced to `/dashboard`) |
+| `/start`, `/confirm` | public (signup/payment flow) |
+| `/login`, `/auth` | `RedirectIfAuthed` |
+| `/reset-password` | public |
+| `/dashboard`, `/leads`, `/settings`, `/setup` | `RequireAuth` |
+
+Keep `Support` reachable from inside the app via a small "Need help?" link in the AppNav dropdown or footer (so logged-in users still have a path to support without it being a top-level marketing item). Confirm: route `/support` will redirect logged-in users away — instead we'll keep `/support` accessible to everyone (no guard) so `RequestSetupBanner` links keep working, but it just won't appear in the AppNav.
+
+## 3. New `/settings` page
+
+Create `src/pages/Settings.tsx` that reuses the existing 6-step wizard logic from `Setup.tsx` but presented as tabbed sections (using existing shadcn `Tabs`):
+
+- Business Info
+- Phone Setup
+- Call Handling
+- AI Settings (combines AI Receptionist + Voice & Greeting)
+
+Each tab shows the same fields as the corresponding wizard step with a single "Save changes" button per tab that writes to `callcapture_businesses` / `callcapture_assistant_configs` (same upsert logic Setup already uses). This way Setup remains the first-time guided flow and Settings is the ongoing editor.
+
+Add route `/settings` in `App.tsx`.
+
+## 4. Restore `/leads`
+
+`/leads` and `LeadInbox.tsx` already exist and work — just make sure it's linked from AppNav (it currently isn't). Verify the empty-state copy matches the spec ("No leads yet — calls will appear here") and tweak if needed.
+
+## 5. Dashboard restructure (`src/pages/Dashboard.tsx`)
+
+Replace the current layout with:
+
+```text
++--------------------------------------------------+
+| Setup Status: Live  |  Business Phone: (xxx)…   |
++--------------------------------------------------+
+| Quick Actions:  [Test My Agent]  [Edit Settings] |
++--------------------------------------------------+
+| Recent Leads (5)                    View all →   |
+|  - Sarah J.   (904)…   Refrigerator   2m ago     |
+|  …                                               |
++--------------------------------------------------+
+```
+
+- Setup Status badge: keep existing logic.
+- Business Phone: pull `phone` from `callcapture_businesses` (fallback to `alert_phone` from clients).
+- "Test My Agent" → calls the demo number (use `DEMO_NUMBER_TEL` `tel:` link, same as `DemoNumberCard`).
+- "Edit Settings" → `/settings`.
+- Recent Leads: query `callcapture_leads` ordered by `created_at desc` limit 5; each row links to `/leads`. Empty state: "No leads yet — calls will appear here".
+- Remove the raw "Your Assistant Instructions" `<pre>` block and the Vapi instructions accordion. (Keep the data fetch only if needed for status; otherwise drop it.)
+- Keep `RequestSetupBanner` at the bottom.
+- Sign-out button moves out of the page header (it now lives in AppNav).
+
+## 6. Files touched
+
+- `src/components/SiteNav.tsx` → rename/split into `MarketingNav.tsx` + `AppNav.tsx`
+- `src/components/Layout.tsx` → conditional nav
+- `src/components/route-guards.tsx` → new
+- `src/App.tsx` → wrap routes with guards, add `/settings`
+- `src/pages/Settings.tsx` → new (tabbed editor reusing wizard fields)
+- `src/pages/Dashboard.tsx` → restructure (status, phone, quick actions, recent leads, drop raw prompt)
+- `src/pages/LeadInbox.tsx` → minor empty-state copy tweak
+
+## 7. What stays the same
+
+- Auth flow (email + password), Stripe checkout, webhooks, Vapi/Twilio/SMS, lead capture, Setup wizard logic.
+- Existing tables and RLS — no DB migrations needed.
+- `/setup` remains the first-time guided wizard; new `/settings` is for editing afterward.
