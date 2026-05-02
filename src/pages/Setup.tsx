@@ -13,8 +13,9 @@ import { Progress } from "@/components/ui/progress";
 import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIONS } from "@/lib/constants";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
-import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Phone } from "lucide-react";
+import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Phone, Check, ChevronDown } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -393,19 +394,86 @@ export default function Setup() {
 
           {/* Step 6: Review & Launch */}
           {step === 5 && (
-            <div className="space-y-5">
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
-                <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                <div className="text-sm">
-                  <p className="font-semibold">Your script is ready to generate.</p>
-                  <p className="text-muted-foreground">
-                    Review and click below — we'll save it and take you to your dashboard.
-                  </p>
-                </div>
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-2xl font-bold tracking-tight">Your AI Receptionist Preview</h3>
+                <p className="mt-1 text-muted-foreground">
+                  This is how your assistant will answer and handle calls.
+                </p>
               </div>
-              <pre className="max-h-[320px] overflow-auto rounded-xl border border-border bg-secondary/40 p-4 text-xs font-mono whitespace-pre-wrap">
+
+              {/* Greeting preview */}
+              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
+                  Greeting
+                </p>
+                <p className="text-base md:text-lg leading-relaxed">
+                  "Thanks for calling{" "}
+                  <span className="font-semibold">
+                    {state.businessName?.trim() || "your business"}
+                  </span>
+                  , how can I help you today?"
+                </p>
+              </div>
+
+              {/* What it will do */}
+              <div className="rounded-2xl border border-border bg-card p-5">
+                <p className="font-semibold mb-3">Your assistant will:</p>
+                <ul className="space-y-2.5">
+                  {[
+                    "Greet callers professionally",
+                    "Ask a few quick questions",
+                    "Capture their details",
+                    "Send the lead to you instantly",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-3 text-sm">
+                      <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                        <Check className="h-3 w-3" />
+                      </span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Questions it will ask */}
+              <div className="rounded-2xl border border-border bg-card p-5">
+                <p className="font-semibold mb-3">Questions it will ask:</p>
+                <ul className="grid sm:grid-cols-2 gap-2.5 text-sm">
+                  {[
+                    "Name",
+                    "Phone number",
+                    "Service address",
+                    "What's going on",
+                    "How urgent it is",
+                  ].map((q) => (
+                    <li key={q} className="flex items-center gap-2.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      {q}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Advanced (collapsed) */}
+              <Collapsible>
+                <CollapsibleTrigger className="group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+                  Show advanced instructions
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  <pre className="max-h-[320px] overflow-auto rounded-xl border border-border bg-secondary/40 p-4 text-xs font-mono whitespace-pre-wrap">
 {generated}
-              </pre>
+                  </pre>
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* Inline secondary action */}
+              <div className="pt-2">
+                <Button variant="outline" onClick={() => setStep(0)}>
+                  Edit Settings
+                </Button>
+              </div>
             </div>
           )}
 
@@ -423,7 +491,7 @@ export default function Setup() {
                 disabled={submitting}
                 className="bg-cta hover:opacity-90 shadow-glow h-11 px-6"
               >
-                {submitting ? "Generating…" : "Generate My AI Receptionist"}
+                {submitting ? "Launching…" : "Launch My AI Receptionist"}
               </Button>
             )}
           </div>
