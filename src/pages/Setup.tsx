@@ -94,9 +94,16 @@ export default function Setup() {
       toast({ title: "Add business name and type", variant: "destructive" });
       return;
     }
-    if (step === 1 && !state.phone.trim()) {
-      toast({ title: "Add your business phone", variant: "destructive" });
-      return;
+    if (step === 1) {
+      const mode = state.phoneMode;
+      if (mode === "new" && !(state.phoneNumber || "").trim()) {
+        toast({ title: "Generate a phone number to continue", variant: "destructive" });
+        return;
+      }
+      if (mode === "existing" && !(state.phoneNumber || "").trim()) {
+        toast({ title: "Enter your current business phone number", variant: "destructive" });
+        return;
+      }
     }
     if (step === 2 && callGoals.length === 0) {
       toast({ title: "Pick at least one call goal", variant: "destructive" });
