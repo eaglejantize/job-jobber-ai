@@ -112,6 +112,42 @@ export type Database = {
         }
         Relationships: []
       }
+      callcapture_leads: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          issue: string | null
+          name: string | null
+          phone: string | null
+          raw_payload: Json | null
+          type: string | null
+          urgency: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          issue?: string | null
+          name?: string | null
+          phone?: string | null
+          raw_payload?: Json | null
+          type?: string | null
+          urgency?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          issue?: string | null
+          name?: string | null
+          phone?: string | null
+          raw_payload?: Json | null
+          type?: string | null
+          urgency?: string | null
+        }
+        Relationships: []
+      }
       callcapture_support_requests: {
         Row: {
           business_name: string | null
