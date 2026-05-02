@@ -1,64 +1,71 @@
-## Plan: Build `send-demo-sms` edge function
+## Plan: Verify demo lead SMS flow
 
-### 1. Add 3 runtime secrets
-- `TWILIO_FROM_NUMBER` = `+13027473683`
-- `DEMO_OWNER_PHONE` = `+19048927004`
-- `VAPI_WEBHOOK_SECRET` = `callcapture_secret_2026`
+### Current setup (already in place)
+- Edge function `send-demo-sms` is deployed
+- Secrets configured:
+  - `TWILIO_FROM_NUMBER` = `+19048927004` (Twilio sender)
+  - `DEMO_OWNER_PHONE` = `+13027473683` (your phone — receives the alert)
+  - `VAPI_WEBHOOK_SECRET` = `callcapture_secret_2026`
+  - `TWILIO_API_KEY` (via connector)
+- Function validates `x-webhook-secret`, parses Vapi payload, sends SMS via Twilio gateway
 
-(Twilio connector is already linked → `TWILIO_API_KEY` and `LOVABLE_API_KEY` are available.)
+### Verification steps (once approved)
 
-### 2. Create `supabase/functions/send-demo-sms/index.ts`
-- Public webhook endpoint (no JWT) called by Vapi end-of-call reports
-- CORS headers on every response (incl. errors), OPTIONS preflight
-- **Auth:** require header `x-webhook-secret` == `VAPI_WEBHOOK_SECRET`; return 401 otherwise
-- **Parse Vapi payload** flexibly — extract from any of:
-  - `message.analysis.structuredData.{name, phone, issue, urgency, type}`
-  - `message.artifact.structuredData.*`
-  - `analysis.structuredData.*`
-  - top-level `{name, phone, issue}` (for manual tests)
-  - fallback: `message.summary` / `summary` for the issue field
-- **Validate** with Zod: `name` (string, 1–120), `phone` (string, 5–25), `issue` (string, 1–800), optional `urgency`, optional `type` (e.g. "Existing Customer Request")
-- **Compose SMS** (≤ 480 chars, single MMS-safe):
-  ```
-  📞 New CallCapture Lead
-  Name: {name}
-  Phone: {phone}
-  {type ? "Type: "+type+"\n" : ""}{urgency ? "⚠️ URGENT\n" : ""}Issue: {issue}
-  ```
-- **Send via Twilio gateway** (`https://connector-gateway.lovable.dev/twilio/Messages.json`, form-urlencoded, From=`TWILIO_FROM_NUMBER`, To=`DEMO_OWNER_PHONE`)
-- Return `{ success: true, sid }` on 2xx, otherwise 502 with the Twilio error body
-- Wrap everything in try/catch; log `console.error` on failures (no secret values logged)
-
-### 3. `supabase/config.toml`
-Leave unchanged — default `verify_jwt = false` for new functions is what we need; no project-level edits.
-
-### 4. After deploy — what you do in Vapi
-1. Server URL → `https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/send-demo-sms`
-2. Server URL Headers → add `x-webhook-secret: callcapture_secret_2026`
-3. Server Messages → enable `end-of-call-report` (and optionally `status-update`)
-4. Assistant → Analysis → **Structured Data** schema:
-   ```
-   { name: string, phone: string, issue: string,
-     urgency: boolean, type: string }
-   ```
-   So Vapi populates `message.analysis.structuredData`.
-
-### 5. Test after deploy
-Curl from my side:
+**1. Direct test — manual payload (simulates Vapi)**
+Hit the deployed function with a clean test lead:
 ```
-POST /functions/v1/send-demo-sms
-x-webhook-secret: callcapture_secret_2026
-{ "name":"Test User","phone":"+15555550123","issue":"AC not cooling","urgency":true }
+POST https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/send-demo-sms
+Headers: x-webhook-secret: callcapture_secret_2026
+Body: {
+  "name": "Verification Test",
+  "phone": "+15555550123",
+  "issue": "Testing SMS delivery to demo owner",
+  "urgency": true,
+  "type": "Existing Customer Request"
+}
 ```
-Expect `200 { success:true, sid:"SM..." }` and a real SMS to `+19048927004`.
+Expect: `200 { success: true, sid: "SM..." }`
 
-### Security recommendations (do after first successful test)
-- In Twilio Console: enable **SMS Pumping Protection**
-- Twilio **Messaging Geo Permissions** → enable only US (and CA if needed)
-- Rotate `VAPI_WEBHOOK_SECRET` if it ever gets pasted publicly
+**2. Vapi-shaped payload test**
+Hit it again with the nested structure Vapi actually sends, to confirm the extractor works:
+```
+{ "message": { "analysis": { "structuredData": {
+    "name": "Vapi Shape Test",
+    "phone": "+15555550199",
+    "issue": "Verifying nested payload extraction",
+    "urgency": false,
+    "type": "New Lead"
+} } } }
+```
+Expect: `200 { success: true, sid: "SM..." }`
 
-### Out of scope
-- No DB writes (lead persistence) — easy to add later if you want a leads table + dashboard
-- No retry queue — Vapi will retry the webhook on non-2xx, which is sufficient
+**3. Auth rejection test**
+Send a request with a wrong secret to confirm the 401 path works (no SMS should fire).
 
-Approve and I'll add the 3 secrets, write the function, deploy it, and run the test call.
+**4. Check edge function logs**
+Pull the latest `send-demo-sms` logs to confirm:
+- No errors
+- Twilio SIDs were returned
+- No secret values leaked into logs
+
+**5. Confirm with you**
+You check `+13027473683` and tell me which messages arrived. Expected: 2 SMS (urgent + non-urgent), each formatted like:
+```
+📞 New CallCapture Lead
+Name: ...
+Phone: ...
+Type: ...
+⚠️ URGENT  (only on urgent one)
+Issue: ...
+```
+
+### If any step fails
+- 4xx from Twilio → likely Geo Permissions / unverified trial number / A2P 10DLC issue → I'll surface the exact Twilio error code from logs and tell you what to flip in the Twilio Console
+- 401 on valid request → secret mismatch → re-check `VAPI_WEBHOOK_SECRET`
+- 400 invalid payload → extractor mismatch → I'll adjust `extractFromVapi` to match the real Vapi shape
+
+### Out of scope for this loop
+- Configuring Vapi's server URL / structured data schema (you do that in the Vapi dashboard once SMS is verified)
+- Persisting leads to a database (separate feature)
+
+Approve to run the tests.
