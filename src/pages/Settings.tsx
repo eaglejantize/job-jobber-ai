@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIONS } from "@/lib/constants";
 import { toast } from "@/hooks/use-toast";
-import { Plus, X, Loader2 } from "lucide-react";
+import { Plus, X, Loader2, Phone, PhoneIncoming, Bot, ClipboardList, MessageSquare, ArrowRight, Sparkles } from "lucide-react";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { Link } from "react-router-dom";
 import VoicePicker from "@/components/VoicePicker";
@@ -112,12 +112,22 @@ export default function Settings() {
   async function savePhone() {
     if (!biz || !user) return;
     setSaving(true);
-    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    const nextRules = {
+      ...(callRules as Record<string, unknown>),
+      ringsBeforeAi: Number((callRules as { ringsBeforeAi?: number }).ringsBeforeAi ?? 3),
+      aiAnswerMissed: (callRules as { aiAnswerMissed?: boolean }).aiAnswerMissed !== false,
+    };
+    const [{ error: e1 }, { error: e2 }, { error: e3 }] = await Promise.all([
       supabase.from("callcapture_businesses").update({ phone: biz.phone }).eq("id", biz.id),
       supabase.from("callcapture_clients").update({ alert_phone: alertPhone }).eq("user_id", user.id),
+      supabase.from("callcapture_assistant_configs").update({
+        transfer_enabled: cfg!.transfer_enabled,
+        transfer_phone: biz.phone,
+        call_rules: nextRules as never,
+      }).eq("id", cfg!.id),
     ]);
     setSaving(false);
-    if (e1 || e2) toast({ title: "Couldn't save", description: (e1 ?? e2)!.message, variant: "destructive" });
+    if (e1 || e2 || e3) toast({ title: "Couldn't save", description: (e1 ?? e2 ?? e3)!.message, variant: "destructive" });
     else toast({ title: "Phone settings saved" });
   }
 
@@ -182,9 +192,11 @@ export default function Settings() {
   }
 
   const intake = (cfg.intake_questions ?? []) as string[];
-  const callRules = (cfg.call_rules ?? {}) as { transferTriggers?: string[]; fallbackAction?: string };
+  const callRules = (cfg.call_rules ?? {}) as { transferTriggers?: string[]; fallbackAction?: string; ringsBeforeAi?: number; aiAnswerMissed?: boolean };
   const transferTriggers = callRules.transferTriggers ?? [];
   const fallbackAction = callRules.fallbackAction ?? "Take a message";
+  const ringsBeforeAi = callRules.ringsBeforeAi ?? 3;
+  const aiAnswerMissed = callRules.aiAnswerMissed !== false;
 
   const notif = (cfg.notification_settings ?? {}) as Record<string, unknown>;
   const savedVoice = (notif.voice ?? null) as { voice_label?: string; voice_id?: string } | null;
@@ -255,11 +267,95 @@ export default function Settings() {
             <SaveButton onClick={saveBusiness} saving={saving} />
           </TabsContent>
 
-          <TabsContent value="phone" className="rounded-2xl border border-border bg-card p-6 mt-4 shadow-card-soft">
-            <div className="grid md:grid-cols-2 gap-4">
-              <Field label="Business phone" type="tel" value={biz.phone ?? ""} onChange={(v) => setBizField("phone", v)} />
-              <Field label="Owner alert SMS number" type="tel" value={alertPhone} onChange={setAlertPhone} />
+          <TabsContent value="phone" className="rounded-2xl border border-border bg-card p-6 mt-4 shadow-card-soft space-y-8">
+            {/* How calls are handled */}
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">How Your Calls Are Handled</h2>
+              <p className="text-sm text-muted-foreground mt-1">When someone calls your number:</p>
+              <ol className="mt-4 space-y-2 text-sm">
+                {[
+                  "Your phone rings first",
+                  "If you don't answer after a few rings, your AI receptionist answers",
+                  "It collects the caller's information (name, phone, issue)",
+                  "You receive the details instantly by text",
+                  "You can call them back or follow up",
+                ].map((line, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">{i + 1}</span>
+                    <span className="text-foreground/90">{line}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
+
+            {/* Call flow visual */}
+            <div className="rounded-xl border border-border bg-secondary/30 p-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-2">
+                {[
+                  { icon: Phone, label: "Customer calls" },
+                  { icon: PhoneIncoming, label: "Your phone rings" },
+                  { icon: Bot, label: "AI answers if missed" },
+                  { icon: ClipboardList, label: "Info captured" },
+                  { icon: MessageSquare, label: "You get notified" },
+                ].map((s, i, arr) => (
+                  <div key={s.label} className="flex md:flex-col items-center gap-2 md:gap-1.5 md:flex-1">
+                    <div className="flex md:flex-col items-center gap-2 md:gap-1.5">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-card border border-border text-primary shrink-0">
+                        <s.icon className="h-5 w-5" />
+                      </div>
+                      <span className="text-xs font-medium text-center">{s.label}</span>
+                    </div>
+                    {i < arr.length - 1 && (
+                      <ArrowRight className="hidden md:block h-4 w-4 text-muted-foreground shrink-0 -mt-5" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Ring control */}
+            <div className="space-y-2">
+              <Label>How many rings before AI answers?</Label>
+              <select
+                value={String(ringsBeforeAi)}
+                onChange={(e) => setCfgField("call_rules", { ...callRules, ringsBeforeAi: Number(e.target.value) } as ConfigRow["call_rules"])}
+                className="flex h-10 w-full md:w-72 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="1">1 ring</option>
+                <option value="2">2 rings</option>
+                <option value="3">3 rings (recommended)</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                This gives you a chance to answer first. If you miss the call, your AI takes over so you never lose the lead.
+              </p>
+            </div>
+
+            {/* Settings */}
+            <div className="space-y-3">
+              <ToggleRow
+                label="Let AI answer missed calls"
+                value={aiAnswerMissed}
+                onChange={(v) => setCfgField("call_rules", { ...callRules, aiAnswerMissed: v } as ConfigRow["call_rules"])}
+              />
+              <ToggleRow
+                label="Forward calls to my phone"
+                value={!!cfg.transfer_enabled}
+                onChange={(v) => setCfgField("transfer_enabled", v)}
+              />
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="Your phone number" type="tel" value={biz.phone ?? ""} onChange={(v) => setBizField("phone", v)} />
+                <Field label="Where to text me missed-call alerts" type="tel" value={alertPhone} onChange={setAlertPhone} />
+              </div>
+            </div>
+
+            {/* Value statement */}
+            <div className="rounded-xl bg-primary/10 border border-primary/20 p-4 flex gap-3">
+              <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <p className="text-sm text-foreground/90">
+                <span className="font-semibold">You never miss a customer again.</span> If you're busy or can't answer, your AI receptionist steps in and captures everything for you.
+              </p>
+            </div>
+
             <SaveButton onClick={savePhone} saving={saving} />
           </TabsContent>
 
