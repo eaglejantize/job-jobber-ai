@@ -1,94 +1,67 @@
-# Navigation & App Structure Fix
+## Goal
 
-Goal: cleanly separate the marketing site (logged-out) from the app shell (logged-in), restructure the dashboard, add a Settings page, and restore the Leads view.
+The wizard already has 6 steps in the requested order:
 
-## 1. Two navbars: marketing vs app
+1. Business Info
+2. Phone Setup
+3. Call Handling
+4. AI Receptionist Setup
+5. Voice & Greeting
+6. Review & Launch
 
-Split the current `SiteNav` into two components and pick which one to render based on auth state.
+Today, Step 2 ("Phone Setup") is just two plain inputs (business phone + owner SMS). I'll rebuild **Step 2** into the full structured experience you described, without touching the other steps, navigation, or save logic.
 
-- `MarketingNav` (logged-out only) — keeps current links: Home, Demo, Pricing, Support + Login + Get Started.
-- `AppNav` (logged-in only) — new component:
-  - Left: Logo → `/dashboard`
-  - Right (desktop): Dashboard, Leads, Settings, Sign out
-  - Mobile: hamburger with the same four items
-  - Active link highlighting via `NavLink`
-  - "Sign out" calls `supabase.auth.signOut()` then navigates to `/`
+## Changes
 
-Update `src/components/Layout.tsx` to read `useAuth()` and render `<AppNav />` when `user` exists, otherwise `<MarketingNav />`. Show a small spinner/blank header while `loading` to avoid flicker.
+### 1. `src/lib/wizardSchema.ts`
+Add two persisted fields so progress survives reloads:
+- `phoneMode: "new" | "existing" | "test"` (default `"new"`)
+- `phoneNumber: string` (default `""`) — holds the generated mock number or the user-entered existing number; mirrored into the existing `phone` field so downstream code (Setup save, Settings, Dashboard "Business phone") keeps working unchanged.
 
-## 2. Route gating
+Defaults stay backward-compatible — old `localStorage` payloads continue to load via the existing spread merge.
 
-Create two small wrapper components in `src/components/route-guards.tsx`:
+### 2. `src/pages/Setup.tsx` — rewrite Step 2 only
 
-- `RequireAuth` — if not logged in → `<Navigate to="/login" replace />`
-- `RedirectIfAuthed` — if logged in → `<Navigate to="/dashboard" replace />` (used to keep marketing pages out of reach once logged in)
+New Step 2 UI:
 
-Apply in `src/App.tsx`:
+**Header**
+- Title: "Set Up Your Business Phone"
+- Subtext: "This is the number your customers will call."
 
-| Route | Guard |
-|---|---|
-| `/`, `/demo`, `/pricing`, `/support` | `RedirectIfAuthed` (logged-in users get bounced to `/dashboard`) |
-| `/start`, `/confirm` | public (signup/payment flow) |
-| `/login`, `/auth` | `RedirectIfAuthed` |
-| `/reset-password` | public |
-| `/dashboard`, `/leads`, `/settings`, `/setup` | `RequireAuth` |
+**Section 1 — Choose phone type** (shadcn `RadioGroup`)
+- Get a new business number (recommended)
+- Use my existing number (forward calls)
+- Skip for now (test mode)
 
-Keep `Support` reachable from inside the app via a small "Need help?" link in the AppNav dropdown or footer (so logged-in users still have a path to support without it being a top-level marketing item). Confirm: route `/support` will redirect logged-in users away — instead we'll keep `/support` accessible to everyone (no guard) so `RequestSetupBanner` links keep working, but it just won't appear in the AppNav.
+**Section 2 — Dynamic inputs** (driven by `phoneMode`)
 
-## 3. New `/settings` page
+- `new`: Area Code input (3 digits) + "Generate Number" button. Generates a mock number `(<area>) XXX-XXXX` with random digits, stores in `phoneNumber`, and shows the result in a highlighted card with a "Regenerate" link.
+- `existing`: Phone input + helper "You'll forward this number to your AI assistant."
+- `test`: Info card "You can test the system without a real number." Auto-sets `phoneNumber` to empty and bypasses the phone validation in `next()`.
 
-Create `src/pages/Settings.tsx` that reuses the existing 6-step wizard logic from `Setup.tsx` but presented as tabbed sections (using existing shadcn `Tabs`):
+Owner alert SMS field stays on this step (it's not on any other step and is needed for lead alerts).
 
-- Business Info
-- Phone Setup
-- Call Handling
-- AI Settings (combines AI Receptionist + Voice & Greeting)
+**Section 3 — How it works** (static info card)
+> When someone calls your number:
+> - Your AI receptionist answers instantly
+> - Captures customer details
+> - Sends the lead to you
+> - Optionally forwards the call
 
-Each tab shows the same fields as the corresponding wizard step with a single "Save changes" button per tab that writes to `callcapture_businesses` / `callcapture_assistant_configs` (same upsert logic Setup already uses). This way Setup remains the first-time guided flow and Settings is the ongoing editor.
+**Validation update in `next()` for step 2:**
+- `new`: require a generated `phoneNumber`
+- `existing`: require non-empty `phoneNumber`
+- `test`: no requirement
+- Keep `phone` in sync with `phoneNumber` so the rest of the flow (Setup submit → `callcapture_businesses.phone`, Dashboard, Settings) is unaffected.
 
-Add route `/settings` in `App.tsx`.
+### 3. No changes elsewhere
+- Step order, progress bar, Continue/Back, persistence (`callcapture.wizard.step`), and the save-to-Supabase logic in `generateAndFinish` remain untouched.
+- No DB migration. `phone_mode` is stored only in local wizard state (and inside `call_rules` JSON if useful later); we explicitly keep Twilio out of scope per your note.
+- No impact on Stripe, Vapi, Twilio, SMS, lead capture, auth, or routing.
 
-## 4. Restore `/leads`
+## Technical notes
 
-`/leads` and `LeadInbox.tsx` already exist and work — just make sure it's linked from AppNav (it currently isn't). Verify the empty-state copy matches the spec ("No leads yet — calls will appear here") and tweak if needed.
-
-## 5. Dashboard restructure (`src/pages/Dashboard.tsx`)
-
-Replace the current layout with:
-
-```text
-+--------------------------------------------------+
-| Setup Status: Live  |  Business Phone: (xxx)…   |
-+--------------------------------------------------+
-| Quick Actions:  [Test My Agent]  [Edit Settings] |
-+--------------------------------------------------+
-| Recent Leads (5)                    View all →   |
-|  - Sarah J.   (904)…   Refrigerator   2m ago     |
-|  …                                               |
-+--------------------------------------------------+
-```
-
-- Setup Status badge: keep existing logic.
-- Business Phone: pull `phone` from `callcapture_businesses` (fallback to `alert_phone` from clients).
-- "Test My Agent" → calls the demo number (use `DEMO_NUMBER_TEL` `tel:` link, same as `DemoNumberCard`).
-- "Edit Settings" → `/settings`.
-- Recent Leads: query `callcapture_leads` ordered by `created_at desc` limit 5; each row links to `/leads`. Empty state: "No leads yet — calls will appear here".
-- Remove the raw "Your Assistant Instructions" `<pre>` block and the Vapi instructions accordion. (Keep the data fetch only if needed for status; otherwise drop it.)
-- Keep `RequestSetupBanner` at the bottom.
-- Sign-out button moves out of the page header (it now lives in AppNav).
-
-## 6. Files touched
-
-- `src/components/SiteNav.tsx` → rename/split into `MarketingNav.tsx` + `AppNav.tsx`
-- `src/components/Layout.tsx` → conditional nav
-- `src/components/route-guards.tsx` → new
-- `src/App.tsx` → wrap routes with guards, add `/settings`
-- `src/pages/Settings.tsx` → new (tabbed editor reusing wizard fields)
-- `src/pages/Dashboard.tsx` → restructure (status, phone, quick actions, recent leads, drop raw prompt)
-- `src/pages/LeadInbox.tsx` → minor empty-state copy tweak
-
-## 7. What stays the same
-
-- Auth flow (email + password), Stripe checkout, webhooks, Vapi/Twilio/SMS, lead capture, Setup wizard logic.
-- Existing tables and RLS — no DB migrations needed.
-- `/setup` remains the first-time guided wizard; new `/settings` is for editing afterward.
+- Use existing `Radio` primitives via `@/components/ui/radio-group`.
+- Mock number generator: `const n = () => Math.floor(1000 + Math.random()*9000); const m = () => Math.floor(100 + Math.random()*900); setPhoneNumber(\`(\${area}) \${m()}-\${n()}\`)`.
+- Area code input: numeric, maxLength 3; "Generate" disabled until 3 digits.
+- When user switches `phoneMode`, clear `phoneNumber` to avoid stale values.

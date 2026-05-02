@@ -14,6 +14,7 @@ import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIO
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Phone } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -93,9 +94,16 @@ export default function Setup() {
       toast({ title: "Add business name and type", variant: "destructive" });
       return;
     }
-    if (step === 1 && !state.phone.trim()) {
-      toast({ title: "Add your business phone", variant: "destructive" });
-      return;
+    if (step === 1) {
+      const mode = state.phoneMode;
+      if (mode === "new" && !(state.phoneNumber || "").trim()) {
+        toast({ title: "Generate a phone number to continue", variant: "destructive" });
+        return;
+      }
+      if (mode === "existing" && !(state.phoneNumber || "").trim()) {
+        toast({ title: "Enter your current business phone number", variant: "destructive" });
+        return;
+      }
     }
     if (step === 2 && callGoals.length === 0) {
       toast({ title: "Pick at least one call goal", variant: "destructive" });
@@ -222,19 +230,7 @@ export default function Setup() {
 
           {/* Step 2: Phone Setup */}
           {step === 1 && (
-            <div className="space-y-5">
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
-                <Phone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                <p className="text-sm text-muted-foreground">
-                  We'll provision a CallCapture number for your business. You'll forward your existing
-                  business line to it so the AI receptionist answers when you can't.
-                </p>
-              </div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <Field label="Business phone *" type="tel" placeholder="(555) 555-1234" value={state.phone} onChange={(v) => set("phone", v)} />
-                <Field label="Owner alert SMS number" type="tel" placeholder="Where new lead texts go" value={state.ownerSms ?? ""} onChange={(v) => set("ownerSms", v)} />
-              </div>
-            </div>
+            <PhoneSetupStep state={state} set={set} />
           )}
 
           {/* Step 3: Call Handling */}
@@ -495,6 +491,176 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
     <label className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-pointer hover:bg-secondary/50">
       <input type="checkbox" className="accent-primary h-4 w-4" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span className="text-sm">{label}</span>
+    </label>
+  );
+}
+
+function PhoneSetupStep({
+  state,
+  set,
+}: {
+  state: WizardState;
+  set: <K extends keyof WizardState>(k: K, v: WizardState[K]) => void;
+}) {
+  const mode = state.phoneMode ?? "new";
+  const [areaCode, setAreaCode] = useState("");
+
+  function setMode(m: "new" | "existing" | "test") {
+    set("phoneMode", m);
+    set("phoneNumber", "");
+    set("phone", "");
+  }
+
+  function generateNumber() {
+    if (areaCode.length !== 3) return;
+    const mid = Math.floor(100 + Math.random() * 900);
+    const last = Math.floor(1000 + Math.random() * 9000);
+    const num = `(${areaCode}) ${mid}-${last}`;
+    set("phoneNumber", num);
+    set("phone", num);
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h3 className="text-lg font-semibold">Set Up Your Business Phone</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          This is the number your customers will call.
+        </p>
+      </div>
+
+      {/* Section 1: Choose phone type */}
+      <div className="space-y-3">
+        <Label>Phone type</Label>
+        <RadioGroup
+          value={mode}
+          onValueChange={(v) => setMode(v as "new" | "existing" | "test")}
+          className="grid gap-2"
+        >
+          <PhoneOption value="new" title="Get a new business number" hint="Recommended" current={mode} />
+          <PhoneOption value="existing" title="Use my existing number" hint="Forward calls to your AI" current={mode} />
+          <PhoneOption value="test" title="Skip for now" hint="Test mode" current={mode} />
+        </RadioGroup>
+      </div>
+
+      {/* Section 2: Dynamic inputs */}
+      <div className="rounded-xl border border-border bg-secondary/30 p-4">
+        {mode === "new" && (
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-[160px_auto] gap-3 items-end">
+              <div className="space-y-2">
+                <Label>Area code</Label>
+                <Input
+                  inputMode="numeric"
+                  maxLength={3}
+                  placeholder="904"
+                  value={areaCode}
+                  onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                />
+              </div>
+              <Button type="button" onClick={generateNumber} disabled={areaCode.length !== 3} variant="outline">
+                Generate Number
+              </Button>
+            </div>
+            {state.phoneNumber ? (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Your new number</p>
+                  <p className="text-xl font-semibold mt-1">{state.phoneNumber}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={generateNumber}
+                  className="text-sm text-primary hover:underline"
+                >
+                  Regenerate
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Enter a 3-digit area code, then click Generate Number.
+              </p>
+            )}
+          </div>
+        )}
+
+        {mode === "existing" && (
+          <div className="space-y-2">
+            <Label>Your current business phone number</Label>
+            <Input
+              type="tel"
+              placeholder="(555) 555-1234"
+              value={state.phoneNumber ?? ""}
+              onChange={(e) => {
+                set("phoneNumber", e.target.value);
+                set("phone", e.target.value);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              You'll forward this number to your AI assistant.
+            </p>
+          </div>
+        )}
+
+        {mode === "test" && (
+          <div className="flex items-start gap-3">
+            <Phone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              You can test the system without a real number. You can add one anytime from Settings.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Owner alert SMS */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Field
+          label="Owner alert SMS number"
+          type="tel"
+          placeholder="Where new lead texts go"
+          value={state.ownerSms ?? ""}
+          onChange={(v) => set("ownerSms", v)}
+        />
+      </div>
+
+      {/* Section 3: How it works */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <p className="text-sm font-semibold mb-2">When someone calls your number:</p>
+        <ul className="text-sm text-muted-foreground space-y-1">
+          <li>• Your AI receptionist answers instantly</li>
+          <li>• Captures customer details</li>
+          <li>• Sends the lead to you</li>
+          <li>• Optionally forwards the call</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function PhoneOption({
+  value,
+  title,
+  hint,
+  current,
+}: {
+  value: string;
+  title: string;
+  hint: string;
+  current: string;
+}) {
+  const active = current === value;
+  return (
+    <label
+      htmlFor={`phone-mode-${value}`}
+      className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+        active ? "border-primary bg-primary/5" : "border-border hover:bg-secondary/50"
+      }`}
+    >
+      <RadioGroupItem id={`phone-mode-${value}`} value={value} />
+      <div className="flex-1">
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
     </label>
   );
 }
