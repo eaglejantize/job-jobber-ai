@@ -112,6 +112,54 @@ export type Database = {
         }
         Relationships: []
       }
+      callcapture_clients: {
+        Row: {
+          alert_phone: string
+          business_name: string
+          created_at: string
+          email: string
+          id: string
+          owner_name: string
+          payment_status: string
+          setup_status: string
+          stripe_checkout_session_id: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          alert_phone: string
+          business_name: string
+          created_at?: string
+          email: string
+          id?: string
+          owner_name: string
+          payment_status?: string
+          setup_status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          alert_phone?: string
+          business_name?: string
+          created_at?: string
+          email?: string
+          id?: string
+          owner_name?: string
+          payment_status?: string
+          setup_status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       callcapture_leads: {
         Row: {
           address: string | null
