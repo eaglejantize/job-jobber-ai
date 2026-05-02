@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight } from "lucide-react";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
+import VoiceTestSection from "@/components/dashboard/VoiceTestSection";
 import { toast } from "@/hooks/use-toast";
 import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
@@ -207,6 +208,9 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Voice & Test Experience */}
+        <VoiceTestSection businessPhone={phoneToShow} status={status} />
 
         {/* Recent Leads */}
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
