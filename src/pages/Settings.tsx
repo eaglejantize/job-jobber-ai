@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { Link } from "react-router-dom";
 import VoicePicker from "@/components/VoicePicker";
 import { DEFAULT_VOICE_ID, VOICES, getVoiceById, type VoicePersona } from "@/lib/voices";
-import { useRef } from "react";
 
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful", "Professional", "Warm"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
