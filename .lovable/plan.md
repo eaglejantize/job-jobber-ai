@@ -1,129 +1,83 @@
-# Magic-Link Auth + Reliable Post-Payment Flow
+# Email + Password Auth (Replace Magic Link)
 
 ## Goal
-1. One-click magic-link auth (no passwords).
-2. Every `callcapture_clients` row is linked to its `auth.users` user via `user_id`.
-3. Stripe checkout returns straight to `/dashboard` — no "Confirming payment" loader, no blocking on the webhook.
-4. Webhook updates the client row by email, setting `payment_status`, `subscription_status`, and `stripe_customer_id`.
-5. Dashboard requires auth, loads by `user_id`, and gracefully polls if the webhook is delayed.
+Old-school email/password login that works on phone and desktop. Add a Login button to the header. Signup happens on `/start` (with password fields) right before Stripe. Existing paid client rows get linked by email.
 
-## Database changes (one migration)
+## Routing change
+Add `/login` route pointing to the existing `Auth.tsx` page (rewritten). Keep `/auth` as an alias so old links still work.
 
-`callcapture_clients.user_id` already exists (nullable uuid). Two more changes:
+## 1. Header — `src/components/SiteNav.tsx`
+- Remove `/dashboard`, `/setup`, `/leads` from the public `links` array (these are auth-gated; keep them reachable from inside the dashboard, not the marketing nav). Keep Home, Demo, Pricing, Support.
+- Desktop: add a **Login** link (text style, to `/login`) immediately to the left of the existing **Get Started** button.
+- Mobile (hamburger menu): add a **Login** entry in the dropdown above the **Get Started** button.
+- When a user is already signed in (use `useAuth`), swap **Login** → **Dashboard** link. Keep **Get Started** hidden for signed-in users.
 
-1. **Add `subscription_status` column** (text, nullable). Defaults to NULL until first webhook.
-2. **Triggers to keep `user_id` linked by email** — covers both directions:
-   - Before insert on `callcapture_clients`: if `user_id` is null, look up `auth.users` by lowercase email.
-   - After insert on `auth.users`: backfill `user_id` on any existing client rows with a matching email.
-
-Both functions use `SECURITY DEFINER` and `set search_path = public` per project rules. Triggers, not CHECK constraints.
-
-## Auth: magic link only (`src/pages/Auth.tsx`)
-
-Replace the password form with a single email field that calls:
-
-```ts
-supabase.auth.signInWithOtp({
-  email,
-  options: {
-    emailRedirectTo: `${window.location.origin}/dashboard`,
-    shouldCreateUser: true,
-  },
-});
-```
-
-`shouldCreateUser: true` means signup and signin are the same action — first-time emails create the user automatically; returning users just get a login link. After submit, show "Check your email — we sent a login link to {email}." No separate signup flow, no password.
-
-`useAuth` already listens via `onAuthStateChange` — no change needed.
-
-## Signup payload from `/start`
-
+## 2. `/start` — add password fields + create auth user
 `src/pages/Start.tsx`:
-- Keep the anonymous insert into `callcapture_clients` (the trigger will link `user_id` later when they click the magic link).
-- Right before calling `create-checkout`, fire a magic link to the same email so it's waiting in their inbox by the time Stripe redirects them back:
-  ```ts
-  await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${window.location.origin}/dashboard`, shouldCreateUser: true },
-  });
-  ```
-  Best-effort — don't block the Stripe redirect on failure.
-- Change the on-`/start`-stripe-return bounce target from `/setup` → `/dashboard`.
+- Extend the zod schema:
+  - `password`: min 8
+  - `confirm_password`: must equal `password` (use `.refine`)
+- Add two new `<Input type="password">` fields after email, before phone, with `autoComplete="new-password"`.
+- New submit flow (replaces the current insert + magic-link logic):
+  1. Validate.
+  2. `supabase.auth.signUp({ email, password, options: { emailRedirectTo: \`${origin}/dashboard\` } })`.
+     - If error message indicates "already registered", call `signInWithPassword` with the entered password instead. If that also fails, surface a friendly toast: "An account already exists for this email. [Log in] or use a different email." (link to `/login?email=…`). Stop here — do not proceed to Stripe with mismatched creds.
+  3. After successful signup/sign-in we have a `session.user.id`. Look for an existing `callcapture_clients` row by email:
+     - If found and `user_id` is null → update that row: set `user_id`, refresh `owner_name`/`business_name`/`alert_phone` from form. Use its `id` as `clientId`.
+     - If found and already linked to this user → reuse its `id`.
+     - Otherwise → insert a new row with `user_id` set and the form fields.
+     - The DB triggers `link_client_to_user` / `link_user_to_clients` already cover the email-match case as a safety net, but doing it explicitly here means the row is correct before we hit Stripe.
+  4. Invoke `create-checkout` with `clientId` exactly as today.
+  5. Redirect to Stripe.
+- Remove the `signInWithOtp` call.
+- Keep the Stripe-return bounce (`isStripeReturn` block) untouched.
 
-`src/pages/Confirm.tsx`: change bounce target from `/setup` → `/dashboard`.
+Note: email-confirmation is on by default in Supabase. Even before the user confirms their email, `signUp` returns a session, so the Stripe redirect and post-payment dashboard load both work. The user will still need to confirm email later for some Supabase features, but login by password works immediately. (We are not enabling/changing auto-confirm — leaving Supabase defaults.)
 
-## Stripe checkout (`supabase/functions/create-checkout/index.ts`)
+## 3. `/login` (and `/auth`) — email + password — `src/pages/Auth.tsx`
+Rewrite to a standard form:
+- Fields: Email, Password (`autoComplete="current-password"`).
+- Button: **Sign In** → `supabase.auth.signInWithPassword({ email, password })`.
+- On success: `navigate("/dashboard")`.
+- Below the form:
+  - "Don't have an account? **Create account**" → `/start`
+  - "**Forgot password?**" → opens an inline mode that calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: \`${origin}/reset-password\` })` and shows a "Check your email" confirmation. (Adding the `/reset-password` page is in scope — see step 4.)
+- Read `?email=` from the URL to prefill (used when `/start` redirects an existing user here).
 
-- `success_url`: `${origin}/dashboard?checkout=success`
-- `cancel_url`: `${origin}/start?canceled=1` (already correct)
+## 4. `/reset-password` page (new)
+Required so password reset works end-to-end (per Lovable auth guidance). New file `src/pages/ResetPassword.tsx`:
+- Public route, added to `App.tsx`.
+- On mount, Supabase auto-handles the recovery token in the URL hash (the client picks it up via `onAuthStateChange` → `PASSWORD_RECOVERY`).
+- Show a single form: New password + Confirm password (min 8, must match).
+- Submit → `supabase.auth.updateUser({ password })`. On success, toast and `navigate("/dashboard")`.
 
-No other logic changes — `client_id` still flows through metadata.
+## 5. App routes — `src/App.tsx`
+- Add `<Route path="/login" element={<Auth />} />`
+- Add `<Route path="/reset-password" element={<ResetPassword />} />`
+- Keep `/auth` route pointing to `Auth` (back-compat).
 
-## Stripe webhook (`supabase/functions/stripe-webhook/index.ts`)
+## 6. Dashboard fallback — `src/pages/Dashboard.tsx`
+Today it queries `callcapture_clients` by `user_id` only. Add an email fallback for users who paid before the user_id link was set:
+- After the `user_id` query, if `data` is null and `user.email` exists, query by `ilike("email", user.email)` (limit 1, newest).
+- If that returns a row whose `user_id` is null, update it: `update({ user_id: user.id }).eq("id", row.id)`. Then use that row.
+- This belt-and-suspenders covers anyone whose row pre-exists (the trigger normally handles this on user insert, but this guarantees recovery for already-created users).
 
-In `checkout.session.completed`:
+The polling logic, status badge, and "checkout=success" toast all stay.
 
-```ts
-const session = event.data.object as Stripe.Checkout.Session;
-const clientId = session.metadata?.client_id ?? null;
-const email = session.customer_details?.email ?? session.customer_email ?? null;
+## 7. Cleanup
+- Remove the magic-link "no password needed" copy from Auth — the new copy is the standard sign-in form.
+- No change to Stripe checkout, webhook, Vapi, Twilio, SMS, or lead capture.
+- No DB migrations. RLS on `callcapture_clients` already supports anon insert, owner select/update by `user_id`, and the email-link triggers stay in place as a safety net.
 
-const update = {
-  payment_status: "active",
-  subscription_status: "active",
-  setup_status: "Setup In Progress",
-  stripe_customer_id: (session.customer as string) ?? null,
-  stripe_subscription_id: (session.subscription as string) ?? null,
-};
-
-let q = supabase.from("callcapture_clients").update(update);
-q = clientId ? q.eq("id", clientId) : email ? q.ilike("email", email) : null;
-if (!q) { console.warn("no client_id or email"); break; }
-const { error } = await q;
-```
-
-Lowercase the values (`payment_status: 'active'`) per the request. Subscription update/delete handlers stay, but switch their values to lowercase too for consistency (`active`, `past_due`, `canceled`, `inactive`).
-
-## Setup page (`src/pages/Setup.tsx`)
-
-Remove:
-- `sessionId` polling block
-- `gate` state
-- "Confirming your payment…" loader
-- "We couldn't confirm your payment" screen
-
-Setup wizard becomes immediately usable for any logged-in user. If `?session_id=...` shows up, ignore it.
-
-## Dashboard (`src/pages/Dashboard.tsx`)
-
-- Already gates on `useAuth` and redirects to `/auth` when signed out — keep.
-- On mount, query `callcapture_clients` by `user_id` (already does).
-- **Webhook-delay fallback:** if the latest client row has `payment_status !== 'active'` (or no row yet), set up a 3-second polling interval that re-queries until either the row is active or 30 seconds have passed. Show a small inline "Finalizing your payment…" badge in the status card during polling — never block the page or the rest of the dashboard.
-- When `?checkout=success` is in the URL, show a one-time toast "Payment received." and clean the param via `replace`.
-- Update the status badge logic to recognize lowercase `active`.
-
-## Status value migration
-
-To keep existing rows consistent, the migration also normalizes existing values:
-```sql
-update public.callcapture_clients
-   set payment_status = lower(payment_status)
- where payment_status is not null;
-```
-Default for new rows stays `'Payment Pending'` until first checkout (we'll keep that string as-is — the dashboard treats anything other than `'active'` as not-yet-active).
-
-## Files changed
-
-- `supabase/migrations/<new>.sql` — add `subscription_status` column, two trigger functions + triggers, normalize existing payment_status values.
-- `src/pages/Auth.tsx` — magic-link only.
-- `src/pages/Start.tsx` — fire magic link before Stripe redirect; bounce target → `/dashboard`.
-- `src/pages/Confirm.tsx` — bounce target → `/dashboard`.
-- `src/pages/Setup.tsx` — strip the payment-confirmation gate.
-- `src/pages/Dashboard.tsx` — `?checkout=success` toast, polling fallback for delayed webhook, lowercase status handling.
-- `supabase/functions/create-checkout/index.ts` — `success_url` → `/dashboard?checkout=success`.
-- `supabase/functions/stripe-webhook/index.ts` — email fallback lookup, write `subscription_status`, lowercase status values.
+## Files touched
+- `src/components/SiteNav.tsx` — Login button, signed-in state.
+- `src/pages/Start.tsx` — password fields, `signUp`, link-existing-row logic.
+- `src/pages/Auth.tsx` — rewrite to email/password + forgot-password.
+- `src/pages/ResetPassword.tsx` — new page.
+- `src/App.tsx` — add `/login` and `/reset-password` routes.
+- `src/pages/Dashboard.tsx` — email-fallback client lookup with auto-link.
 
 ## Out of scope
-- Google sign-in (you asked specifically for magic link).
-- Custom-branded auth email templates (default Lovable templates are fine unless you ask).
-- RLS changes — existing `own client select`/`update` policies on `user_id` are correct and will work the moment the trigger sets `user_id`.
+- Re-enabling magic link (you said "we can add it later").
+- Google sign-in.
+- Custom email templates for the password-reset email (Supabase default is fine for now).
