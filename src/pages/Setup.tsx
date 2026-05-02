@@ -230,19 +230,7 @@ export default function Setup() {
 
           {/* Step 2: Phone Setup */}
           {step === 1 && (
-            <div className="space-y-5">
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
-                <Phone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                <p className="text-sm text-muted-foreground">
-                  We'll provision a CallCapture number for your business. You'll forward your existing
-                  business line to it so the AI receptionist answers when you can't.
-                </p>
-              </div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <Field label="Business phone *" type="tel" placeholder="(555) 555-1234" value={state.phone} onChange={(v) => set("phone", v)} />
-                <Field label="Owner alert SMS number" type="tel" placeholder="Where new lead texts go" value={state.ownerSms ?? ""} onChange={(v) => set("ownerSms", v)} />
-              </div>
-            </div>
+            <PhoneSetupStep state={state} set={set} />
           )}
 
           {/* Step 3: Call Handling */}
