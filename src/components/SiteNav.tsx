@@ -3,20 +3,19 @@ import { Phone, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 const links = [
   { to: "/", label: "Home" },
   { to: "/demo", label: "Demo" },
   { to: "/pricing", label: "Pricing" },
-  { to: "/setup", label: "Setup" },
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/leads", label: "Leads" },
   { to: "/support", label: "Support" },
 ];
 
 export default function SiteNav() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
@@ -45,10 +44,24 @@ export default function SiteNav() {
           ))}
         </nav>
 
-        <div className="hidden md:block">
-          <Button onClick={() => navigate("/start")} className="bg-cta hover:opacity-90 shadow-glow">
-            Get Started
-          </Button>
+        <div className="hidden md:flex items-center gap-3">
+          {user ? (
+            <Button onClick={() => navigate("/dashboard")} className="bg-cta hover:opacity-90 shadow-glow">
+              Dashboard
+            </Button>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Login
+              </Link>
+              <Button onClick={() => navigate("/start")} className="bg-cta hover:opacity-90 shadow-glow">
+                Get Started
+              </Button>
+            </>
+          )}
         </div>
 
         <button
@@ -78,12 +91,30 @@ export default function SiteNav() {
                 {l.label}
               </NavLink>
             ))}
-            <Button
-              onClick={() => { setOpen(false); navigate("/start"); }}
-              className="bg-cta hover:opacity-90 shadow-glow mt-2"
-            >
-              Get Started
-            </Button>
+            {user ? (
+              <Button
+                onClick={() => { setOpen(false); navigate("/dashboard"); }}
+                className="bg-cta hover:opacity-90 shadow-glow mt-2"
+              >
+                Dashboard
+              </Button>
+            ) : (
+              <>
+                <NavLink
+                  to="/login"
+                  onClick={() => setOpen(false)}
+                  className="py-2 text-sm font-medium text-foreground"
+                >
+                  Login
+                </NavLink>
+                <Button
+                  onClick={() => { setOpen(false); navigate("/start"); }}
+                  className="bg-cta hover:opacity-90 shadow-glow mt-2"
+                >
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -64,13 +64,34 @@ export default function Dashboard() {
     const startedAt = Date.now();
 
     const fetchClient = async () => {
-      const { data } = await supabase
+      let { data } = await supabase
         .from("callcapture_clients")
         .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
+      // Fallback: if no row by user_id, try email match and link it.
+      if (!data && user.email) {
+        const { data: byEmail } = await supabase
+          .from("callcapture_clients")
+          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id")
+          .ilike("email", user.email)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (byEmail) {
+          if (!byEmail.user_id) {
+            await supabase
+              .from("callcapture_clients")
+              .update({ user_id: user.id })
+              .eq("id", byEmail.id);
+          }
+          data = byEmail as typeof data;
+        }
+      }
+
       if (cancelled) return;
       setClient(data as Client | null);
       const isActive = (data?.payment_status ?? "").toLowerCase() === "active";
