@@ -49,23 +49,22 @@ export default function Start() {
     setErrors({});
     setSubmitting(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
-      const { data: client, error } = await supabase
+      const clientId = crypto.randomUUID();
+      const { error } = await supabase
         .from("callcapture_clients")
         .insert({
+          id: clientId,
           owner_name: parsed.data.owner_name,
           business_name: parsed.data.business_name,
           email: parsed.data.email,
           alert_phone: parsed.data.alert_phone,
-          user_id: u.user?.id ?? null,
           setup_status: "Payment Pending",
-        })
-        .select("id")
-        .single();
-      if (error || !client) throw error ?? new Error("Could not save");
+          payment_status: "Pending",
+        });
+      if (error) throw error;
 
       const { data: checkout, error: fnErr } = await supabase.functions.invoke("create-checkout", {
-        body: { clientId: client.id },
+        body: { clientId },
       });
       if (fnErr || !checkout?.url) throw fnErr ?? new Error("Could not start checkout");
 
