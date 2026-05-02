@@ -53,7 +53,10 @@ export default function Start() {
       const { data: client, error } = await supabase
         .from("callcapture_clients")
         .insert({
-          ...parsed.data,
+          owner_name: parsed.data.owner_name,
+          business_name: parsed.data.business_name,
+          email: parsed.data.email,
+          alert_phone: parsed.data.alert_phone,
           user_id: u.user?.id ?? null,
           setup_status: "Payment Pending",
         })
