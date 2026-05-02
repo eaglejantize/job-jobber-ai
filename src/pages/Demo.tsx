@@ -31,10 +31,10 @@ export default function Demo() {
           <SampleLeadCard />
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow h-12 flex-1">
-              <Link to="/support">Get Set Up in 24 Hours</Link>
+              <Link to="/start">Get Started — $99 + $197/mo</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-12 flex-1 border-primary/40">
-              <Link to="/setup">Try the Setup Wizard</Link>
+              <Link to="/support">Talk to a human</Link>
             </Button>
           </div>
         </div>

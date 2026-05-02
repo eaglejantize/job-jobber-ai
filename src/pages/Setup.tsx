@@ -1,92 +1,209 @@
 import Layout from "@/components/Layout";
 import { useEffect, useMemo, useState } from "react";
-import { defaultWizardState, loadWizardState, saveWizardState, type WizardState, wizardSchema } from "@/lib/wizardSchema";
+import {
+  defaultWizardState,
+  loadWizardState,
+  saveWizardState,
+  type WizardState,
+} from "@/lib/wizardSchema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { INDUSTRIES, TONES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIONS } from "@/lib/constants";
+import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS } from "@/lib/constants";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
-import { generateAssistantPrompt, VAPI_INSTRUCTIONS } from "@/lib/generatePrompt";
-import { Copy, ArrowRight, ArrowLeft, Plus, X, Check, Sparkles } from "lucide-react";
+import { generateAssistantPrompt } from "@/lib/generatePrompt";
+import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const STEPS = [
   "Business Info",
-  "Receptionist Behavior",
-  "Intake Questions",
-  "Call Handling",
-  "Notifications",
-  "Your AI Receptionist Is Ready",
-];
+  "Call Goals",
+  "Info to Collect",
+  "Tone",
+  "Existing Customer Handling",
+  "Generate Instructions",
+] as const;
+
+const CALL_GOALS = ["Capture leads", "Existing customers", "Info calls"] as const;
+const TONE_OPTIONS = ["Friendly", "Direct", "Helpful"] as const;
+const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
+
+type GateState = "checking" | "ready" | "denied";
 
 export default function Setup() {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const sessionId = params.get("session_id");
+
+  const [gate, setGate] = useState<GateState>(sessionId ? "checking" : "ready");
+  const [clientId, setClientId] = useState<string | null>(null);
+
   const [state, setState] = useState<WizardState>(loadWizardState);
   const [step, setStep] = useState(0);
   const [customQ, setCustomQ] = useState("");
+  const [callGoals, setCallGoals] = useState<string[]>(["Capture leads"]);
+  const [existingCustomerForward, setExistingCustomerForward] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { saveWizardState(state); }, [state]);
+
+  // Payment gate: poll for activation when arriving from Stripe
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      const { data } = await supabase
+        .from("callcapture_clients")
+        .select("id, payment_status, owner_name, business_name, email, alert_phone")
+        .eq("stripe_checkout_session_id", sessionId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data && data.payment_status === "Active") {
+        setClientId(data.id);
+        setState((s) => ({
+          ...s,
+          businessName: s.businessName || data.business_name || "",
+          email: s.email || data.email || "",
+          ownerName: s.ownerName || data.owner_name || "",
+          ownerSms: s.ownerSms || data.alert_phone || "",
+        }));
+        setGate("ready");
+        return;
+      }
+      if (attempts >= 10) { setGate("denied"); return; }
+      setTimeout(poll, 2000);
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
   const set = <K extends keyof WizardState>(k: K, v: WizardState[K]) =>
     setState((s) => ({ ...s, [k]: v }));
 
-  const generated = useMemo(() => generateAssistantPrompt(state), [state]);
+  const generated = useMemo(
+    () => generateAssistantPrompt({
+      ...state,
+      // Map wizard tone "Helpful" through generator (already in enum)
+    }),
+    [state],
+  );
 
   function next() {
-    // Validate per-step (light)
-    if (step === 0) {
-      const r = wizardSchema.pick({ businessName: true, industry: true, phone: true, email: true })
-        .safeParse(state);
-      if (!r.success) { toast({ title: "Fill in the required fields", variant: "destructive" }); return; }
+    if (step === 0 && (!state.businessName.trim() || !state.industry)) {
+      toast({ title: "Add business type and name", variant: "destructive" });
+      return;
     }
-    if (step === 1) {
-      const r = wizardSchema.pick({ assistantName: true, greeting: true, tone: true })
-        .safeParse(state);
-      if (!r.success) { toast({ title: "Fill in the required fields", variant: "destructive" }); return; }
+    if (step === 1 && callGoals.length === 0) {
+      toast({ title: "Pick at least one call goal", variant: "destructive" });
+      return;
     }
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function prev() { setStep((s) => Math.max(0, s - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
-  async function saveToCloud() {
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) {
-      toast({ title: "Sign in to save", description: "Your work is saved locally for now." });
-      return;
+  async function generateAndFinish() {
+    setSubmitting(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (u.user) {
+        const { data: biz, error: be } = await supabase
+          .from("callcapture_businesses")
+          .insert({
+            user_id: u.user.id,
+            business_name: state.businessName,
+            industry: state.industry,
+            phone: state.phone,
+            email: state.email,
+            service_area: state.serviceArea || null,
+            business_hours: state.businessHours || null,
+          })
+          .select("id")
+          .single();
+        if (be || !biz) throw be ?? new Error("Couldn't save business");
+
+        const { error: ce } = await supabase
+          .from("callcapture_assistant_configs")
+          .insert({
+            business_id: biz.id,
+            user_id: u.user.id,
+            assistant_name: state.assistantName,
+            greeting: state.greeting,
+            tone: state.tone,
+            after_hours_enabled: state.afterHoursEnabled,
+            transfer_enabled: state.transferEnabled || existingCustomerForward,
+            transfer_phone: state.transferPhone || null,
+            intake_questions: state.intakeQuestions,
+            call_rules: {
+              transferTriggers: state.transferTriggers,
+              fallbackAction: state.fallbackAction,
+              callGoals,
+              existingCustomerForward,
+            },
+            notification_settings: {
+              ownerName: state.ownerName,
+              ownerSms: state.ownerSms,
+              ownerEmail: state.ownerEmail,
+              sendSms: state.sendSms,
+              sendEmail: state.sendEmail,
+            },
+            generated_prompt: generated,
+          });
+        if (ce) throw ce;
+      }
+
+      if (clientId) {
+        await supabase
+          .from("callcapture_clients")
+          .update({ setup_status: "Live" })
+          .eq("id", clientId);
+      }
+
+      toast({ title: "Your AI receptionist is ready." });
+      navigate("/dashboard");
+    } catch (err) {
+      toast({
+        title: "Couldn't finish setup",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
     }
-    const { data: biz, error: be } = await supabase.from("callcapture_businesses").insert({
-      user_id: u.user.id,
-      business_name: state.businessName,
-      industry: state.industry,
-      phone: state.phone,
-      email: state.email,
-      service_area: state.serviceArea || null,
-      business_hours: state.businessHours || null,
-    }).select("id").single();
-    if (be || !biz) { toast({ title: "Save failed", description: be?.message, variant: "destructive" }); return; }
-    const { error: ce } = await supabase.from("callcapture_assistant_configs").insert({
-      business_id: biz.id,
-      user_id: u.user.id,
-      assistant_name: state.assistantName,
-      greeting: state.greeting,
-      tone: state.tone,
-      after_hours_enabled: state.afterHoursEnabled,
-      transfer_enabled: state.transferEnabled,
-      transfer_phone: state.transferPhone || null,
-      intake_questions: state.intakeQuestions,
-      call_rules: { transferTriggers: state.transferTriggers, fallbackAction: state.fallbackAction },
-      notification_settings: {
-        ownerName: state.ownerName, ownerSms: state.ownerSms, ownerEmail: state.ownerEmail,
-        sendSms: state.sendSms, sendEmail: state.sendEmail,
-      },
-      generated_prompt: generated,
-    });
-    if (ce) { toast({ title: "Save failed", description: ce.message, variant: "destructive" }); return; }
-    toast({ title: "Saved to your dashboard." });
+  }
+
+  if (gate === "checking") {
+    return (
+      <Layout>
+        <section className="container py-24 text-center">
+          <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary" />
+          <p className="mt-4 text-muted-foreground">Confirming your payment…</p>
+        </section>
+      </Layout>
+    );
+  }
+  if (gate === "denied") {
+    return (
+      <Layout>
+        <section className="container py-24 text-center max-w-lg mx-auto">
+          <h1 className="text-2xl font-bold">We couldn't confirm your payment.</h1>
+          <p className="mt-3 text-muted-foreground">
+            If you completed checkout, please refresh this page in a moment. Otherwise start again.
+          </p>
+          <div className="mt-6 flex gap-3 justify-center">
+            <Button onClick={() => location.reload()} variant="outline">Refresh</Button>
+            <Button onClick={() => navigate("/start")} className="bg-cta hover:opacity-90 shadow-glow">
+              Start over
+            </Button>
+          </div>
+        </section>
+      </Layout>
+    );
   }
 
   return (
@@ -98,8 +215,9 @@ export default function Setup() {
               Step {step + 1} of {STEPS.length}
             </p>
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-              {step === STEPS.length - 1 ? "Your AI Receptionist Is Ready" : "Let's set up your AI receptionist"}
+              Let's set up your AI receptionist
             </h1>
+            <p className="mt-2 text-muted-foreground">We set this up for you. Live in 24 hours.</p>
             <Progress value={((step + 1) / STEPS.length) * 100} className="mt-6 h-2" />
           </div>
         </div>
@@ -112,29 +230,31 @@ export default function Setup() {
           {step === 0 && (
             <div className="grid md:grid-cols-2 gap-4">
               <Field label="Business name *" value={state.businessName} onChange={(v) => set("businessName", v)} />
-              <SelectField label="Industry *" value={state.industry} onChange={(v) => set("industry", v)} options={INDUSTRIES} />
-              <Field label="Business phone *" type="tel" value={state.phone} onChange={(v) => set("phone", v)} />
-              <Field label="Business email *" type="email" value={state.email} onChange={(v) => set("email", v)} />
+              <SelectField label="Business type *" value={state.industry} onChange={(v) => set("industry", v)} options={INDUSTRIES} />
               <Field label="Service area" placeholder="e.g. Jacksonville + 30 mi" value={state.serviceArea ?? ""} onChange={(v) => set("serviceArea", v)} />
-              <Field label="Business hours" placeholder="Mon–Fri 8am–6pm" value={state.businessHours ?? ""} onChange={(v) => set("businessHours", v)} />
+              <Field label="Hours" placeholder="Mon–Fri 8am–6pm" value={state.businessHours ?? ""} onChange={(v) => set("businessHours", v)} />
+              <Field label="Business phone" type="tel" value={state.phone} onChange={(v) => set("phone", v)} />
+              <Field label="Business email" type="email" value={state.email} onChange={(v) => set("email", v)} />
             </div>
           )}
 
           {step === 1 && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <Field label="Assistant name *" value={state.assistantName} onChange={(v) => set("assistantName", v)} />
-              <SelectField label="Tone *" value={state.tone} onChange={(v) => set("tone", v as WizardState["tone"])} options={[...TONES]} />
-              <div className="md:col-span-2 space-y-2">
-                <Label>Greeting *</Label>
-                <Textarea rows={2} value={state.greeting} onChange={(e) => set("greeting", e.target.value)} />
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">What kinds of calls should the AI handle?</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {CALL_GOALS.map((g) => (
+                  <CheckRow
+                    key={g}
+                    label={g}
+                    checked={callGoals.includes(g)}
+                    onChange={(c) =>
+                      setCallGoals(c
+                        ? [...callGoals, g]
+                        : callGoals.filter((x) => x !== g))
+                    }
+                  />
+                ))}
               </div>
-              <ToggleRow label="Answer calls after hours?" value={state.afterHoursEnabled} onChange={(v) => set("afterHoursEnabled", v)} />
-              <ToggleRow label="Transfer urgent calls to a human?" value={state.transferEnabled} onChange={(v) => set("transferEnabled", v)} />
-              {state.transferEnabled && (
-                <div className="md:col-span-2">
-                  <Field label="Transfer phone number" type="tel" value={state.transferPhone ?? ""} onChange={(v) => set("transferPhone", v)} />
-                </div>
-              )}
             </div>
           )}
 
@@ -144,7 +264,19 @@ export default function Setup() {
                 Pick what your receptionist should ask every caller.
               </p>
               <div className="grid sm:grid-cols-2 gap-2">
-                {DEFAULT_INTAKE_QUESTIONS.map((q) => (
+                {COLLECT_OPTIONS.map((q) => (
+                  <CheckRow
+                    key={q}
+                    label={q}
+                    checked={state.intakeQuestions.includes(q)}
+                    onChange={(c) =>
+                      set("intakeQuestions", c
+                        ? [...state.intakeQuestions, q]
+                        : state.intakeQuestions.filter((x) => x !== q))
+                    }
+                  />
+                ))}
+                {DEFAULT_INTAKE_QUESTIONS.filter((q) => !COLLECT_OPTIONS.some((o) => o.toLowerCase() === q.toLowerCase())).map((q) => (
                   <CheckRow
                     key={q}
                     label={q}
@@ -176,7 +308,7 @@ export default function Setup() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {state.intakeQuestions
-                    .filter((q) => !DEFAULT_INTAKE_QUESTIONS.includes(q))
+                    .filter((q) => ![...COLLECT_OPTIONS, ...DEFAULT_INTAKE_QUESTIONS].some((o) => o.toLowerCase() === q.toLowerCase()))
                     .map((q) => (
                       <span key={q} className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm">
                         {q}
@@ -191,53 +323,49 @@ export default function Setup() {
           )}
 
           {step === 3 && (
-            <div className="space-y-6">
-              <div>
-                <Label className="text-base">When should the AI transfer to a human?</Label>
-                <div className="grid sm:grid-cols-2 gap-2 mt-3">
-                  {TRANSFER_TRIGGERS.map((t) => (
-                    <CheckRow
-                      key={t}
-                      label={t}
-                      checked={state.transferTriggers.includes(t)}
-                      onChange={(c) =>
-                        set("transferTriggers", c
-                          ? [...state.transferTriggers, t]
-                          : state.transferTriggers.filter((x) => x !== t))
-                      }
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">How should your receptionist sound?</p>
+              <div className="grid sm:grid-cols-3 gap-2">
+                {TONE_OPTIONS.map((t) => (
+                  <label key={t} className={`flex items-center justify-center rounded-lg border p-4 cursor-pointer text-sm font-medium ${state.tone === t ? "border-primary bg-primary/10" : "border-border hover:bg-secondary/50"}`}>
+                    <input
+                      type="radio"
+                      name="tone"
+                      className="sr-only"
+                      checked={state.tone === t}
+                      onChange={() => set("tone", t)}
                     />
-                  ))}
-                </div>
+                    {t}
+                  </label>
+                ))}
               </div>
-              <div>
-                <Label className="text-base">If no one answers the transfer…</Label>
-                <div className="mt-3 space-y-2">
-                  {FALLBACK_ACTIONS.map((a) => (
-                    <label key={a} className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-pointer hover:bg-secondary/50">
-                      <input
-                        type="radio"
-                        name="fallback"
-                        className="accent-primary"
-                        checked={state.fallbackAction === a}
-                        onChange={() => set("fallbackAction", a)}
-                      />
-                      <span className="text-sm">{a}</span>
-                    </label>
-                  ))}
-                </div>
+              <div className="grid md:grid-cols-2 gap-4 mt-6">
+                <Field label="Receptionist name" value={state.assistantName} onChange={(v) => set("assistantName", v)} />
+                <Field label="Greeting" value={state.greeting} onChange={(v) => set("greeting", v)} />
               </div>
             </div>
           )}
 
           {step === 4 && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <Field label="Owner name" value={state.ownerName ?? ""} onChange={(v) => set("ownerName", v)} />
-              <Field label="Owner SMS number" type="tel" value={state.ownerSms ?? ""} onChange={(v) => set("ownerSms", v)} />
-              <Field label="Owner email" type="email" value={state.ownerEmail ?? ""} onChange={(v) => set("ownerEmail", v)} />
-              <div className="md:col-span-2 grid sm:grid-cols-2 gap-3">
-                <ToggleRow label="Send leads by SMS" value={state.sendSms} onChange={(v) => set("sendSms", v)} />
-                <ToggleRow label="Send leads by email" value={state.sendEmail} onChange={(v) => set("sendEmail", v)} />
-              </div>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                When an existing customer calls, we'll forward the call to your line by default.
+                If your line doesn't answer, the AI takes a message and sends it to your alert number.
+              </p>
+              <ToggleRow
+                label="Forward existing customer calls to my phone"
+                value={existingCustomerForward}
+                onChange={setExistingCustomerForward}
+              />
+              {existingCustomerForward && (
+                <Field
+                  label="Forward to phone number"
+                  type="tel"
+                  value={state.transferPhone ?? ""}
+                  onChange={(v) => set("transferPhone", v)}
+                />
+              )}
+              <Field label="Owner alert SMS number" type="tel" value={state.ownerSms ?? ""} onChange={(v) => set("ownerSms", v)} />
             </div>
           )}
 
@@ -246,49 +374,23 @@ export default function Setup() {
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
                 <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                 <div className="text-sm">
-                  <p className="font-semibold">Your script is ready.</p>
+                  <p className="font-semibold">Your script is ready to generate.</p>
                   <p className="text-muted-foreground">
-                    Copy this into your Vapi assistant — or let us set it up for you.
+                    Review and click below — we'll save it and take you to your dashboard.
                   </p>
                 </div>
               </div>
-              <pre className="max-h-[420px] overflow-auto rounded-xl border border-border bg-secondary/40 p-4 text-xs font-mono whitespace-pre-wrap">
+              <pre className="max-h-[320px] overflow-auto rounded-xl border border-border bg-secondary/40 p-4 text-xs font-mono whitespace-pre-wrap">
 {generated}
               </pre>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  className="bg-cta hover:opacity-90 shadow-glow flex-1 h-12"
-                  onClick={() => {
-                    navigator.clipboard.writeText(generated);
-                    toast({ title: "Copied to clipboard" });
-                  }}
-                >
-                  <Copy className="h-4 w-4" /> Copy Instructions
-                </Button>
-                <Button asChild variant="outline" className="flex-1 h-12 border-primary/40">
-                  <Link to="/support">Request Setup Help</Link>
-                </Button>
-              </div>
-              <details className="rounded-xl border border-border bg-card p-4">
-                <summary className="cursor-pointer text-sm font-semibold">How to connect this to Vapi</summary>
-                <pre className="mt-3 text-xs whitespace-pre-wrap text-muted-foreground">{VAPI_INSTRUCTIONS}</pre>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-3"
-                  onClick={() => { navigator.clipboard.writeText(VAPI_INSTRUCTIONS); toast({ title: "Copied" }); }}
-                >
-                  <Copy className="h-3 w-3" /> Copy Vapi Setup Instructions
-                </Button>
-              </details>
-              <div className="pt-2">
-                <Button onClick={saveToCloud} variant="secondary" className="w-full h-11">
-                  <Check className="h-4 w-4" /> Save to my dashboard
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Saves to your TryCallCapture account so you can access it later.
-                </p>
-              </div>
+              <Button
+                onClick={generateAndFinish}
+                disabled={submitting}
+                size="lg"
+                className="w-full bg-cta hover:opacity-90 shadow-glow h-12"
+              >
+                {submitting ? "Generating…" : "Generate My AI Receptionist"}
+              </Button>
             </div>
           )}
 
@@ -309,10 +411,10 @@ export default function Setup() {
         <aside className="space-y-4">
           <RequestSetupBanner variant="compact" />
           <div className="rounded-xl border border-border bg-card p-5 text-sm">
-            <p className="font-semibold">Why people pick "white-glove"</p>
+            <p className="font-semibold">We set this up for you</p>
             <ul className="mt-3 space-y-2 text-muted-foreground">
-              <li>• Live in 24 hours, no fiddling</li>
-              <li>• We handle Vapi, the script, and the number</li>
+              <li>• Live in 24 hours</li>
+              <li>• No tech skills required</li>
               <li>• You just answer the leads</li>
             </ul>
           </div>
@@ -331,7 +433,7 @@ function Field({ label, value, onChange, type = "text", placeholder }: { label: 
   );
 }
 
-function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>

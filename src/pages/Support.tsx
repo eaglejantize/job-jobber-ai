@@ -8,7 +8,7 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { REQUEST_TYPES } from "@/lib/constants";
-import { CheckCircle2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Required").max(120),
@@ -21,8 +21,8 @@ const schema = z.object({
 
 export default function Support() {
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const navigate = useNavigate();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -61,8 +61,20 @@ export default function Support() {
       toast({ title: "Couldn't send", description: error.message, variant: "destructive" });
       return;
     }
-    setDone(true);
-    toast({ title: "We got it.", description: "We'll be in touch within a few hours." });
+    toast({
+      title: "We got it.",
+      description: "Continue to setup & payment so we can get you live in 24 hours.",
+    });
+    navigate("/start", {
+      state: {
+        prefill: {
+          owner_name: parsed.data.name,
+          business_name: parsed.data.business_name || "",
+          email: parsed.data.email,
+          alert_phone: parsed.data.phone || "",
+        },
+      },
+    });
   }
 
   return (
@@ -80,16 +92,7 @@ export default function Support() {
 
       <section className="container pb-20 -mt-6">
         <div className="max-w-xl mx-auto rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft">
-          {done ? (
-            <div className="text-center py-8">
-              <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">You're on the list.</h2>
-              <p className="mt-2 text-muted-foreground">
-                We'll reach out within a few hours to get your AI receptionist live.
-              </p>
-            </div>
-          ) : (
-            <form className="space-y-4" onSubmit={onSubmit}>
+          <form className="space-y-4" onSubmit={onSubmit}>
               <Field label="Your name" name="name" required error={errors.name} />
               <Field label="Business name" name="business_name" error={errors.business_name} />
               <Field label="Email" name="email" type="email" required error={errors.email} />
@@ -112,10 +115,9 @@ export default function Support() {
                 <Textarea id="message" name="message" rows={4} placeholder="Tell us about your business and what you'd like the receptionist to do." />
               </div>
               <Button type="submit" disabled={submitting} size="lg" className="w-full bg-cta hover:opacity-90 shadow-glow h-12">
-                {submitting ? "Sending…" : "Request Setup Help"}
+                {submitting ? "Sending…" : "Continue to Setup & Payment"}
               </Button>
-            </form>
-          )}
+          </form>
         </div>
       </section>
     </Layout>

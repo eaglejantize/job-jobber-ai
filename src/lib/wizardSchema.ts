@@ -11,7 +11,7 @@ export const wizardSchema = z.object({
   // Step 2
   assistantName: z.string().trim().min(1, "Give your receptionist a name").max(60),
   greeting: z.string().trim().min(5, "Write a greeting").max(280),
-  tone: z.enum(["Friendly", "Professional", "Direct", "Warm"]),
+  tone: z.enum(["Friendly", "Professional", "Direct", "Warm", "Helpful"]),
   afterHoursEnabled: z.boolean(),
   transferEnabled: z.boolean(),
   transferPhone: z.string().trim().max(30).optional().or(z.literal("")),

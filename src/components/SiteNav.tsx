@@ -46,8 +46,8 @@ export default function SiteNav() {
         </nav>
 
         <div className="hidden md:block">
-          <Button onClick={() => navigate("/support")} className="bg-cta hover:opacity-90 shadow-glow">
-            Get Set Up in 24 Hours
+          <Button onClick={() => navigate("/start")} className="bg-cta hover:opacity-90 shadow-glow">
+            Get Started
           </Button>
         </div>
 
@@ -79,10 +79,10 @@ export default function SiteNav() {
               </NavLink>
             ))}
             <Button
-              onClick={() => { setOpen(false); navigate("/support"); }}
+              onClick={() => { setOpen(false); navigate("/start"); }}
               className="bg-cta hover:opacity-90 shadow-glow mt-2"
             >
-              Get Set Up in 24 Hours
+              Get Started
             </Button>
           </div>
         </div>
