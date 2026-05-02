@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Navigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight } from "lucide-react";
+import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight, Bot } from "lucide-react";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { toast } from "@/hooks/use-toast";
 import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
@@ -48,6 +48,8 @@ export default function Dashboard() {
   const [configFetched, setConfigFetched] = useState(false);
   const [voiceLabel, setVoiceLabel] = useState<string | null>(null);
   const [voicePersona, setVoicePersona] = useState<string | null>(null);
+  const [ringsBeforeAi, setRingsBeforeAi] = useState<number>(3);
+  const [aiAnswerMissed, setAiAnswerMissed] = useState<boolean>(true);
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [polling, setPolling] = useState(false);
   const toastedRef = useRef(false);
@@ -68,7 +70,7 @@ export default function Dashboard() {
 
     void supabase
       .from("callcapture_assistant_configs")
-      .select("id, generated_prompt, notification_settings")
+      .select("id, generated_prompt, notification_settings, call_rules")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -86,6 +88,9 @@ export default function Dashboard() {
           setVoiceLabel(def.label);
           setVoicePersona(def.persona);
         }
+        const rules = (data?.call_rules ?? {}) as { ringsBeforeAi?: number; aiAnswerMissed?: boolean };
+        setRingsBeforeAi(rules.ringsBeforeAi ?? 3);
+        setAiAnswerMissed(rules.aiAnswerMissed !== false);
       });
 
     void supabase
@@ -228,6 +233,33 @@ export default function Dashboard() {
                 </Link>
               </Button>
             )}
+          </div>
+        </div>
+
+        {/* Call Setup */}
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Call Setup</h2>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/settings">Edit Call Settings</Link>
+            </Button>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Phone Number</p>
+              <p className="mt-2 font-medium">{phoneToShow ?? <span className="text-muted-foreground">—</span>}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Rings before AI</p>
+              <p className="mt-2 font-medium">{ringsBeforeAi} {ringsBeforeAi === 1 ? "ring" : "rings"}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">AI Backup</p>
+              <p className="mt-2 font-medium inline-flex items-center gap-1.5">
+                <Bot className="h-4 w-4 text-primary" />
+                {aiAnswerMissed ? "ON" : "OFF"}
+              </p>
+            </div>
           </div>
         </div>
 
