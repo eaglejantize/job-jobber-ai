@@ -33,36 +33,39 @@ Deno.serve(async (req) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const clientId = session.metadata?.client_id;
-        if (!clientId) {
-          console.warn("checkout.session.completed without client_id");
-          break;
-        }
+        const clientId = session.metadata?.client_id ?? null;
+        const email =
+          session.customer_details?.email ?? session.customer_email ?? null;
         const update = {
-          payment_status: "Active",
+          payment_status: "active",
+          subscription_status: "active",
           setup_status: "Setup In Progress",
           stripe_subscription_id: (session.subscription as string) ?? null,
           stripe_customer_id: (session.customer as string) ?? null,
         };
-        const { error } = await supabase
-          .from("callcapture_clients")
-          .update(update)
-          .eq("id", clientId);
+        let q = supabase.from("callcapture_clients").update(update);
+        if (clientId) q = q.eq("id", clientId);
+        else if (email) q = q.ilike("email", email);
+        else {
+          console.warn("checkout.session.completed without client_id or email");
+          break;
+        }
+        const { error } = await q;
         if (error) console.error("update failed", error);
-        else console.log("client activated", clientId);
+        else console.log("client activated", { clientId, email });
         break;
       }
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;
         const status = sub.status;
         const payment_status =
-          status === "active" || status === "trialing" ? "Active"
-          : status === "past_due" || status === "unpaid" ? "Past Due"
-          : status === "canceled" || status === "incomplete_expired" ? "Canceled"
-          : "Inactive";
+          status === "active" || status === "trialing" ? "active"
+          : status === "past_due" || status === "unpaid" ? "past_due"
+          : status === "canceled" || status === "incomplete_expired" ? "canceled"
+          : "inactive";
         const { error } = await supabase
           .from("callcapture_clients")
-          .update({ payment_status })
+          .update({ payment_status, subscription_status: status })
           .eq("stripe_subscription_id", sub.id);
         if (error) console.error("sub update failed", error);
         break;
@@ -71,7 +74,7 @@ Deno.serve(async (req) => {
         const sub = event.data.object as Stripe.Subscription;
         const { error } = await supabase
           .from("callcapture_clients")
-          .update({ payment_status: "Canceled" })
+          .update({ payment_status: "canceled", subscription_status: "canceled" })
           .eq("stripe_subscription_id", sub.id);
         if (error) console.error("sub delete update failed", error);
         break;

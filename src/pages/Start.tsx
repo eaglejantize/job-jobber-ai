@@ -46,7 +46,7 @@ export default function Start() {
   useEffect(() => {
     if (!isStripeReturn) return;
     const t = setTimeout(() => {
-      navigate(`/setup${location.search}`, { replace: true });
+      navigate(`/dashboard${location.search}`, { replace: true });
     }, 2000);
     return () => clearTimeout(t);
   }, [isStripeReturn, navigate, location.search]);
@@ -84,9 +84,18 @@ export default function Start() {
           email: parsed.data.email,
           alert_phone: parsed.data.alert_phone,
           setup_status: "Payment Pending",
-          payment_status: "Pending",
+          payment_status: "pending",
         });
       if (error) throw error;
+
+      // Best-effort: send a magic link so it's waiting in their inbox after Stripe.
+      void supabase.auth.signInWithOtp({
+        email: parsed.data.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+          shouldCreateUser: true,
+        },
+      });
 
       const { data: checkout, error: fnErr } = await supabase.functions.invoke("create-checkout", {
         body: { clientId },

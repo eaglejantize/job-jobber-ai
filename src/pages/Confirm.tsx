@@ -8,7 +8,7 @@ export default function Confirm() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      navigate(`/setup${location.search}`, { replace: true });
+      navigate(`/dashboard${location.search}`, { replace: true });
     }, 2000);
     return () => clearTimeout(t);
   }, [navigate, location.search]);
