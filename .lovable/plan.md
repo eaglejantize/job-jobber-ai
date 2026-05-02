@@ -1,67 +1,96 @@
-## Goal
+# Voice Selection Rebuild (Static Previews)
 
-The wizard already has 6 steps in the requested order:
+Curated voice personas with local MP3 previews. UI lives in **Settings → AI Settings**, selection saved to the database, and shown on the **Dashboard**. No ElevenLabs, no live Vapi calls.
 
-1. Business Info
-2. Phone Setup
-3. Call Handling
-4. AI Receptionist Setup
-5. Voice & Greeting
-6. Review & Launch
+## What gets built
 
-Today, Step 2 ("Phone Setup") is just two plain inputs (business phone + owner SMS). I'll rebuild **Step 2** into the full structured experience you described, without touching the other steps, navigation, or save logic.
+### 1. Voice catalog (new file `src/lib/voices.ts`)
+A single source of truth used by Settings + Dashboard:
 
-## Changes
+```ts
+export type VoicePersona = {
+  id: string;            // stable key, e.g. "maya"
+  label: string;         // "Maya"
+  persona: string;       // "Recommended" | "Most Human" | "Premium" | "Confident Technician" | "Fast" | "Calm" | "Calm Authority"
+  badge?: "Recommended" | "Most Human" | "Premium";
+  description: string;
+  previewUrl: string;    // "/audio/voices/maya-preview.mp3"
+  voiceId: string;       // placeholder, e.g. "placeholder-maya"
+};
+export const VOICES: VoicePersona[] = [ /* all 7 */ ];
+export const DEFAULT_VOICE_ID = "maya";
+```
 
-### 1. `src/lib/wizardSchema.ts`
-Add two persisted fields so progress survives reloads:
-- `phoneMode: "new" | "existing" | "test"` (default `"new"`)
-- `phoneNumber: string` (default `""`) — holds the generated mock number or the user-entered existing number; mirrored into the existing `phone` field so downstream code (Setup save, Settings, Dashboard "Business phone") keeps working unchanged.
+The 7 entries match the spec exactly (Maya, Jasmine, Claire, Marcus, Leo, Ava, Noah) with badges only on Maya/Jasmine/Claire.
 
-Defaults stay backward-compatible — old `localStorage` payloads continue to load via the existing spread merge.
+### 2. Database storage
+Voice fields are stored as JSON inside the existing `callcapture_assistant_configs.notification_settings` jsonb column under a `voice` key:
 
-### 2. `src/pages/Setup.tsx` — rewrite Step 2 only
+```json
+"voice": {
+  "voice_label": "Maya",
+  "voice_persona": "Recommended",
+  "voice_preview_url": "/audio/voices/maya-preview.mp3",
+  "voice_id": "placeholder-maya"
+}
+```
 
-New Step 2 UI:
+This avoids a schema migration and keeps the existing types file untouched. Default = Maya when no value is saved.
 
-**Header**
-- Title: "Set Up Your Business Phone"
-- Subtext: "This is the number your customers will call."
+### 3. New component `src/components/VoicePicker.tsx`
+- Renders a responsive grid of 7 voice cards.
+- Each card: name, persona/badge pill, description, **Play Preview** button, **Select Voice** button (shows "Selected" state when active).
+- One shared `<audio>` element (ref) — clicking Play on another card stops the previous one.
+- If the audio file 404s (`onError`), the card swaps the player area for muted text: **"Preview audio not uploaded yet."**
+- Selected card visually highlighted (primary border + soft bg).
+- Props: `value: string` (voice id), `onChange: (v: VoicePersona) => void`.
 
-**Section 1 — Choose phone type** (shadcn `RadioGroup`)
-- Get a new business number (recommended)
-- Use my existing number (forward calls)
-- Skip for now (test mode)
+### 4. Settings page changes (`src/pages/Settings.tsx`)
+Inside the **AI Settings** tab, add a new section **above** the existing Tone selector:
 
-**Section 2 — Dynamic inputs** (driven by `phoneMode`)
+```
+Voice
+  <VoicePicker value={selectedVoiceId} onChange={...} />
+Tone (secondary)
+  <existing tone radios>
+```
 
-- `new`: Area Code input (3 digits) + "Generate Number" button. Generates a mock number `(<area>) XXX-XXXX` with random digits, stores in `phoneNumber`, and shows the result in a highlighted card with a "Regenerate" link.
-- `existing`: Phone input + helper "You'll forward this number to your AI assistant."
-- `test`: Info card "You can test the system without a real number." Auto-sets `phoneNumber` to empty and bypasses the phone validation in `next()`.
+Reads/writes `cfg.notification_settings.voice`. The `saveAi` handler already persists `intake_questions`, `assistant_name`, etc. — extend it to also write `notification_settings` with the voice block merged in, and regenerate the prompt as it already does.
 
-Owner alert SMS field stays on this step (it's not on any other step and is needed for lead alerts).
+### 5. Dashboard display (`src/pages/Dashboard.tsx`)
+Add a small read-only row in the existing status card (next to Business Phone):
 
-**Section 3 — How it works** (static info card)
-> When someone calls your number:
-> - Your AI receptionist answers instantly
-> - Captures customer details
-> - Sends the lead to you
-> - Optionally forwards the call
+```
+AI Voice
+Maya · Recommended
+```
 
-**Validation update in `next()` for step 2:**
-- `new`: require a generated `phoneNumber`
-- `existing`: require non-empty `phoneNumber`
-- `test`: no requirement
-- Keep `phone` in sync with `phoneNumber` so the rest of the flow (Setup submit → `callcapture_businesses.phone`, Dashboard, Settings) is unaffected.
+Fetched from the same `callcapture_assistant_configs` query already running on the page (extend the select to include `notification_settings`). Falls back to "Maya · Recommended" if unset.
 
-### 3. No changes elsewhere
-- Step order, progress bar, Continue/Back, persistence (`callcapture.wizard.step`), and the save-to-Supabase logic in `generateAndFinish` remain untouched.
-- No DB migration. `phone_mode` is stored only in local wizard state (and inside `call_rules` JSON if useful later); we explicitly keep Twilio out of scope per your note.
-- No impact on Stripe, Vapi, Twilio, SMS, lead capture, auth, or routing.
+### 6. Static audio placeholders
+Create `public/audio/voices/.gitkeep` so the folder exists. Real MP3 files are not generated by this task; until uploaded, the picker shows "Preview audio not uploaded yet." per spec.
 
-## Technical notes
+## What is NOT changing
 
-- Use existing `Radio` primitives via `@/components/ui/radio-group`.
-- Mock number generator: `const n = () => Math.floor(1000 + Math.random()*9000); const m = () => Math.floor(100 + Math.random()*900); setPhoneNumber(\`(\${area}) \${m()}-\${n()}\`)`.
-- Area code input: numeric, maxLength 3; "Generate" disabled until 3 digits.
-- When user switches `phoneMode`, clear `phoneNumber` to avoid stale values.
+- No ElevenLabs integration, no `ELEVENLABS_API_KEY`.
+- No live Vapi voice preview calls.
+- No edge function changes.
+- No Setup wizard changes (voice picking lives in Settings, as requested).
+- No changes to auth, leads, Stripe, Twilio, or Supabase schema.
+- `src/integrations/supabase/types.ts` untouched (we use existing jsonb columns).
+
+## Files touched
+
+- **new** `src/lib/voices.ts`
+- **new** `src/components/VoicePicker.tsx`
+- **new** `public/audio/voices/.gitkeep`
+- **edit** `src/pages/Settings.tsx` — add Voice section in AI tab, persist to `notification_settings.voice`
+- **edit** `src/pages/Dashboard.tsx` — show selected voice in status card
+
+## Acceptance
+
+- AI Settings tab shows 7 voice cards with correct names, badges, descriptions.
+- Clicking Play Preview attempts to play the matching `/audio/voices/<id>-preview.mp3`; if missing, shows "Preview audio not uploaded yet."
+- Clicking Select Voice highlights that card and saves on "Save changes".
+- Dashboard status card shows the selected voice (Maya by default).
+- Tone selector still works and is positioned below Voice.
