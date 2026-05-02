@@ -1,68 +1,79 @@
-## Add "Test Your AI Receptionist" section to Dashboard
+## Goal
 
-Insert a new interactive Voice & Test card on `/dashboard`, placed right after the existing "Quick Actions" block and before "Recent Leads" — so the existing layout, status row, and leads list remain untouched.
+Add a final **success screen** to the onboarding wizard. After the user clicks "Launch My AI Receptionist" on Step 6, save their config and advance them to Step 7 — a celebratory "You're live" screen — instead of immediately redirecting. Auto-redirect to `/dashboard` after 3 seconds.
 
-### Section structure
+This must feel like a finish line, not another form step.
 
-**Header**
-- Title: "Test Your AI Receptionist"
-- Subtext: "Call or listen to your assistant before going live."
-- Right-side badge: 🟢 "Live — Calls Active" (green pill, only shown when `setup_status === "Live"`; otherwise neutral "Setup in progress")
+## What changes
 
-**Part 1 — Voice Selection (4 cards in a responsive grid)**
-Selectable voice cards (radio-style, click to select):
-- Riley — Friendly Female
-- Morgan — Professional Female
-- Jesse — Friendly Male
-- Cameron — Professional Male
+### `src/pages/Setup.tsx`
 
-Selected card gets primary border + ring. Selection persists in `localStorage` under `callcapture.selectedVoice`.
-
-**Part 2 — Voice Preview**
-Each voice card has a "▶ Play Sample" button. Clicking it:
-- Plays a short greeting sample (5–10 s) using the assistant's greeting + tone
-- Uses ElevenLabs TTS via a new edge function `voice-sample` (returns MP3 bytes), with the appropriate ElevenLabs voice ID per option
-- Button toggles to "⏸ Stop" while playing; only one sample can play at a time
-- Falls back gracefully with a toast if `ELEVENLABS_API_KEY` is missing
-
-**Part 3 — Test Call**
-- Label: "Your AI Phone Number"
-- Display the user's `businessPhone` (from `callcapture_businesses.phone`) if set; otherwise the `DEMO_NUMBER` with a small "(demo)" tag
-- Button: "Call My AI" → `tel:` link
-- Button: "Copy Number" → writes to clipboard + success toast
-
-**Part 4 — Guided Test Mode**
-- Switch labeled "Guided Test Mode" (off by default)
-- When ON, reveal a soft-bordered panel with example prompts:
-  - "My dryer isn't heating"
-  - "I need service tomorrow"
-  - "This is a recall job"
-- State persists in `localStorage`
-
-### Files to add / change
-
-- **New** `supabase/functions/voice-sample/index.ts` — POST `{ voiceId, text }` → returns `audio/mpeg` bytes from ElevenLabs (`eleven_turbo_v2_5`, `mp3_44100_128`). Reads `ELEVENLABS_API_KEY` from secrets. CORS-enabled. `verify_jwt = false` not required (will use default).
-- **New** `src/components/dashboard/VoiceTestSection.tsx` — Self-contained component containing all five parts above. Uses existing UI primitives: `Card`, `Button`, `Switch`, `Badge`, plus `useToast`. Fetches sample audio via `supabase.functions.invoke("voice-sample", { body: { voiceId, text } })`, converts the returned `Blob` to an object URL, plays it through a single `HTMLAudioElement` ref.
-- **Edit** `src/pages/Dashboard.tsx` — Import and render `<VoiceTestSection businessPhone={phoneToShow} businessName={client?.business_name} status={status} />` between the Quick Actions card and Recent Leads card. No other changes.
-
-### Secrets
-
-If `ELEVENLABS_API_KEY` is not yet configured in Lovable Cloud, request it via `add_secret` before deploying the edge function. Without it, the play button falls back to a toast: "Voice preview unavailable — add an ElevenLabs API key to enable samples."
-
-### Voice IDs (per the ElevenLabs guide)
-
-- Riley (Friendly Female) → Sarah `EXAVITQu4vr4xnSDxMaL`
-- Morgan (Professional Female) → Alice `Xb7hH8MSUJpSbSDYk0k2`
-- Jesse (Friendly Male) → Liam `TX3LPaxmHKxFdv7VOQHJ`
-- Cameron (Professional Male) → Brian `nPczCjzI2devNBz1zQrb`
-
-### Sample text used for preview
-
-```text
-Thanks for calling {businessName || "our team"}, this is {voiceName}. How can I help you today?
+**1. Add a 7th step to `STEPS`:**
+```ts
+const STEPS = [
+  "Business Info",
+  "Phone Setup",
+  "Call Handling",
+  "AI Receptionist Setup",
+  "Voice & Greeting",
+  "Review & Launch",
+  "You're Live",
+] as const;
 ```
 
-### What stays untouched
+**2. Change `generateAndFinish` flow:**
+- Keep all existing Supabase save logic (business + assistant config inserts, `setup_status: "Live"` update, `clearWizardState`, `localStorage.removeItem(STEP_KEY)`).
+- Remove the immediate `navigate("/dashboard")` and the success toast.
+- On success, instead call `setStep(6)` to advance to the new success step.
+- Keep error toast behavior on failure.
 
-- Setup flow, wizard steps, auth, routing, existing dashboard cards (Status, Quick Actions, Recent Leads, Request Setup banner) all remain exactly as they are.
-- No DB schema changes.
+**3. Render Step 7 (`step === 6`) as a success screen** (no form chrome):
+
+Layout:
+- Large green check / celebratory icon (`CheckCircle2` from lucide) centered.
+- Title: **"Your AI Receptionist is Ready"**
+- Subtext: *"You're live. Your assistant is now answering calls."*
+
+**Summary card** — shows:
+- Business Name → `state.businessName`
+- Phone Number → `state.phoneNumber || state.phone || "—"`
+- Call Handling Mode → derived label:
+  - If `state.transferEnabled` and AI handles new calls → "Hybrid (AI + Forwarding)"
+  - Else if `state.phoneMode === "existing"` and forwarding only → "Forwarding"
+  - Else → "AI"
+
+**What happens next** card:
+> When someone calls your number:
+> - Your AI receptionist answers instantly
+> - Captures the customer's info
+> - Sends the lead to you
+> - You follow up and book the job
+
+**Buttons:**
+- Primary: **"Go to Dashboard"** → `navigate("/dashboard")`
+- Secondary: **"Call Your Number to Test"** → `<a href={"tel:" + digits-only of phoneNumber}>` (falls back to demo number if no phone configured)
+
+**Auto-redirect:** `useEffect` watching `step === 6` sets a 3s `setTimeout` → `navigate("/dashboard")`. Cleared on unmount or step change.
+
+**4. Hide wizard chrome on Step 7:**
+- Hide the top "Step X of Y" header section and progress bar when `step === 6` (or replace with a subtle "Setup complete" line).
+- Hide the bottom Back/Continue/Launch footer row when `step === 6` (the success screen has its own buttons).
+- Hide the right-hand sidebar ("We set this up for you") when `step === 6` so the success layout is centered and clean.
+
+### Optional polish
+- Wrap the success content in a single centered card (`max-w-xl mx-auto`) so it visually breaks from the wizard pattern.
+- Use a small countdown hint: *"Redirecting to your dashboard in 3 seconds…"*
+
+## Technical notes
+
+- Only `src/pages/Setup.tsx` is touched. No schema, RLS, route, or backend changes.
+- The success step is conditionally rendered; existing steps 1–6 remain untouched.
+- `setStep(6)` works because `STEPS.length` is now 7; existing `next()` validation guards (which key off step indexes 0/1/2/4) are unaffected.
+- Onboarding is "marked complete" via the existing `setup_status: "Live"` update on `callcapture_clients` plus `clearWizardState()` — both already happen in `generateAndFinish`.
+- The auto-redirect timer must be cleaned up to avoid firing after the user manually clicks "Go to Dashboard".
+- No changes to `Dashboard.tsx`, `wizardSchema.ts`, `route-guards.tsx`, or any other file.
+
+## Out of scope
+- No real Twilio number provisioning.
+- No email/SMS confirmation send.
+- No analytics events (can be added later).
