@@ -1,83 +1,41 @@
-# Email + Password Auth (Replace Magic Link)
+# Restructure Setup Wizard into 6 Clear Steps
 
 ## Goal
-Old-school email/password login that works on phone and desktop. Add a Login button to the header. Signup happens on `/start` (with password fields) right before Stripe. Existing paid client rows get linked by email.
+Reorganize `src/pages/Setup.tsx` into the exact 6-step structure requested, with a clear progress indicator, consistent Continue/Back navigation, and resumable progress — without breaking existing data persistence (Supabase saves to `callcapture_businesses` and `callcapture_assistant_configs`) or any downstream Vapi/Twilio/dashboard flows.
 
-## Routing change
-Add `/login` route pointing to the existing `Auth.tsx` page (rewritten). Keep `/auth` as an alias so old links still work.
+## New Step Order
+1. **Business Info** — name, industry, phone, email, service area, hours
+2. **Phone Setup** — business phone (forwarded line) + alert/owner SMS number + a short "we'll provision your CallCapture number" explainer
+3. **Call Handling** — call goals (Capture leads / Existing customers / Info calls), existing customer forwarding toggle + forward number, after-hours toggle, fallback action
+4. **AI Receptionist Setup** — info to collect (intake questions, with custom add), transfer triggers
+5. **Voice & Greeting** — receptionist name, tone (Friendly / Direct / Helpful), greeting line
+6. **Review & Launch** — generated prompt preview + "Generate My AI Receptionist" CTA (saves to DB, marks client `setup_status = 'Live'`, navigates to `/dashboard`)
 
-## 1. Header — `src/components/SiteNav.tsx`
-- Remove `/dashboard`, `/setup`, `/leads` from the public `links` array (these are auth-gated; keep them reachable from inside the dashboard, not the marketing nav). Keep Home, Demo, Pricing, Support.
-- Desktop: add a **Login** link (text style, to `/login`) immediately to the left of the existing **Get Started** button.
-- Mobile (hamburger menu): add a **Login** entry in the dropdown above the **Get Started** button.
-- When a user is already signed in (use `useAuth`), swap **Login** → **Dashboard** link. Keep **Get Started** hidden for signed-in users.
+All fields currently in the wizard are preserved — just regrouped to match these step titles.
 
-## 2. `/start` — add password fields + create auth user
-`src/pages/Start.tsx`:
-- Extend the zod schema:
-  - `password`: min 8
-  - `confirm_password`: must equal `password` (use `.refine`)
-- Add two new `<Input type="password">` fields after email, before phone, with `autoComplete="new-password"`.
-- New submit flow (replaces the current insert + magic-link logic):
-  1. Validate.
-  2. `supabase.auth.signUp({ email, password, options: { emailRedirectTo: \`${origin}/dashboard\` } })`.
-     - If error message indicates "already registered", call `signInWithPassword` with the entered password instead. If that also fails, surface a friendly toast: "An account already exists for this email. [Log in] or use a different email." (link to `/login?email=…`). Stop here — do not proceed to Stripe with mismatched creds.
-  3. After successful signup/sign-in we have a `session.user.id`. Look for an existing `callcapture_clients` row by email:
-     - If found and `user_id` is null → update that row: set `user_id`, refresh `owner_name`/`business_name`/`alert_phone` from form. Use its `id` as `clientId`.
-     - If found and already linked to this user → reuse its `id`.
-     - Otherwise → insert a new row with `user_id` set and the form fields.
-     - The DB triggers `link_client_to_user` / `link_user_to_clients` already cover the email-match case as a safety net, but doing it explicitly here means the row is correct before we hit Stripe.
-  4. Invoke `create-checkout` with `clientId` exactly as today.
-  5. Redirect to Stripe.
-- Remove the `signInWithOtp` call.
-- Keep the Stripe-return bounce (`isStripeReturn` block) untouched.
+## UI Changes (per page)
+- Sticky header inside the wizard hero showing:
+  - `Step X of 6 — {Step Title}`
+  - Horizontal `<Progress />` bar (already imported)
+- Card body shows the step title (h2) + description
+- Footer of card always shows:
+  - **Back** button (ghost, disabled on Step 1)
+  - **Continue** button (Step 1–5) OR **Generate My AI Receptionist** (Step 6)
+- Per-step validation kept (e.g. Step 1 requires business name + industry; Step 3 requires at least one call goal)
 
-Note: email-confirmation is on by default in Supabase. Even before the user confirms their email, `signUp` returns a session, so the Stripe redirect and post-payment dashboard load both work. The user will still need to confirm email later for some Supabase features, but login by password works immediately. (We are not enabling/changing auto-confirm — leaving Supabase defaults.)
+## Resumable Progress
+- Wizard form state already persists to `localStorage` via `saveWizardState` / `loadWizardState` (`callcapture.wizard` key).
+- Add a second key `callcapture.wizard.step` storing the current step index (0–5). Restore on mount; clear on successful "Generate" along with existing wizard state via `clearWizardState`.
+- Existing prefill from `callcapture_clients` (by `user_id`) is kept untouched so signed-in users still see their info on return.
 
-## 3. `/login` (and `/auth`) — email + password — `src/pages/Auth.tsx`
-Rewrite to a standard form:
-- Fields: Email, Password (`autoComplete="current-password"`).
-- Button: **Sign In** → `supabase.auth.signInWithPassword({ email, password })`.
-- On success: `navigate("/dashboard")`.
-- Below the form:
-  - "Don't have an account? **Create account**" → `/start`
-  - "**Forgot password?**" → opens an inline mode that calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: \`${origin}/reset-password\` })` and shows a "Check your email" confirmation. (Adding the `/reset-password` page is in scope — see step 4.)
-- Read `?email=` from the URL to prefill (used when `/start` redirects an existing user here).
+## Technical Notes
+- Single file edited: `src/pages/Setup.tsx`.
+- Keep existing helpers (`Field`, `SelectField`, `ToggleRow`, `CheckRow`) and reuse them.
+- Keep existing `generateAndFinish()` function and its Supabase inserts/updates exactly as-is — only the step that triggers it moves to Step 6.
+- `STEPS` array updated to the new 6 titles.
+- Add `localStorage` read/write for `callcapture.wizard.step` in a `useEffect` mirroring the existing pattern.
+- No route changes, no schema changes, no edge function changes.
 
-## 4. `/reset-password` page (new)
-Required so password reset works end-to-end (per Lovable auth guidance). New file `src/pages/ResetPassword.tsx`:
-- Public route, added to `App.tsx`.
-- On mount, Supabase auto-handles the recovery token in the URL hash (the client picks it up via `onAuthStateChange` → `PASSWORD_RECOVERY`).
-- Show a single form: New password + Confirm password (min 8, must match).
-- Submit → `supabase.auth.updateUser({ password })`. On success, toast and `navigate("/dashboard")`.
-
-## 5. App routes — `src/App.tsx`
-- Add `<Route path="/login" element={<Auth />} />`
-- Add `<Route path="/reset-password" element={<ResetPassword />} />`
-- Keep `/auth` route pointing to `Auth` (back-compat).
-
-## 6. Dashboard fallback — `src/pages/Dashboard.tsx`
-Today it queries `callcapture_clients` by `user_id` only. Add an email fallback for users who paid before the user_id link was set:
-- After the `user_id` query, if `data` is null and `user.email` exists, query by `ilike("email", user.email)` (limit 1, newest).
-- If that returns a row whose `user_id` is null, update it: `update({ user_id: user.id }).eq("id", row.id)`. Then use that row.
-- This belt-and-suspenders covers anyone whose row pre-exists (the trigger normally handles this on user insert, but this guarantees recovery for already-created users).
-
-The polling logic, status badge, and "checkout=success" toast all stay.
-
-## 7. Cleanup
-- Remove the magic-link "no password needed" copy from Auth — the new copy is the standard sign-in form.
-- No change to Stripe checkout, webhook, Vapi, Twilio, SMS, or lead capture.
-- No DB migrations. RLS on `callcapture_clients` already supports anon insert, owner select/update by `user_id`, and the email-link triggers stay in place as a safety net.
-
-## Files touched
-- `src/components/SiteNav.tsx` — Login button, signed-in state.
-- `src/pages/Start.tsx` — password fields, `signUp`, link-existing-row logic.
-- `src/pages/Auth.tsx` — rewrite to email/password + forgot-password.
-- `src/pages/ResetPassword.tsx` — new page.
-- `src/App.tsx` — add `/login` and `/reset-password` routes.
-- `src/pages/Dashboard.tsx` — email-fallback client lookup with auto-link.
-
-## Out of scope
-- Re-enabling magic link (you said "we can add it later").
-- Google sign-in.
-- Custom email templates for the password-reset email (Supabase default is fine for now).
+## Out of Scope
+- No changes to auth, Stripe checkout, webhook, dashboard, Vapi/Twilio, or lead capture.
+- No new DB columns (existing tables already store all wizard data).
