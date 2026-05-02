@@ -49,7 +49,6 @@ export default function Start() {
     setErrors({});
     setSubmitting(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
       const { data: client, error } = await supabase
         .from("callcapture_clients")
         .insert({
@@ -57,8 +56,8 @@ export default function Start() {
           business_name: parsed.data.business_name,
           email: parsed.data.email,
           alert_phone: parsed.data.alert_phone,
-          user_id: u.user?.id ?? null,
           setup_status: "Payment Pending",
+          payment_status: "Pending",
         })
         .select("id")
         .single();
