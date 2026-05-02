@@ -17,34 +17,54 @@ type Config = {
   updated_at: string;
 };
 
+type Client = {
+  id: string;
+  setup_status: string;
+  payment_status: string;
+  alert_phone: string;
+  business_name: string;
+};
+
 export default function Dashboard() {
   const { user, loading } = useAuth();
   const [config, setConfig] = useState<Config | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [fetched, setFetched] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    supabase
+    void supabase
       .from("callcapture_assistant_configs")
       .select("id, generated_prompt, assistant_name, updated_at")
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle()
       .then(({ data }) => { setConfig(data as Config | null); setFetched(true); });
+    void supabase
+      .from("callcapture_clients")
+      .select("id, setup_status, payment_status, alert_phone, business_name")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { setClient(data as Client | null); });
   }, [user]);
 
   if (loading) return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
   if (!user) return <Navigate to="/auth" replace />;
 
-  const status: "Not Started" | "In Progress" | "Ready" = !fetched
-    ? "Not Started"
-    : config?.generated_prompt ? "Ready" : config ? "In Progress" : "Not Started";
+  const status: string = client?.setup_status
+    ?? (!fetched ? "Not Started"
+        : config?.generated_prompt ? "Live"
+        : config ? "Setup In Progress" : "Not Started");
 
-  const statusColor = status === "Ready"
+  const statusColor = status === "Live" || status === "Ready"
     ? "bg-primary text-primary-foreground"
-    : status === "In Progress"
+    : status === "Setup In Progress" || status === "In Progress"
     ? "bg-secondary text-foreground"
+    : status === "Payment Pending"
+    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
     : "bg-muted text-muted-foreground";
 
   return (
@@ -66,16 +86,30 @@ export default function Dashboard() {
 
         {/* Setup status */}
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Setup Status</p>
-          <div className="mt-3 flex items-center gap-3">
-            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor}`}>
-              {status}
-            </span>
-            {status !== "Ready" && (
-              <Button asChild size="sm" className="bg-cta hover:opacity-90 shadow-glow">
-                <Link to="/setup">Continue setup</Link>
-              </Button>
-            )}
+          <div className="grid sm:grid-cols-3 gap-6">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Setup Status</p>
+              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold mt-2 ${statusColor}`}>
+                {status}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Alert Phone</p>
+              <p className="mt-2 font-medium">{client?.alert_phone ?? <span className="text-muted-foreground">—</span>}</p>
+            </div>
+            <div className="flex items-start sm:justify-end">
+              {status !== "Live" && status !== "Ready" ? (
+                <Button asChild size="sm" className="bg-cta hover:opacity-90 shadow-glow">
+                  <Link to={status === "Payment Pending" ? "/start" : "/setup"}>
+                    {status === "Payment Pending" ? "Complete payment" : "Continue setup"}
+                  </Link>
+                </Button>
+              ) : (
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/support">Request Setup Help</Link>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
