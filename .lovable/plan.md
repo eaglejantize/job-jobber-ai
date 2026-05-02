@@ -1,71 +1,69 @@
-## Plan: Verify demo lead SMS flow
+## Plan: Add Lead Inbox storage to CallCapture
 
-### Current setup (already in place)
-- Edge function `send-demo-sms` is deployed
-- Secrets configured:
-  - `TWILIO_FROM_NUMBER` = `+19048927004` (Twilio sender)
-  - `DEMO_OWNER_PHONE` = `+13027473683` (your phone — receives the alert)
-  - `VAPI_WEBHOOK_SECRET` = `callcapture_secret_2026`
-  - `TWILIO_API_KEY` (via connector)
-- Function validates `x-webhook-secret`, parses Vapi payload, sends SMS via Twilio gateway
+Goal: every successful Vapi webhook call sends the SMS (existing behavior, unchanged) AND persists a lead row. Minimal, stable, no CRM UI.
 
-### Verification steps (once approved)
+### 1. New table `callcapture_leads` (migration)
 
-**1. Direct test — manual payload (simulates Vapi)**
-Hit the deployed function with a clean test lead:
-```
-POST https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/send-demo-sms
-Headers: x-webhook-secret: callcapture_secret_2026
-Body: {
-  "name": "Verification Test",
-  "phone": "+15555550123",
-  "issue": "Testing SMS delivery to demo owner",
-  "urgency": true,
-  "type": "Existing Customer Request"
-}
-```
-Expect: `200 { success: true, sid: "SM..." }`
+```sql
+CREATE TABLE public.callcapture_leads (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text,
+  phone       text,
+  issue       text,
+  type        text,        -- "New Lead" or "Existing Customer"
+  urgency     text,        -- stored as text per spec (e.g. "true"/"false"/"high")
+  address     text,
+  raw_payload jsonb,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
 
-**2. Vapi-shaped payload test**
-Hit it again with the nested structure Vapi actually sends, to confirm the extractor works:
-```
-{ "message": { "analysis": { "structuredData": {
-    "name": "Vapi Shape Test",
-    "phone": "+15555550199",
-    "issue": "Verifying nested payload extraction",
-    "urgency": false,
-    "type": "New Lead"
-} } } }
-```
-Expect: `200 { success: true, sid: "SM..." }`
-
-**3. Auth rejection test**
-Send a request with a wrong secret to confirm the 401 path works (no SMS should fire).
-
-**4. Check edge function logs**
-Pull the latest `send-demo-sms` logs to confirm:
-- No errors
-- Twilio SIDs were returned
-- No secret values leaked into logs
-
-**5. Confirm with you**
-You check `+13027473683` and tell me which messages arrived. Expected: 2 SMS (urgent + non-urgent), each formatted like:
-```
-📞 New CallCapture Lead
-Name: ...
-Phone: ...
-Type: ...
-⚠️ URGENT  (only on urgent one)
-Issue: ...
+ALTER TABLE public.callcapture_leads ENABLE ROW LEVEL SECURITY;
 ```
 
-### If any step fails
-- 4xx from Twilio → likely Geo Permissions / unverified trial number / A2P 10DLC issue → I'll surface the exact Twilio error code from logs and tell you what to flip in the Twilio Console
-- 401 on valid request → secret mismatch → re-check `VAPI_WEBHOOK_SECRET`
-- 400 invalid payload → extractor mismatch → I'll adjust `extractFromVapi` to match the real Vapi shape
+RLS: the edge function writes via the service role key, which bypasses RLS, so no INSERT policy is needed for the webhook. To keep the table locked down (no public read/write) we add **no policies** — anon/auth clients get nothing. If/when a Lead Inbox UI is built later, we'll add an owner-scoped SELECT policy then.
 
-### Out of scope for this loop
-- Configuring Vapi's server URL / structured data schema (you do that in the Vapi dashboard once SMS is verified)
-- Persisting leads to a database (separate feature)
+### 2. Update `supabase/functions/send-demo-sms/index.ts`
 
-Approve to run the tests.
+Changes (additive only — SMS path untouched):
+
+- Extend `extractFromVapi` to also pull `address` (`sd.address`, `body.address`, `m.customer?.address`).
+- Loosen `PayloadSchema` to accept optional `address` (string, max ~300).
+- After Twilio returns `200`, insert a row into `callcapture_leads` using the service-role Supabase client:
+  - `name`, `phone`, `issue`, `type`, `urgency` (coerced to string: `String(urgency ?? "")` — keeps "true"/"false"/"high" etc.), `address`, `raw_payload: raw` (the full incoming JSON body).
+- Wrap insert in try/catch. **Never fail the request if DB insert fails** — SMS already sent, just log.
+- Logging:
+  - Success: `console.log("lead inserted", { id, phone })`
+  - Failure: `console.error("lead insert failed", error.message)` (no payload contents)
+- Response stays the same shape; optionally add `leadId` when insert succeeds (non-breaking).
+
+Client used in the function:
+```ts
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { persistSession: false } }
+);
+```
+
+Both env vars already exist in the project (see secrets list).
+
+### 3. Verification
+
+After deploy, re-run the existing curl tests (flat payload + Vapi-nested payload). For each:
+- Confirm SMS still sends (Twilio SID returned).
+- Query `select id, name, phone, type, urgency, address, created_at from callcapture_leads order by created_at desc limit 5;` and confirm rows landed with correct fields and `raw_payload` populated.
+- Send one bad-DB scenario isn't really reachable, but verify the function still returns 200 even if we simulate a DB hiccup (covered by try/catch design).
+
+### Out of scope
+
+- No UI / Lead Inbox page (spec says "do NOT build a full CRM").
+- No changes to auth, RLS for client reads, or Vapi schema.
+- No update to existing tables.
+
+### Files touched
+
+- New migration: `callcapture_leads` table + RLS enable.
+- `supabase/functions/send-demo-sms/index.ts`: add address extraction, schema field, post-SMS insert with logging.
+
+Approve to implement.
