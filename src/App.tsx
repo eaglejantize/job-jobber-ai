@@ -12,6 +12,7 @@ import Support from "./pages/Support.tsx";
 import Start from "./pages/Start.tsx";
 import Confirm from "./pages/Confirm.tsx";
 import Auth from "./pages/Auth.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
 import LeadInbox from "./pages/LeadInbox.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -34,6 +35,8 @@ const App = () => (
           <Route path="/leads" element={<LeadInbox />} />
           <Route path="/support" element={<Support />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/login" element={<Auth />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
