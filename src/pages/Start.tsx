@@ -6,15 +6,22 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 
-const schema = z.object({
-  owner_name: z.string().trim().min(1, "Required").max(120),
-  business_name: z.string().trim().min(1, "Required").max(160),
-  email: z.string().trim().email("Enter a valid email").max(160),
-  alert_phone: z.string().trim().min(7, "Enter a phone number").max(30),
-});
+const schema = z
+  .object({
+    owner_name: z.string().trim().min(1, "Required").max(120),
+    business_name: z.string().trim().min(1, "Required").max(160),
+    email: z.string().trim().email("Enter a valid email").max(160),
+    alert_phone: z.string().trim().min(7, "Enter a phone number").max(30),
+    password: z.string().min(8, "At least 8 characters").max(72),
+    confirm_password: z.string(),
+  })
+  .refine((d) => d.password === d.confirm_password, {
+    message: "Passwords don't match",
+    path: ["confirm_password"],
+  });
 
 type Prefill = Partial<z.infer<typeof schema>>;
 
@@ -34,6 +41,8 @@ export default function Start() {
   const [business_name, setBiz] = useState(prefill.business_name ?? "");
   const [email, setEmail] = useState(prefill.email ?? "");
   const [alert_phone, setPhone] = useState(prefill.alert_phone ?? "");
+  const [password, setPassword] = useState("");
+  const [confirm_password, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -55,7 +64,7 @@ export default function Start() {
     return (
       <Layout>
         <section className="container py-24 text-center">
-          <h1 className="text-2xl font-semibold">Redirecting to setup…</h1>
+          <h1 className="text-2xl font-semibold">Redirecting to dashboard…</h1>
           <p className="mt-3 text-muted-foreground">One moment while we take you to the next step.</p>
         </section>
       </Layout>
@@ -64,7 +73,7 @@ export default function Start() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = schema.safeParse({ owner_name, business_name, email, alert_phone });
+    const parsed = schema.safeParse({ owner_name, business_name, email, alert_phone, password, confirm_password });
     if (!parsed.success) {
       const f: Record<string, string> = {};
       parsed.error.issues.forEach((i) => { f[i.path[0] as string] = i.message; });
@@ -74,29 +83,90 @@ export default function Start() {
     setErrors({});
     setSubmitting(true);
     try {
-      const clientId = crypto.randomUUID();
-      const { error } = await supabase
-        .from("callcapture_clients")
-        .insert({
-          id: clientId,
-          owner_name: parsed.data.owner_name,
-          business_name: parsed.data.business_name,
-          email: parsed.data.email,
-          alert_phone: parsed.data.alert_phone,
-          setup_status: "Payment Pending",
-          payment_status: "pending",
-        });
-      if (error) throw error;
+      const data = parsed.data;
 
-      // Best-effort: send a magic link so it's waiting in their inbox after Stripe.
-      void supabase.auth.signInWithOtp({
-        email: parsed.data.email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-          shouldCreateUser: true,
-        },
+      // 1. Create auth user (or sign in if it already exists with these creds).
+      let userId: string | null = null;
+      const signUpRes = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
       });
 
+      if (signUpRes.error) {
+        const msg = signUpRes.error.message?.toLowerCase() ?? "";
+        const alreadyExists = msg.includes("registered") || msg.includes("already") || msg.includes("exists");
+        if (alreadyExists) {
+          // Try sign-in with the entered password.
+          const signInRes = await supabase.auth.signInWithPassword({
+            email: data.email,
+            password: data.password,
+          });
+          if (signInRes.error) {
+            setSubmitting(false);
+            toast({
+              title: "Account already exists",
+              description: "Use the login page to sign in, or use a different email.",
+              variant: "destructive",
+            });
+            navigate(`/login?email=${encodeURIComponent(data.email)}`);
+            return;
+          }
+          userId = signInRes.data.user?.id ?? null;
+        } else {
+          throw signUpRes.error;
+        }
+      } else {
+        userId = signUpRes.data.user?.id ?? null;
+      }
+
+      if (!userId) {
+        // Fallback: read current session.
+        const { data: sess } = await supabase.auth.getSession();
+        userId = sess.session?.user.id ?? null;
+      }
+      if (!userId) throw new Error("Could not create account");
+
+      // 2. Find existing client row by email (covers prior anon signups).
+      const { data: existing } = await supabase
+        .from("callcapture_clients")
+        .select("id, user_id")
+        .ilike("email", data.email)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let clientId: string;
+      if (existing) {
+        clientId = existing.id;
+        const { error: updErr } = await supabase
+          .from("callcapture_clients")
+          .update({
+            user_id: userId,
+            owner_name: data.owner_name,
+            business_name: data.business_name,
+            alert_phone: data.alert_phone,
+          })
+          .eq("id", existing.id);
+        if (updErr) throw updErr;
+      } else {
+        clientId = crypto.randomUUID();
+        const { error: insErr } = await supabase
+          .from("callcapture_clients")
+          .insert({
+            id: clientId,
+            user_id: userId,
+            owner_name: data.owner_name,
+            business_name: data.business_name,
+            email: data.email,
+            alert_phone: data.alert_phone,
+            setup_status: "Payment Pending",
+            payment_status: "pending",
+          });
+        if (insErr) throw insErr;
+      }
+
+      // 3. Stripe checkout.
       const { data: checkout, error: fnErr } = await supabase.functions.invoke("create-checkout", {
         body: { clientId },
       });
@@ -141,6 +211,26 @@ export default function Start() {
             <Field label="Email" error={errors.email}>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
             </Field>
+            <Field label="Password" error={errors.password}>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </Field>
+            <Field label="Confirm password" error={errors.confirm_password}>
+              <Input
+                type="password"
+                value={confirm_password}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </Field>
             <Field label="Mobile number for lead alerts" error={errors.alert_phone}>
               <Input type="tel" value={alert_phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" required />
             </Field>
@@ -154,6 +244,12 @@ export default function Start() {
             </Button>
             <p className="text-xs text-muted-foreground text-center">
               Secure payment via Stripe. $99 one-time setup, then $197/month.
+            </p>
+            <p className="text-xs text-muted-foreground text-center">
+              Already have an account?{" "}
+              <Link to="/login" className="font-medium text-foreground hover:underline">
+                Sign in
+              </Link>
             </p>
           </form>
 
