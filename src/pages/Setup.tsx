@@ -13,10 +13,10 @@ import { Progress } from "@/components/ui/progress";
 import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS } from "@/lib/constants";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
-import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Loader2 } from "lucide-react";
+import { ArrowRight, ArrowLeft, Plus, X, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 const STEPS = [
   "Business Info",
@@ -31,14 +31,8 @@ const CALL_GOALS = ["Capture leads", "Existing customers", "Info calls"] as cons
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
 
-type GateState = "checking" | "ready" | "denied";
-
 export default function Setup() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const sessionId = params.get("session_id");
-
-  const [gate, setGate] = useState<GateState>(sessionId ? "checking" : "ready");
   const [clientId, setClientId] = useState<string | null>(null);
 
   const [state, setState] = useState<WizardState>(loadWizardState);
@@ -50,37 +44,31 @@ export default function Setup() {
 
   useEffect(() => { saveWizardState(state); }, [state]);
 
-  // Payment gate: poll for activation when arriving from Stripe
+  // Prefill from the user's most recent client row, if signed in.
   useEffect(() => {
-    if (!sessionId) return;
     let cancelled = false;
-    let attempts = 0;
-    const poll = async () => {
-      attempts += 1;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user || cancelled) return;
       const { data } = await supabase
         .from("callcapture_clients")
-        .select("id, payment_status, owner_name, business_name, email, alert_phone")
-        .eq("stripe_checkout_session_id", sessionId)
+        .select("id, owner_name, business_name, email, alert_phone")
+        .eq("user_id", u.user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
-      if (cancelled) return;
-      if (data && data.payment_status === "Active") {
-        setClientId(data.id);
-        setState((s) => ({
-          ...s,
-          businessName: s.businessName || data.business_name || "",
-          email: s.email || data.email || "",
-          ownerName: s.ownerName || data.owner_name || "",
-          ownerSms: s.ownerSms || data.alert_phone || "",
-        }));
-        setGate("ready");
-        return;
-      }
-      if (attempts >= 10) { setGate("denied"); return; }
-      setTimeout(poll, 2000);
-    };
-    poll();
+      if (cancelled || !data) return;
+      setClientId(data.id);
+      setState((s) => ({
+        ...s,
+        businessName: s.businessName || data.business_name || "",
+        email: s.email || data.email || "",
+        ownerName: s.ownerName || data.owner_name || "",
+        ownerSms: s.ownerSms || data.alert_phone || "",
+      }));
+    })();
     return () => { cancelled = true; };
-  }, [sessionId]);
+  }, []);
 
   const set = <K extends keyof WizardState>(k: K, v: WizardState[K]) =>
     setState((s) => ({ ...s, [k]: v }));
@@ -175,35 +163,6 @@ export default function Setup() {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  if (gate === "checking") {
-    return (
-      <Layout>
-        <section className="container py-24 text-center">
-          <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary" />
-          <p className="mt-4 text-muted-foreground">Confirming your payment…</p>
-        </section>
-      </Layout>
-    );
-  }
-  if (gate === "denied") {
-    return (
-      <Layout>
-        <section className="container py-24 text-center max-w-lg mx-auto">
-          <h1 className="text-2xl font-bold">We couldn't confirm your payment.</h1>
-          <p className="mt-3 text-muted-foreground">
-            If you completed checkout, please refresh this page in a moment. Otherwise start again.
-          </p>
-          <div className="mt-6 flex gap-3 justify-center">
-            <Button onClick={() => location.reload()} variant="outline">Refresh</Button>
-            <Button onClick={() => navigate("/start")} className="bg-cta hover:opacity-90 shadow-glow">
-              Start over
-            </Button>
-          </div>
-        </section>
-      </Layout>
-    );
   }
 
   return (
