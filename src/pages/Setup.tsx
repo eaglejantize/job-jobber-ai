@@ -14,6 +14,7 @@ import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIO
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { ArrowRight, ArrowLeft, Plus, X, Sparkles, Phone } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
