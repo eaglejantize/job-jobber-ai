@@ -15,9 +15,14 @@ export default function RequestSetupBanner({
             <p className="text-sm text-muted-foreground">We'll do it in 24 hours.</p>
           </div>
         </div>
-        <Button asChild className="bg-cta hover:opacity-90 shadow-glow shrink-0">
-          <Link to="/support">Request Setup Help</Link>
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+          <Button asChild className="bg-cta hover:opacity-90 shadow-glow">
+            <Link to="/start">Get Started</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/support">Talk to a human</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -31,9 +36,14 @@ export default function RequestSetupBanner({
         <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
           We'll do it in 24 hours. You don't lift a finger.
         </p>
-        <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-8">
-          <Link to="/support">Request Setup Help</Link>
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-8">
+            <Link to="/start">Get Started — $99 + $197/mo</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="text-base h-12 px-8">
+            <Link to="/support">Talk to a human</Link>
+          </Button>
+        </div>
       </div>
     </section>
   );
