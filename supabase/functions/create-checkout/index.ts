@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
           },
         },
       ],
-      success_url: `${origin}/setup?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/start?canceled=1`,
       metadata: { client_id: client.id },
       subscription_data: { metadata: { client_id: client.id } },
