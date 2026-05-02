@@ -83,7 +83,7 @@ export default function LeadInbox() {
             <div className="p-8 text-muted-foreground">Loading leads…</div>
           ) : leads.length === 0 ? (
             <div className="p-8 text-muted-foreground">
-              No leads yet. They'll appear here as calls come in.
+              No leads yet — calls will appear here
             </div>
           ) : (
             <Table>

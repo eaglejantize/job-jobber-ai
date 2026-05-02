@@ -4,18 +4,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { Navigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Copy, Phone, Loader2 } from "lucide-react";
-import { VAPI_INSTRUCTIONS } from "@/lib/generatePrompt";
+import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight } from "lucide-react";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
-import DemoNumberCard from "@/components/DemoNumberCard";
 import { toast } from "@/hooks/use-toast";
-
-type Config = {
-  id: string;
-  generated_prompt: string | null;
-  assistant_name: string | null;
-  updated_at: string;
-};
+import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
+import { Badge } from "@/components/ui/badge";
 
 type Client = {
   id: string;
@@ -26,17 +19,36 @@ type Client = {
   business_name: string;
 };
 
+type Lead = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  issue: string | null;
+  urgency: string | null;
+  created_at: string;
+};
+
+function timeAgo(iso: string): string {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
 export default function Dashboard() {
   const { user, loading } = useAuth();
   const [params, setParams] = useSearchParams();
-  const [config, setConfig] = useState<Config | null>(null);
   const [client, setClient] = useState<Client | null>(null);
-  const [signingOut, setSigningOut] = useState(false);
-  const [fetched, setFetched] = useState(false);
+  const [businessPhone, setBusinessPhone] = useState<string | null>(null);
+  const [hasConfig, setHasConfig] = useState(false);
+  const [configFetched, setConfigFetched] = useState(false);
+  const [leads, setLeads] = useState<Lead[] | null>(null);
   const [polling, setPolling] = useState(false);
   const toastedRef = useRef(false);
 
-  // One-time "Payment received" toast on Stripe return.
   useEffect(() => {
     if (params.get("checkout") === "success" && !toastedRef.current) {
       toastedRef.current = true;
@@ -50,17 +62,35 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
+
     void supabase
       .from("callcapture_assistant_configs")
-      .select("id, generated_prompt, assistant_name, updated_at")
+      .select("id, generated_prompt")
+      .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => { setConfig(data as Config | null); setFetched(true); });
+      .then(({ data }) => { setHasConfig(!!data?.generated_prompt); setConfigFetched(true); });
+
+    void supabase
+      .from("callcapture_businesses")
+      .select("phone")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { setBusinessPhone(data?.phone ?? null); });
+
+    void supabase
+      .from("callcapture_leads")
+      .select("id, name, phone, issue, urgency, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5)
+      .then(({ data }) => setLeads((data as Lead[]) ?? []));
 
     let cancelled = false;
     let attempts = 0;
-    const maxAttempts = 10; // ~30s at 3s
+    const maxAttempts = 10;
     const startedAt = Date.now();
 
     const fetchClient = async () => {
@@ -72,7 +102,6 @@ export default function Dashboard() {
         .limit(1)
         .maybeSingle();
 
-      // Fallback: if no row by user_id, try email match and link it.
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
@@ -114,9 +143,7 @@ export default function Dashboard() {
 
   const paymentActive = (client?.payment_status ?? "").toLowerCase() === "active";
   const status: string = client?.setup_status
-    ?? (!fetched ? "Not Started"
-        : config?.generated_prompt ? "Live"
-        : config ? "Setup In Progress" : "Not Started");
+    ?? (!configFetched ? "Not Started" : hasConfig ? "Live" : "Not Started");
 
   const statusColor = status === "Live" || status === "Ready"
     ? "bg-primary text-primary-foreground"
@@ -126,26 +153,19 @@ export default function Dashboard() {
     ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
     : "bg-muted text-muted-foreground";
 
+  const phoneToShow = businessPhone || client?.alert_phone || null;
+
   return (
     <Layout>
       <section className="container py-10 md:py-14">
-        <div className="flex items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Your dashboard</h1>
-            <p className="text-muted-foreground mt-1">Signed in as {user.email}</p>
-          </div>
-          <Button
-            variant="outline"
-            disabled={signingOut}
-            onClick={async () => { setSigningOut(true); await supabase.auth.signOut(); }}
-          >
-            Sign out
-          </Button>
+        <div className="mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Your dashboard</h1>
+          <p className="text-muted-foreground mt-1">Signed in as {user.email}</p>
         </div>
 
-        {/* Setup status */}
+        {/* Status row */}
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
-          <div className="grid sm:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 gap-6">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Setup Status</p>
               <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold mt-2 ${statusColor}`}>
@@ -158,70 +178,75 @@ export default function Dashboard() {
               )}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">Alert Phone</p>
-              <p className="mt-2 font-medium">{client?.alert_phone ?? <span className="text-muted-foreground">—</span>}</p>
-            </div>
-            <div className="flex items-start sm:justify-end">
-              {status !== "Live" && status !== "Ready" ? (
-                <Button asChild size="sm" className="bg-cta hover:opacity-90 shadow-glow">
-                  <Link to={status === "Payment Pending" ? "/start" : "/setup"}>
-                    {status === "Payment Pending" ? "Complete payment" : "Continue setup"}
-                  </Link>
-                </Button>
-              ) : (
-                <Button asChild size="sm" variant="outline">
-                  <Link to="/support">Request Setup Help</Link>
-                </Button>
-              )}
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Business Phone</p>
+              <p className="mt-2 font-medium">{phoneToShow ?? <span className="text-muted-foreground">—</span>}</p>
             </div>
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Assistant Instructions */}
-          <div className="lg:col-span-2 rounded-2xl border border-border bg-card p-6 shadow-card-soft">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Your Assistant Instructions</h2>
-              {config?.generated_prompt && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => { navigator.clipboard.writeText(config.generated_prompt!); toast({ title: "Copied" }); }}
-                >
-                  <Copy className="h-3 w-3" /> Copy
-                </Button>
-              )}
-            </div>
-            {config?.generated_prompt ? (
-              <>
-              <pre className="max-h-[420px] overflow-auto rounded-xl bg-secondary/40 p-4 text-xs font-mono whitespace-pre-wrap">
-{config.generated_prompt}
-              </pre>
-              <details className="mt-4 rounded-xl border border-border bg-secondary/20 p-4">
-                <summary className="cursor-pointer text-sm font-semibold">How to connect this to Vapi</summary>
-                <pre className="mt-3 text-xs whitespace-pre-wrap text-muted-foreground">{VAPI_INSTRUCTIONS}</pre>
-              </details>
-              </>
-            ) : (
-              <div className="rounded-xl border border-dashed border-border p-8 text-center">
-                <Phone className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground mb-4">No script saved yet.</p>
-                <Button asChild className="bg-cta hover:opacity-90 shadow-glow">
-                  <Link to="/setup">Run the setup wizard</Link>
-                </Button>
-              </div>
+        {/* Quick Actions */}
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
+          <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">Quick Actions</p>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild className="bg-cta hover:opacity-90 shadow-glow">
+              <a href={`tel:${DEMO_NUMBER_TEL}`}>
+                <PhoneCall className="h-4 w-4" /> Test My Agent ({DEMO_NUMBER})
+              </a>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/settings">
+                <SettingsIcon className="h-4 w-4" /> Edit Settings
+              </Link>
+            </Button>
+            {(status !== "Live" && status !== "Ready") && (
+              <Button asChild variant="outline">
+                <Link to={status === "Payment Pending" ? "/start" : "/setup"}>
+                  {status === "Payment Pending" ? "Complete payment" : "Continue setup"}
+                </Link>
+              </Button>
             )}
           </div>
+        </div>
 
-          {/* Demo Number */}
-          <div className="space-y-4">
-            <DemoNumberCard />
+        {/* Recent Leads */}
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Recent Leads</h2>
+            {leads && leads.length > 0 && (
+              <Link to="/leads" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
+                View all <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
           </div>
+          {leads === null ? (
+            <p className="text-sm text-muted-foreground">Loading leads…</p>
+          ) : leads.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-8 text-center">
+              <Phone className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">No leads yet — calls will appear here</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {leads.map((l) => (
+                <li key={l.id} className="py-3 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {l.name || "Unknown caller"}
+                      {l.phone && <span className="text-muted-foreground font-normal"> · {l.phone}</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{l.issue || "—"}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {l.urgency && <Badge variant="secondary">{l.urgency}</Badge>}
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{timeAgo(l.created_at)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        <div className="mt-6">
-          <RequestSetupBanner variant="compact" />
-        </div>
+        <RequestSetupBanner variant="compact" />
       </section>
     </Layout>
   );
