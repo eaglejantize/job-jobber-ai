@@ -1,69 +1,60 @@
-## Plan: Add Lead Inbox storage to CallCapture
+## Plan: Lead Inbox page
 
-Goal: every successful Vapi webhook call sends the SMS (existing behavior, unchanged) AND persists a lead row. Minimal, stable, no CRM UI.
+Add a `/leads` page that lists every captured lead from `callcapture_leads`, newest first. Auth-gated (same pattern as Dashboard). Minimal — no filters, no detail view, no edit.
 
-### 1. New table `callcapture_leads` (migration)
+### 1. Database — add SELECT policy
 
+The `callcapture_leads` table currently has **RLS enabled but zero policies**, so the edge function (service role) can write but no client can read. We need a read policy.
+
+Since leads are not user-scoped (the webhook from Vapi doesn't know which app user owns the call — there's no `user_id` column), the simplest correct rule is: **any authenticated user can read all leads**. This matches the "Lead Inbox for the operator" intent and avoids inventing ownership we don't have.
+
+Migration:
 ```sql
-CREATE TABLE public.callcapture_leads (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        text,
-  phone       text,
-  issue       text,
-  type        text,        -- "New Lead" or "Existing Customer"
-  urgency     text,        -- stored as text per spec (e.g. "true"/"false"/"high")
-  address     text,
-  raw_payload jsonb,
-  created_at  timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE public.callcapture_leads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated can read leads"
+ON public.callcapture_leads
+FOR SELECT
+TO authenticated
+USING (true);
 ```
 
-RLS: the edge function writes via the service role key, which bypasses RLS, so no INSERT policy is needed for the webhook. To keep the table locked down (no public read/write) we add **no policies** — anon/auth clients get nothing. If/when a Lead Inbox UI is built later, we'll add an owner-scoped SELECT policy then.
+(If you'd rather restrict to a specific admin later, we can swap this for a `has_role(...)` policy then. Flagging now so you can say no.)
 
-### 2. Update `supabase/functions/send-demo-sms/index.ts`
+### 2. New page `src/pages/LeadInbox.tsx`
 
-Changes (additive only — SMS path untouched):
+- Use `Layout` + `useAuth` guard, redirect to `/auth` if not signed in (mirrors `Dashboard.tsx`).
+- Fetch on mount:
+  ```ts
+  supabase
+    .from("callcapture_leads")
+    .select("id, name, phone, issue, urgency, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  ```
+- Render with the existing `Table` primitives (`@/components/ui/table`):
+  - Columns: **Name**, **Phone**, **Issue**, **Urgency**, **Received**.
+  - Urgency rendered as a `Badge` — `destructive` variant when value looks urgent (`true`, `high`, `urgent`, case-insensitive), otherwise `secondary`.
+  - `created_at` formatted as a relative time ("3m ago", "2h ago", "Apr 30") via a tiny inline helper — no new dependency.
+  - Empty state: "No leads yet. They'll appear here as calls come in."
+  - Loading state: simple "Loading…" line, same as Dashboard.
+- Mobile: table wrapper already scrolls horizontally (`overflow-auto` in `Table`), so it works on small screens without extra work.
 
-- Extend `extractFromVapi` to also pull `address` (`sd.address`, `body.address`, `m.customer?.address`).
-- Loosen `PayloadSchema` to accept optional `address` (string, max ~300).
-- After Twilio returns `200`, insert a row into `callcapture_leads` using the service-role Supabase client:
-  - `name`, `phone`, `issue`, `type`, `urgency` (coerced to string: `String(urgency ?? "")` — keeps "true"/"false"/"high" etc.), `address`, `raw_payload: raw` (the full incoming JSON body).
-- Wrap insert in try/catch. **Never fail the request if DB insert fails** — SMS already sent, just log.
-- Logging:
-  - Success: `console.log("lead inserted", { id, phone })`
-  - Failure: `console.error("lead insert failed", error.message)` (no payload contents)
-- Response stays the same shape; optionally add `leadId` when insert succeeds (non-breaking).
+### 3. Routing + nav
 
-Client used in the function:
-```ts
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  { auth: { persistSession: false } }
-);
-```
-
-Both env vars already exist in the project (see secrets list).
-
-### 3. Verification
-
-After deploy, re-run the existing curl tests (flat payload + Vapi-nested payload). For each:
-- Confirm SMS still sends (Twilio SID returned).
-- Query `select id, name, phone, type, urgency, address, created_at from callcapture_leads order by created_at desc limit 5;` and confirm rows landed with correct fields and `raw_payload` populated.
-- Send one bad-DB scenario isn't really reachable, but verify the function still returns 200 even if we simulate a DB hiccup (covered by try/catch design).
+- Register the route in `src/App.tsx`:
+  ```tsx
+  <Route path="/leads" element={<LeadInbox />} />
+  ```
+  Place above the catch-all.
+- Add `{ to: "/leads", label: "Leads" }` to the `links` array in `src/components/SiteNav.tsx` so it shows up in both the desktop and mobile nav.
 
 ### Out of scope
-
-- No UI / Lead Inbox page (spec says "do NOT build a full CRM").
-- No changes to auth, RLS for client reads, or Vapi schema.
-- No update to existing tables.
+- No detail page, no editing/deleting leads, no realtime subscription, no filters/search, no CSV export, no pagination beyond the 200-row cap.
+- No changes to `send-demo-sms` or any existing table.
 
 ### Files touched
-
-- New migration: `callcapture_leads` table + RLS enable.
-- `supabase/functions/send-demo-sms/index.ts`: add address extraction, schema field, post-SMS insert with logging.
+- New migration: SELECT policy on `callcapture_leads`.
+- New file: `src/pages/LeadInbox.tsx`.
+- Edit: `src/App.tsx` (route).
+- Edit: `src/components/SiteNav.tsx` (nav link).
 
 Approve to implement.
