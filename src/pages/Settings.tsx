@@ -148,7 +148,7 @@ export default function Settings() {
       after_hours_enabled: cfg.after_hours_enabled,
       transfer_enabled: cfg.transfer_enabled,
       transfer_phone: cfg.transfer_phone,
-      call_rules: cfg.call_rules ?? {},
+      call_rules: (cfg.call_rules ?? {}) as never,
       generated_prompt,
     }).eq("id", cfg.id);
     setSaving(false);
