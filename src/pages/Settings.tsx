@@ -11,6 +11,8 @@ import { toast } from "@/hooks/use-toast";
 import { Plus, X, Loader2 } from "lucide-react";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { Link } from "react-router-dom";
+import VoicePicker from "@/components/VoicePicker";
+import { DEFAULT_VOICE_ID, getVoiceById, type VoicePersona } from "@/lib/voices";
 
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful", "Professional", "Warm"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
@@ -160,11 +162,13 @@ export default function Settings() {
     if (!cfg || !biz) return;
     setSaving(true);
     const generated_prompt = await regeneratePrompt(cfg, biz);
+    const notification_settings = (cfg.notification_settings ?? {}) as Record<string, unknown>;
     const { error } = await supabase.from("callcapture_assistant_configs").update({
       assistant_name: cfg.assistant_name,
       greeting: cfg.greeting,
       tone: cfg.tone,
       intake_questions: cfg.intake_questions ?? [],
+      notification_settings: notification_settings as never,
       generated_prompt,
     }).eq("id", cfg.id);
     setSaving(false);
@@ -176,6 +180,28 @@ export default function Settings() {
   const callRules = (cfg.call_rules ?? {}) as { transferTriggers?: string[]; fallbackAction?: string };
   const transferTriggers = callRules.transferTriggers ?? [];
   const fallbackAction = callRules.fallbackAction ?? "Take a message";
+
+  const notif = (cfg.notification_settings ?? {}) as Record<string, unknown>;
+  const savedVoice = (notif.voice ?? null) as { voice_label?: string; voice_id?: string } | null;
+  const selectedVoiceId = (() => {
+    if (!savedVoice) return DEFAULT_VOICE_ID;
+    const byLabel = savedVoice.voice_label?.toLowerCase();
+    const match = byLabel ? getVoiceById(byLabel) : getVoiceById(DEFAULT_VOICE_ID);
+    return match.id;
+  })();
+
+  function selectVoice(v: VoicePersona) {
+    const next = {
+      ...notif,
+      voice: {
+        voice_label: v.label,
+        voice_persona: v.persona,
+        voice_preview_url: v.previewUrl,
+        voice_id: v.voiceId,
+      },
+    };
+    setCfgField("notification_settings", next as ConfigRow["notification_settings"]);
+  }
 
   function setCallRule<K extends "transferTriggers" | "fallbackAction">(k: K, v: K extends "transferTriggers" ? string[] : string) {
     setCfgField("call_rules", { ...callRules, [k]: v } as ConfigRow["call_rules"]);
@@ -242,7 +268,15 @@ export default function Settings() {
               <Field label="Greeting" value={cfg.greeting ?? ""} onChange={(v) => setCfgField("greeting", v)} />
             </div>
             <div>
+              <Label>Voice</Label>
+              <p className="text-sm text-muted-foreground mt-1 mb-3">
+                Pick the voice your AI receptionist uses on calls.
+              </p>
+              <VoicePicker value={selectedVoiceId} onChange={selectVoice} />
+            </div>
+            <div>
               <Label>Tone</Label>
+              <p className="text-sm text-muted-foreground mt-1 mb-2">Secondary style for how the voice speaks.</p>
               <div className="grid sm:grid-cols-3 gap-2 mt-2">
                 {TONE_OPTIONS.map((t) => (
                   <label key={t} className={`flex items-center justify-center rounded-lg border p-3 cursor-pointer text-sm font-medium ${cfg.tone === t ? "border-primary bg-primary/10" : "border-border hover:bg-secondary/50"}`}>

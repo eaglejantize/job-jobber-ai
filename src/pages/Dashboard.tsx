@@ -9,6 +9,7 @@ import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { toast } from "@/hooks/use-toast";
 import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
+import { getVoiceById, DEFAULT_VOICE_ID } from "@/lib/voices";
 
 type Client = {
   id: string;
@@ -45,6 +46,8 @@ export default function Dashboard() {
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [hasConfig, setHasConfig] = useState(false);
   const [configFetched, setConfigFetched] = useState(false);
+  const [voiceLabel, setVoiceLabel] = useState<string | null>(null);
+  const [voicePersona, setVoicePersona] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [polling, setPolling] = useState(false);
   const toastedRef = useRef(false);
@@ -65,12 +68,25 @@ export default function Dashboard() {
 
     void supabase
       .from("callcapture_assistant_configs")
-      .select("id, generated_prompt")
+      .select("id, generated_prompt, notification_settings")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => { setHasConfig(!!data?.generated_prompt); setConfigFetched(true); });
+      .then(({ data }) => {
+        setHasConfig(!!data?.generated_prompt);
+        setConfigFetched(true);
+        const notif = (data?.notification_settings ?? {}) as Record<string, unknown>;
+        const v = (notif.voice ?? null) as { voice_label?: string; voice_persona?: string } | null;
+        if (v?.voice_label) {
+          setVoiceLabel(v.voice_label);
+          setVoicePersona(v.voice_persona ?? null);
+        } else {
+          const def = getVoiceById(DEFAULT_VOICE_ID);
+          setVoiceLabel(def.label);
+          setVoicePersona(def.persona);
+        }
+      });
 
     void supabase
       .from("callcapture_businesses")
@@ -165,7 +181,7 @@ export default function Dashboard() {
 
         {/* Status row */}
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
-          <div className="grid sm:grid-cols-2 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Setup Status</p>
               <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold mt-2 ${statusColor}`}>
@@ -180,6 +196,13 @@ export default function Dashboard() {
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Business Phone</p>
               <p className="mt-2 font-medium">{phoneToShow ?? <span className="text-muted-foreground">—</span>}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">AI Voice</p>
+              <p className="mt-2 font-medium">
+                {voiceLabel ?? "Maya"}
+                {voicePersona && <span className="text-muted-foreground font-normal"> · {voicePersona}</span>}
+              </p>
             </div>
           </div>
         </div>
