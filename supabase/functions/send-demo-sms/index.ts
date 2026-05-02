@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { z } from "https://esm.sh/zod@3.23.8";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +17,7 @@ const PayloadSchema = z.object({
   issue: z.string().trim().min(1).max(800),
   urgency: z.union([z.boolean(), z.string()]).optional(),
   type: z.string().trim().max(80).optional(),
+  address: z.string().trim().max(300).optional(),
 });
 
 function pick<T>(...vals: (T | undefined | null)[]): T | undefined {
@@ -53,6 +55,11 @@ function extractFromVapi(body: any) {
     ),
     urgency: pick<boolean | string>(sd.urgency, body?.urgency),
     type: pick<string>(sd.type, body?.type),
+    address: pick<string>(
+      sd.address,
+      body?.address,
+      m?.customer?.address,
+    ),
   };
 }
 
@@ -114,7 +121,7 @@ serve(async (req) => {
       );
     }
 
-    const { name, phone, issue, urgency, type } = parsed.data;
+    const { name, phone, issue, urgency, type, address } = parsed.data;
     const urgent = isUrgent(urgency);
 
     const lines = [
@@ -149,8 +156,44 @@ serve(async (req) => {
       );
     }
 
+    // Persist lead (best-effort — never fail the webhook if DB insert fails)
+    let leadId: string | undefined;
+    try {
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+          auth: { persistSession: false },
+        });
+        const { data: inserted, error: insertError } = await supabase
+          .from("callcapture_leads")
+          .insert({
+            name,
+            phone,
+            issue,
+            type: type ?? null,
+            urgency: urgency === undefined || urgency === null ? null : String(urgency),
+            address: address ?? null,
+            raw_payload: raw,
+          })
+          .select("id")
+          .single();
+        if (insertError) {
+          console.error("lead insert failed", insertError.message);
+        } else {
+          leadId = inserted?.id;
+          console.log("lead inserted", { id: leadId, phone });
+        }
+      } else {
+        console.error("lead insert skipped: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing");
+      }
+    } catch (dbErr) {
+      const msg = dbErr instanceof Error ? dbErr.message : "unknown db error";
+      console.error("lead insert threw", msg);
+    }
+
     return new Response(
-      JSON.stringify({ success: true, sid: data.sid, urgent }),
+      JSON.stringify({ success: true, sid: data.sid, urgent, leadId }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
