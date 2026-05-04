@@ -71,10 +71,10 @@ export default function LeadInbox() {
       <section className="container py-10 md:py-14">
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Lead Inbox
+            Call Inbox
           </h1>
           <p className="text-muted-foreground mt-1">
-            Every call your assistant captures shows up here, newest first.
+            Captured calls and customer requests appear here.
           </p>
         </div>
 
