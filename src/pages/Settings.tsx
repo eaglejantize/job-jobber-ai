@@ -13,9 +13,44 @@ import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { Link } from "react-router-dom";
 import VoicePicker from "@/components/VoicePicker";
 import { DEFAULT_VOICE_ID, VOICES, getVoiceById, type VoicePersona } from "@/lib/voices";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful", "Professional", "Warm"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
+
+type GreetingStyle = "friendly" | "professional" | "direct";
+
+const GREETING_STYLE_OPTIONS: { value: GreetingStyle; label: string; hint: string }[] = [
+  { value: "friendly", label: "Friendly (Recommended)", hint: "Warm and welcoming" },
+  { value: "professional", label: "Professional", hint: "Formal and polished" },
+  { value: "direct", label: "Direct", hint: "Short and to the point" },
+];
+
+function buildGreeting(
+  style: GreetingStyle,
+  includeName: boolean,
+  disclosure: boolean,
+  business: string,
+  name: string,
+): string {
+  const biz = business.trim() || "your business";
+  const nm = name.trim() || "your receptionist";
+  const identity = disclosure
+    ? ", this is the automated assistant"
+    : includeName
+      ? `, this is ${nm}`
+      : "";
+  switch (style) {
+    case "professional":
+      return `You've reached ${biz}${identity}. How may I assist you?`;
+    case "direct":
+      return `${biz}${identity}, how can I help you?`;
+    case "friendly":
+    default:
+      return `Thanks for calling ${biz}${identity}. How can I help you today?`;
+  }
+}
 
 type BusinessRow = {
   id: string;
@@ -50,6 +85,10 @@ export default function Settings() {
   const [alertPhone, setAlertPhone] = useState("");
   const [customQ, setCustomQ] = useState("");
   const nameManuallyEditedRef = useRef(false);
+  const greetingManuallyEditedRef = useRef(false);
+  const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>("friendly");
+  const [includeName, setIncludeName] = useState<boolean>(true);
+  const [disclosureMode, setDisclosureMode] = useState<boolean>(false);
 
   useEffect(() => {
     if (!user) return;
@@ -66,9 +105,50 @@ export default function Settings() {
       const savedName = (cRows?.[0] as ConfigRow | undefined)?.assistant_name?.trim() ?? "";
       const matchesVoice = !!savedName && VOICES.some((v) => v.label.toLowerCase() === savedName.toLowerCase());
       nameManuallyEditedRef.current = !!savedName && !matchesVoice;
+      // Hydrate greeting controls from notification_settings.greeting (if any)
+      const notif = ((cRows?.[0] as ConfigRow | undefined)?.notification_settings ?? {}) as Record<string, unknown>;
+      const g = (notif.greeting ?? {}) as {
+        greeting_style?: GreetingStyle;
+        include_name?: boolean;
+        disclosure_mode?: boolean;
+        final_greeting_text?: string;
+      };
+      if (g.greeting_style) setGreetingStyle(g.greeting_style);
+      if (typeof g.include_name === "boolean") setIncludeName(g.include_name);
+      if (typeof g.disclosure_mode === "boolean") setDisclosureMode(g.disclosure_mode);
+      const savedGreeting = (cRows?.[0] as ConfigRow | undefined)?.greeting?.trim() ?? "";
+      // If saved greeting differs from any composed variant, treat as manually edited.
+      if (savedGreeting) {
+        const bizName = (bRows?.[0] as BusinessRow | undefined)?.business_name ?? "";
+        const composed = buildGreeting(
+          g.greeting_style ?? "friendly",
+          g.include_name ?? true,
+          g.disclosure_mode ?? false,
+          bizName,
+          savedName,
+        );
+        greetingManuallyEditedRef.current = savedGreeting !== composed;
+      }
       setLoading(false);
     })();
   }, [user]);
+
+  // Auto-sync composed greeting → cfg.greeting unless user manually edited it.
+  useEffect(() => {
+    if (!cfg || !biz) return;
+    if (greetingManuallyEditedRef.current) return;
+    const composed = buildGreeting(
+      greetingStyle,
+      includeName,
+      disclosureMode,
+      biz.business_name ?? "",
+      cfg.assistant_name ?? "",
+    );
+    if ((cfg.greeting ?? "") !== composed) {
+      setCfg((c) => (c ? { ...c, greeting: composed } : c));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [greetingStyle, includeName, disclosureMode, biz?.business_name, cfg?.assistant_name]);
 
   if (authLoading || loading) {
     return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
@@ -177,7 +257,15 @@ export default function Settings() {
     if (!cfg || !biz) return;
     setSaving(true);
     const generated_prompt = await regeneratePrompt(cfg, biz);
-    const notification_settings = (cfg.notification_settings ?? {}) as Record<string, unknown>;
+    const notification_settings = {
+      ...((cfg.notification_settings ?? {}) as Record<string, unknown>),
+      greeting: {
+        greeting_style: greetingStyle,
+        include_name: includeName,
+        disclosure_mode: disclosureMode,
+        final_greeting_text: cfg.greeting ?? "",
+      },
+    };
     const { error } = await supabase.from("callcapture_assistant_configs").update({
       assistant_name: cfg.assistant_name,
       greeting: cfg.greeting,
@@ -239,6 +327,14 @@ export default function Settings() {
   function setCallRule<K extends "transferTriggers" | "fallbackAction">(k: K, v: K extends "transferTriggers" ? string[] : string) {
     setCfgField("call_rules", { ...callRules, [k]: v } as ConfigRow["call_rules"]);
   }
+
+  const previewGreeting = buildGreeting(
+    greetingStyle,
+    includeName,
+    disclosureMode,
+    biz.business_name ?? "",
+    cfg.assistant_name ?? "",
+  );
 
   return (
     <Layout>
@@ -399,7 +495,88 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
-              <Field label="Greeting" value={cfg.greeting ?? ""} onChange={(v) => setCfgField("greeting", v)} />
+            </div>
+
+            {/* Call Greeting */}
+            <div className="rounded-xl border border-border p-5 space-y-5">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">Call Greeting</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The first thing every caller hears. Keep it short and natural.
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-muted/40 border border-border p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Live preview</p>
+                <p className="text-base md:text-lg italic">“{previewGreeting}”</p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Greeting style</Label>
+                  <Select value={greetingStyle} onValueChange={(v) => setGreetingStyle(v as GreetingStyle)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GREETING_STYLE_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {GREETING_STYLE_OPTIONS.find((o) => o.value === greetingStyle)?.hint}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                    <div>
+                      <p className="text-sm font-medium">Include receptionist name</p>
+                      <p className="text-xs text-muted-foreground">Adds “this is {cfg.assistant_name?.trim() || "your receptionist"}”</p>
+                    </div>
+                    <Switch checked={includeName} onCheckedChange={setIncludeName} disabled={disclosureMode} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                    <div>
+                      <p className="text-sm font-medium">Let callers know it's an automated assistant</p>
+                      <p className="text-xs text-muted-foreground">Optional — for transparency</p>
+                    </div>
+                    <Switch checked={disclosureMode} onCheckedChange={setDisclosureMode} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Custom greeting (optional override)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={cfg.greeting ?? ""}
+                    onChange={(e) => {
+                      greetingManuallyEditedRef.current = true;
+                      setCfgField("greeting", e.target.value);
+                    }}
+                    placeholder={previewGreeting}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      greetingManuallyEditedRef.current = false;
+                      setCfgField("greeting", previewGreeting);
+                    }}
+                  >
+                    Use preview
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Edit only if you want to override the generated greeting above.
+                </p>
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between gap-2">

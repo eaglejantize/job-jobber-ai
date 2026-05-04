@@ -1,72 +1,66 @@
+## Call Greeting Section (Settings → AI Settings)
 
-# Phone System Clarity — Plan
+Add a new "Call Greeting" block at the top of the AI Settings tab in `src/pages/Settings.tsx`, above the existing receptionist name field. The current single-line "Greeting" input gets replaced by this richer composer (the underlying `cfg.greeting` column still stores the final composed text, so nothing else breaks).
 
-Make Settings → Phone Setup self-explanatory for non-technical users, and surface a Call Setup summary on the Dashboard.
+### UI inside AI Settings tab
 
-## 1. Settings → Phone Setup tab (`src/pages/Settings.tsx`)
+1. **Section header** — "Call Greeting" + helper text: "The first thing every caller hears. Keep it short and natural."
 
-Replace the current bare two-input layout with a clear, sectioned page. All sections live inside the existing "Phone Setup" tab so navigation doesn't change.
+2. **Greeting style dropdown** (shadcn `Select`):
+   - Friendly (Recommended) — `Thanks for calling [Business], how can I help you today?`
+   - Professional — `You've reached [Business]. How may I assist you?`
+   - Direct — `[Business], how can I help you?`
 
-**Section A — "How Your Calls Are Handled"** (info card, top of tab)
+3. **Toggle: "Include receptionist name"** (default ON)
+   - When ON, inserts `, this is [Name]` after the business name in each style.
 
-Plain-language list (no jargon):
-- Your phone rings first
-- If you don't answer after a few rings, your AI receptionist answers
-- It collects the caller's information (name, phone, issue)
-- You receive the details instantly by text
-- You can call them back or follow up
+4. **Toggle: "Let callers know this is an automated assistant"** (default OFF, labeled "Optional — for transparency")
+   - When ON, replaces the name segment with `, this is the automated assistant`.
+   - When both this and "Include name" are ON, disclosure wins (name is overridden) — only one identity phrase at a time.
 
-**Section B — Call Flow Visual**
+5. **Live preview card** — bordered, muted background, quote-styled. Re-renders instantly from the three controls + `biz.business_name` + `cfg.assistant_name`. Falls back to "your business" / "your receptionist" when fields are empty.
 
-Horizontal step strip with icons + arrows (lucide: `Phone` → `PhoneIncoming` → `Bot` → `ClipboardList` → `MessageSquare`). On mobile it stacks vertically. Pure presentational, no state.
+6. **"Use this greeting" button** — copies the composed preview text into `cfg.greeting`. Greeting is also auto-synced whenever style/toggles/name/business name change *unless* the user has manually edited the greeting input (tracked via a ref, same pattern as `nameManuallyEditedRef`).
+
+7. The existing free-form Greeting `Input` stays below the preview as "Custom greeting (optional override)" so power users can still type whatever they want.
+
+### Composition logic
 
 ```text
-Customer calls → Your phone rings → AI answers if missed → Info captured → You get notified
+buildGreeting(style, includeName, disclosure, business, name):
+  business = business || "your business"
+  name     = name || "your receptionist"
+
+  identity =
+    disclosure ? ", this is the automated assistant"
+    : includeName ? `, this is ${name}`
+    : ""
+
+  switch (style):
+    "friendly":     `Thanks for calling ${business}${identity}. How can I help you today?`
+    "professional": `You've reached ${business}${identity}. How may I assist you?`
+    "direct":       `${business}${identity}, how can I help you?`
 ```
 
-**Section C — Ring Control**
+### Persistence
 
-New select: "How many rings before AI answers?" with options `1 ring`, `2 rings`, `3 rings (recommended)`. Default `3`.
-Helper text: "This gives you a chance to answer first. If you miss the call, your AI takes over so you never lose the lead."
+All four new fields live inside `callcapture_assistant_configs.notification_settings` (existing jsonb) under a `greeting` namespace — no DB migration needed:
 
-Persisted in `callcapture_assistant_configs.call_rules.ringsBeforeAi` (number). No DB migration needed — `call_rules` is jsonb.
+```ts
+notification_settings.greeting = {
+  greeting_style: "friendly" | "professional" | "direct",
+  include_name: boolean,
+  disclosure_mode: boolean,
+  final_greeting_text: string,  // mirror of cfg.greeting at save time
+}
+```
 
-**Section D — Settings (toggles + phone)**
+`cfg.greeting` continues to hold `final_greeting_text` so the existing `regeneratePrompt` flow keeps working unchanged. `saveAi` is extended to write the nested `greeting` object alongside the existing notification_settings.
 
-- Toggle: "Let AI answer missed calls" (default ON) — stored in `call_rules.aiAnswerMissed`
-- Toggle: "Forward calls to my phone" (default ON) — reuses existing `transfer_enabled`
-- Input: "Your phone number" — reuses existing `biz.phone`
-- Owner alert SMS number — keep existing `alertPhone` field
+### Out of scope
 
-**Section E — Value Statement**
+Voice picker, tone, intake questions, phone tab, dashboard, setup wizard, edge functions, Vapi/Twilio/Stripe — all untouched.
 
-Highlighted info box (primary/10 background, rounded):
-> "You never miss a customer again. If you're busy or can't answer, your AI receptionist steps in and captures everything for you."
+### Files touched
 
-**Save button**
-
-Existing `savePhone` extended to also write `call_rules` (merging `ringsBeforeAi` + `aiAnswerMissed` into existing `call_rules` jsonb on `callcapture_assistant_configs`). Keeps `transfer_enabled` write so the toggle persists from this tab too.
-
-## 2. Dashboard "Call Setup" card (`src/pages/Dashboard.tsx`)
-
-Add a new card beneath the existing Status row (above Quick Actions):
-
-- Title: "Call Setup"
-- Rows:
-  - Phone Number — `businessPhone` (or em dash)
-  - Rings before AI: X — from `call_rules.ringsBeforeAi` (default 3)
-  - AI Backup: ON / OFF — from `call_rules.aiAnswerMissed` (default ON)
-- Button: "Edit Call Settings" → links to `/settings` (Phone Setup tab is default-shown via `?tab=phone` query, or simply `/settings`).
-
-Fetch `call_rules` in the existing `callcapture_assistant_configs` query (already loaded — just add `call_rules` to the select list).
-
-## Out of scope
-
-- Setup wizard, Voice picker, AI tab, Leads, Auth, Stripe, Twilio, Vapi, edge functions
-- DB schema (no migrations)
-- Actually wiring `ringsBeforeAi` to Twilio/Vapi behavior — UI + persistence only for now (matches prior pattern of static-then-wire).
-
-## Files touched
-
-- `src/pages/Settings.tsx` — rebuild the Phone Setup tab body, extend `savePhone`
-- `src/pages/Dashboard.tsx` — new Call Setup card, extend assistant config select
+- `src/pages/Settings.tsx` — new Call Greeting block, `buildGreeting` helper, extend `saveAi`, load defaults from `notification_settings.greeting`.
