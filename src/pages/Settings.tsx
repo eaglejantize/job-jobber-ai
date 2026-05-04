@@ -377,6 +377,81 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="phone" className="rounded-2xl border border-border bg-card p-6 mt-4 shadow-card-soft space-y-8">
+            {/* Phone setup choice */}
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Phone Setup</h2>
+                <p className="text-sm text-muted-foreground mt-1">Choose how customers reach your AI receptionist.</p>
+              </div>
+              <div className="grid gap-2">
+                {[
+                  { v: "new", title: "Get a new CallCapture number", hint: "Recommended" },
+                  { v: "existing", title: "Use my existing business number", hint: "Forward missed calls to your AI receptionist" },
+                  { v: "test", title: "Test mode for now", hint: "Use the demo number while setup is being finalized" },
+                ].map((o) => {
+                  const active = phoneMode === o.v;
+                  return (
+                    <button
+                      key={o.v}
+                      type="button"
+                      onClick={() => setCfgField("call_rules", { ...callRules, phone_mode: o.v as "new" | "existing" | "test" } as ConfigRow["call_rules"])}
+                      className={`text-left flex items-start gap-3 rounded-lg border p-3 transition-colors ${active ? "border-primary bg-primary/5" : "border-border hover:bg-secondary/50"}`}
+                    >
+                      <span className={`mt-1 h-3 w-3 rounded-full border ${active ? "bg-primary border-primary" : "border-muted-foreground"}`} />
+                      <span>
+                        <span className="block text-sm font-medium">{o.title}</span>
+                        <span className="block text-xs text-muted-foreground">{o.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {phoneMode === "new" && (
+                <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
+                  <div className="space-y-2 max-w-xs">
+                    <Label>Preferred area code</Label>
+                    <Input
+                      inputMode="numeric"
+                      maxLength={3}
+                      placeholder="904"
+                      value={preferredAreaCode}
+                      onChange={(e) => setCfgField("call_rules", { ...callRules, preferred_area_code: e.target.value.replace(/\D/g, "").slice(0, 3) } as ConfigRow["call_rules"])}
+                    />
+                  </div>
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Your CallCapture number</p>
+                    <p className="text-lg font-semibold mt-1">{assignedCallcaptureNumber || "(XXX) XXX-XXXX"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">We'll assign this during setup.</p>
+                  </div>
+                </div>
+              )}
+
+              {phoneMode === "existing" && (
+                <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2">
+                  <Label>Current business phone number</Label>
+                  <Input
+                    type="tel"
+                    placeholder="(555) 555-1234"
+                    value={businessPhone}
+                    onChange={(e) => {
+                      setCfgField("call_rules", { ...callRules, business_phone: e.target.value } as ConfigRow["call_rules"]);
+                      setBizField("phone", e.target.value);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">You'll forward missed calls to your AI receptionist.</p>
+                </div>
+              )}
+
+              {phoneMode === "test" && (
+                <div className="rounded-xl border border-border bg-secondary/30 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    Use the demo number while setup is being finalized.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* How calls are handled */}
             <div>
               <h2 className="text-xl font-semibold tracking-tight">How Your Calls Are Handled</h2>
