@@ -280,11 +280,24 @@ export default function Settings() {
   }
 
   const intake = (cfg.intake_questions ?? []) as string[];
-  const callRules = (cfg.call_rules ?? {}) as { transferTriggers?: string[]; fallbackAction?: string; ringsBeforeAi?: number; aiAnswerMissed?: boolean };
+  const callRules = (cfg.call_rules ?? {}) as {
+    transferTriggers?: string[];
+    fallbackAction?: string;
+    ringsBeforeAi?: number;
+    aiAnswerMissed?: boolean;
+    phone_mode?: "new" | "existing" | "test";
+    preferred_area_code?: string;
+    business_phone?: string;
+    assigned_callcapture_number?: string;
+  };
   const transferTriggers = callRules.transferTriggers ?? [];
   const fallbackAction = callRules.fallbackAction ?? "Take a message";
   const ringsBeforeAi = callRules.ringsBeforeAi ?? 3;
   const aiAnswerMissed = callRules.aiAnswerMissed !== false;
+  const phoneMode = callRules.phone_mode ?? "existing";
+  const preferredAreaCode = callRules.preferred_area_code ?? "";
+  const businessPhone = callRules.business_phone ?? biz.phone ?? "";
+  const assignedCallcaptureNumber = callRules.assigned_callcapture_number ?? "";
 
   const notif = (cfg.notification_settings ?? {}) as Record<string, unknown>;
   const savedVoice = (notif.voice ?? null) as { voice_label?: string; voice_id?: string } | null;
