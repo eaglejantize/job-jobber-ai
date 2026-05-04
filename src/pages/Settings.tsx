@@ -328,6 +328,14 @@ export default function Settings() {
     setCfgField("call_rules", { ...callRules, [k]: v } as ConfigRow["call_rules"]);
   }
 
+  const previewGreeting = buildGreeting(
+    greetingStyle,
+    includeName,
+    disclosureMode,
+    biz.business_name ?? "",
+    cfg.assistant_name ?? "",
+  );
+
   return (
     <Layout>
       <section className="container py-10 md:py-14 max-w-4xl">
