@@ -117,6 +117,9 @@ export default function Index() {
         </div>
       </section>
 
+      {/* HEAR IT IN ACTION */}
+      <HearInAction />
+
       {/* WHAT IT ACTUALLY DOES */}
       <section className="container py-16">
         <div className="text-center max-w-2xl mx-auto mb-10">
