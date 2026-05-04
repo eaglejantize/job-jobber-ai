@@ -8,6 +8,14 @@ import SampleLeadCard from "@/components/SampleLeadCard";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
 import { RECEPTIONIST_FLOW, RECEPTIONIST_OPENING, RECEPTIONIST_CLOSING, RECEPTIONIST_DONTS } from "@/lib/receptionistScript";
+import CallDemoButton from "@/components/CallDemoButton";
+import { useState } from "react";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
 
 const industries = [
   { name: "Appliance Repair", icon: Wrench },
@@ -53,9 +61,9 @@ export default function Index() {
             </p>
             <div className="mt-7 flex flex-col sm:flex-row gap-4">
               <div className="flex flex-col">
-                <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
-                  <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
-                </Button>
+                <CallDemoButton size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+                  <Phone className="h-5 w-5" /> Call the Demo
+                </CallDemoButton>
                 <p className="mt-1.5 text-xs text-muted-foreground text-center">Takes 30 seconds</p>
               </div>
               <div className="flex flex-col">
@@ -108,6 +116,9 @@ export default function Index() {
           </Button>
         </div>
       </section>
+
+      {/* HEAR IT IN ACTION */}
+      <HearInAction />
 
       {/* WHAT IT ACTUALLY DOES */}
       <section className="container py-16">
@@ -325,9 +336,9 @@ export default function Index() {
             If you don't answer, someone else will.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-            <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
-              <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
-            </Button>
+            <CallDemoButton size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+              <Phone className="h-5 w-5" /> Call the Demo
+            </CallDemoButton>
             <Button asChild size="lg" variant="outline" className="text-base h-14 px-7 border-primary/40">
               <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
             </Button>
@@ -337,5 +348,56 @@ export default function Index() {
 
       <RequestSetupBanner />
     </Layout>
+  );
+}
+
+function HearInAction() {
+  const [audioMissing, setAudioMissing] = useState(false);
+  return (
+    <section className="container py-20">
+      <div className="text-center max-w-2xl mx-auto mb-8">
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Real call, real flow</p>
+        <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Hear CallCapture in Action</h2>
+        <p className="mt-4 text-muted-foreground text-lg">
+          Listen to a real-style service call handled by the AI receptionist.
+        </p>
+      </div>
+      <div className="max-w-2xl mx-auto rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft">
+        {audioMissing ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            Demo call recording will be added shortly.
+          </p>
+        ) : (
+          <audio
+            controls
+            className="w-full"
+            preload="none"
+            src="/audio/demo/full-demo-call.mp3"
+            onError={() => setAudioMissing(true)}
+          >
+            Your browser does not support audio playback.
+          </audio>
+        )}
+        <Accordion type="single" collapsible className="mt-4">
+          <AccordionItem value="transcript" className="border-b-0">
+            <AccordionTrigger className="text-sm font-semibold">
+              Read the call transcript
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 text-sm text-foreground/90">
+                <p><span className="font-semibold">Customer:</span> "Hi, my dryer isn't heating."</p>
+                <p><span className="font-semibold text-primary">AI Receptionist:</span> "Thanks for calling. I can help with that. Can I get your name?"</p>
+                <p><span className="font-semibold">Customer:</span> "John Smith."</p>
+                <p><span className="font-semibold text-primary">AI Receptionist:</span> "Thanks John. What's the best phone number to reach you?"</p>
+                <p><span className="font-semibold">Customer:</span> "904-555-1234."</p>
+                <p><span className="font-semibold text-primary">AI Receptionist:</span> "Got it. What's the issue with the dryer?"</p>
+                <p><span className="font-semibold">Customer:</span> "It runs but doesn't heat."</p>
+                <p><span className="font-semibold text-primary">AI Receptionist:</span> "Thanks. I'll send this over so someone can follow up shortly."</p>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+    </section>
   );
 }

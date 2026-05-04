@@ -96,11 +96,11 @@ export default function Setup() {
     }
     if (step === 1) {
       const mode = state.phoneMode;
-      if (mode === "new" && !(state.phoneNumber || "").trim()) {
-        toast({ title: "Generate a phone number to continue", variant: "destructive" });
+      if (mode === "new" && !(state.preferredAreaCode || "").trim()) {
+        toast({ title: "Enter a preferred area code", variant: "destructive" });
         return;
       }
-      if (mode === "existing" && !(state.phoneNumber || "").trim()) {
+      if (mode === "existing" && !(state.businessPhone || "").trim()) {
         toast({ title: "Enter your current business phone number", variant: "destructive" });
         return;
       }
@@ -503,21 +503,17 @@ function PhoneSetupStep({
   set: <K extends keyof WizardState>(k: K, v: WizardState[K]) => void;
 }) {
   const mode = state.phoneMode ?? "new";
-  const [areaCode, setAreaCode] = useState("");
+  const placeholderAssigned = state.assignedCallcaptureNumber || "(XXX) XXX-XXXX";
 
   function setMode(m: "new" | "existing" | "test") {
     set("phoneMode", m);
-    set("phoneNumber", "");
-    set("phone", "");
-  }
-
-  function generateNumber() {
-    if (areaCode.length !== 3) return;
-    const mid = Math.floor(100 + Math.random() * 900);
-    const last = Math.floor(1000 + Math.random() * 9000);
-    const num = `(${areaCode}) ${mid}-${last}`;
-    set("phoneNumber", num);
-    set("phone", num);
+    if (m === "new") {
+      set("phone", state.assignedCallcaptureNumber ?? "");
+    } else if (m === "existing") {
+      set("phone", state.businessPhone ?? "");
+    } else {
+      set("phone", "");
+    }
   }
 
   return (
@@ -537,9 +533,9 @@ function PhoneSetupStep({
           onValueChange={(v) => setMode(v as "new" | "existing" | "test")}
           className="grid gap-2"
         >
-          <PhoneOption value="new" title="Get a new business number" hint="Recommended" current={mode} />
-          <PhoneOption value="existing" title="Use my existing number" hint="Forward calls to your AI" current={mode} />
-          <PhoneOption value="test" title="Skip for now" hint="Test mode" current={mode} />
+          <PhoneOption value="new" title="Get a new CallCapture number" hint="Recommended" current={mode} />
+          <PhoneOption value="existing" title="Use my existing business number" hint="Forward missed calls to your AI receptionist" current={mode} />
+          <PhoneOption value="test" title="Test mode for now" hint="Use the demo number while setup is being finalized" current={mode} />
         </RadioGroup>
       </div>
 
@@ -547,57 +543,38 @@ function PhoneSetupStep({
       <div className="rounded-xl border border-border bg-secondary/30 p-4">
         {mode === "new" && (
           <div className="space-y-4">
-            <div className="grid sm:grid-cols-[160px_auto] gap-3 items-end">
-              <div className="space-y-2">
-                <Label>Area code</Label>
-                <Input
-                  inputMode="numeric"
-                  maxLength={3}
-                  placeholder="904"
-                  value={areaCode}
-                  onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                />
-              </div>
-              <Button type="button" onClick={generateNumber} disabled={areaCode.length !== 3} variant="outline">
-                Generate Number
-              </Button>
+            <div className="space-y-2 max-w-xs">
+              <Label>Preferred area code</Label>
+              <Input
+                inputMode="numeric"
+                maxLength={3}
+                placeholder="904"
+                value={state.preferredAreaCode ?? ""}
+                onChange={(e) => set("preferredAreaCode", e.target.value.replace(/\D/g, "").slice(0, 3))}
+              />
             </div>
-            {state.phoneNumber ? (
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Your new number</p>
-                  <p className="text-xl font-semibold mt-1">{state.phoneNumber}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={generateNumber}
-                  className="text-sm text-primary hover:underline"
-                >
-                  Regenerate
-                </button>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Enter a 3-digit area code, then click Generate Number.
-              </p>
-            )}
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Your CallCapture number</p>
+              <p className="text-xl font-semibold mt-1">{placeholderAssigned}</p>
+              <p className="text-xs text-muted-foreground mt-1">We'll assign this during setup.</p>
+            </div>
           </div>
         )}
 
         {mode === "existing" && (
           <div className="space-y-2">
-            <Label>Your current business phone number</Label>
+            <Label>Current business phone number</Label>
             <Input
               type="tel"
               placeholder="(555) 555-1234"
-              value={state.phoneNumber ?? ""}
+              value={state.businessPhone ?? ""}
               onChange={(e) => {
-                set("phoneNumber", e.target.value);
+                set("businessPhone", e.target.value);
                 set("phone", e.target.value);
               }}
             />
             <p className="text-xs text-muted-foreground">
-              You'll forward this number to your AI assistant.
+              You'll forward missed calls to your AI receptionist.
             </p>
           </div>
         )}
@@ -606,7 +583,7 @@ function PhoneSetupStep({
           <div className="flex items-start gap-3">
             <Phone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
             <p className="text-sm text-muted-foreground">
-              You can test the system without a real number. You can add one anytime from Settings.
+              Use the demo number while setup is being finalized. You can switch to a real number anytime from Settings.
             </p>
           </div>
         )}

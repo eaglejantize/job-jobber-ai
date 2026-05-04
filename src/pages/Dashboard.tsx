@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight, Bot } from "lucide-react";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { toast } from "@/hooks/use-toast";
-import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
+import { DEMO_NUMBER } from "@/lib/constants";
+import CallDemoButton from "@/components/CallDemoButton";
 import { Badge } from "@/components/ui/badge";
 import { getVoiceById, DEFAULT_VOICE_ID } from "@/lib/voices";
 
@@ -216,11 +217,9 @@ export default function Dashboard() {
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
           <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">Quick Actions</p>
           <div className="flex flex-wrap gap-3">
-            <Button asChild className="bg-cta hover:opacity-90 shadow-glow">
-              <a href={`tel:${DEMO_NUMBER_TEL}`}>
-                <PhoneCall className="h-4 w-4" /> Test My Agent ({DEMO_NUMBER})
-              </a>
-            </Button>
+            <CallDemoButton className="bg-cta hover:opacity-90 shadow-glow">
+              <PhoneCall className="h-4 w-4" /> Test My Agent ({DEMO_NUMBER})
+            </CallDemoButton>
             <Button asChild variant="outline">
               <Link to="/settings">
                 <SettingsIcon className="h-4 w-4" /> Edit Settings
@@ -266,7 +265,7 @@ export default function Dashboard() {
         {/* Recent Leads */}
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Recent Leads</h2>
+            <h2 className="text-lg font-semibold">Recent Inbox</h2>
             {leads && leads.length > 0 && (
               <Link to="/leads" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
                 View all <ArrowRight className="h-3 w-3" />
