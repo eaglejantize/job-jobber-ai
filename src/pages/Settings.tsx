@@ -257,7 +257,15 @@ export default function Settings() {
     if (!cfg || !biz) return;
     setSaving(true);
     const generated_prompt = await regeneratePrompt(cfg, biz);
-    const notification_settings = (cfg.notification_settings ?? {}) as Record<string, unknown>;
+    const notification_settings = {
+      ...((cfg.notification_settings ?? {}) as Record<string, unknown>),
+      greeting: {
+        greeting_style: greetingStyle,
+        include_name: includeName,
+        disclosure_mode: disclosureMode,
+        final_greeting_text: cfg.greeting ?? "",
+      },
+    };
     const { error } = await supabase.from("callcapture_assistant_configs").update({
       assistant_name: cfg.assistant_name,
       greeting: cfg.greeting,
