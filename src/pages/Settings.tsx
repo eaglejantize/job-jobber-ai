@@ -133,6 +133,23 @@ export default function Settings() {
     })();
   }, [user]);
 
+  // Auto-sync composed greeting → cfg.greeting unless user manually edited it.
+  useEffect(() => {
+    if (!cfg || !biz) return;
+    if (greetingManuallyEditedRef.current) return;
+    const composed = buildGreeting(
+      greetingStyle,
+      includeName,
+      disclosureMode,
+      biz.business_name ?? "",
+      cfg.assistant_name ?? "",
+    );
+    if ((cfg.greeting ?? "") !== composed) {
+      setCfg((c) => (c ? { ...c, greeting: composed } : c));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [greetingStyle, includeName, disclosureMode, biz?.business_name, cfg?.assistant_name]);
+
   if (authLoading || loading) {
     return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
   }
