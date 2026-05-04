@@ -96,11 +96,11 @@ export default function Setup() {
     }
     if (step === 1) {
       const mode = state.phoneMode;
-      if (mode === "new" && !(state.phoneNumber || "").trim()) {
-        toast({ title: "Generate a phone number to continue", variant: "destructive" });
+      if (mode === "new" && !(state.preferredAreaCode || "").trim()) {
+        toast({ title: "Enter a preferred area code", variant: "destructive" });
         return;
       }
-      if (mode === "existing" && !(state.phoneNumber || "").trim()) {
+      if (mode === "existing" && !(state.businessPhone || "").trim()) {
         toast({ title: "Enter your current business phone number", variant: "destructive" });
         return;
       }
