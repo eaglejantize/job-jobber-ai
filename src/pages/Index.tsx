@@ -8,6 +8,14 @@ import SampleLeadCard from "@/components/SampleLeadCard";
 import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
 import { RECEPTIONIST_FLOW, RECEPTIONIST_OPENING, RECEPTIONIST_CLOSING, RECEPTIONIST_DONTS } from "@/lib/receptionistScript";
+import CallDemoButton from "@/components/CallDemoButton";
+import { useState } from "react";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
 
 const industries = [
   { name: "Appliance Repair", icon: Wrench },
@@ -53,9 +61,9 @@ export default function Index() {
             </p>
             <div className="mt-7 flex flex-col sm:flex-row gap-4">
               <div className="flex flex-col">
-                <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
-                  <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
-                </Button>
+                <CallDemoButton size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+                  <Phone className="h-5 w-5" /> Call the Demo
+                </CallDemoButton>
                 <p className="mt-1.5 text-xs text-muted-foreground text-center">Takes 30 seconds</p>
               </div>
               <div className="flex flex-col">
@@ -325,9 +333,9 @@ export default function Index() {
             If you don't answer, someone else will.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-            <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
-              <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-5 w-5" /> Call the Demo</a>
-            </Button>
+            <CallDemoButton size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
+              <Phone className="h-5 w-5" /> Call the Demo
+            </CallDemoButton>
             <Button asChild size="lg" variant="outline" className="text-base h-14 px-7 border-primary/40">
               <Link to="/support">Get Set Up in 24 Hours <ArrowRight className="h-4 w-4" /></Link>
             </Button>
