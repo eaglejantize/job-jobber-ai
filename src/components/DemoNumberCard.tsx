@@ -1,7 +1,8 @@
-import { Phone, Copy } from "lucide-react";
+import { Copy } from "lucide-react";
 import { DEMO_NUMBER, DEMO_NUMBER_TEL } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import CallDemoButton from "@/components/CallDemoButton";
 
 export default function DemoNumberCard() {
   function copy() {
@@ -37,9 +38,7 @@ export default function DemoNumberCard() {
         Hear exactly what your customers experience.
       </p>
       <div className="mt-5 flex flex-col sm:flex-row gap-2">
-        <Button asChild className="bg-cta hover:opacity-90 shadow-glow flex-1">
-          <a href={`tel:${DEMO_NUMBER_TEL}`}><Phone className="h-4 w-4" /> Call the Demo</a>
-        </Button>
+        <CallDemoButton className="bg-cta hover:opacity-90 shadow-glow flex-1" />
         <Button variant="outline" size="sm" onClick={copy} className="border-primary/40">
           <Copy className="h-4 w-4" /> Copy Number
         </Button>
