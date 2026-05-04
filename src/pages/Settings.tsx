@@ -17,6 +17,39 @@ import { DEFAULT_VOICE_ID, VOICES, getVoiceById, type VoicePersona } from "@/lib
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful", "Professional", "Warm"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
 
+type GreetingStyle = "friendly" | "professional" | "direct";
+
+const GREETING_STYLE_OPTIONS: { value: GreetingStyle; label: string; hint: string }[] = [
+  { value: "friendly", label: "Friendly (Recommended)", hint: "Warm and welcoming" },
+  { value: "professional", label: "Professional", hint: "Formal and polished" },
+  { value: "direct", label: "Direct", hint: "Short and to the point" },
+];
+
+function buildGreeting(
+  style: GreetingStyle,
+  includeName: boolean,
+  disclosure: boolean,
+  business: string,
+  name: string,
+): string {
+  const biz = business.trim() || "your business";
+  const nm = name.trim() || "your receptionist";
+  const identity = disclosure
+    ? ", this is the automated assistant"
+    : includeName
+      ? `, this is ${nm}`
+      : "";
+  switch (style) {
+    case "professional":
+      return `You've reached ${biz}${identity}. How may I assist you?`;
+    case "direct":
+      return `${biz}${identity}, how can I help you?`;
+    case "friendly":
+    default:
+      return `Thanks for calling ${biz}${identity}. How can I help you today?`;
+  }
+}
+
 type BusinessRow = {
   id: string;
   business_name: string;
