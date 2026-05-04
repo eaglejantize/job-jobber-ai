@@ -495,7 +495,88 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
-              <Field label="Greeting" value={cfg.greeting ?? ""} onChange={(v) => setCfgField("greeting", v)} />
+            </div>
+
+            {/* Call Greeting */}
+            <div className="rounded-xl border border-border p-5 space-y-5">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">Call Greeting</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The first thing every caller hears. Keep it short and natural.
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-muted/40 border border-border p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Live preview</p>
+                <p className="text-base md:text-lg italic">“{previewGreeting}”</p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Greeting style</Label>
+                  <Select value={greetingStyle} onValueChange={(v) => setGreetingStyle(v as GreetingStyle)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GREETING_STYLE_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {GREETING_STYLE_OPTIONS.find((o) => o.value === greetingStyle)?.hint}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                    <div>
+                      <p className="text-sm font-medium">Include receptionist name</p>
+                      <p className="text-xs text-muted-foreground">Adds “this is {cfg.assistant_name?.trim() || "your receptionist"}”</p>
+                    </div>
+                    <Switch checked={includeName} onCheckedChange={setIncludeName} disabled={disclosureMode} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                    <div>
+                      <p className="text-sm font-medium">Let callers know it's an automated assistant</p>
+                      <p className="text-xs text-muted-foreground">Optional — for transparency</p>
+                    </div>
+                    <Switch checked={disclosureMode} onCheckedChange={setDisclosureMode} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Custom greeting (optional override)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={cfg.greeting ?? ""}
+                    onChange={(e) => {
+                      greetingManuallyEditedRef.current = true;
+                      setCfgField("greeting", e.target.value);
+                    }}
+                    placeholder={previewGreeting}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      greetingManuallyEditedRef.current = false;
+                      setCfgField("greeting", previewGreeting);
+                    }}
+                  >
+                    Use preview
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Edit only if you want to override the generated greeting above.
+                </p>
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between gap-2">
