@@ -85,6 +85,10 @@ export default function Settings() {
   const [alertPhone, setAlertPhone] = useState("");
   const [customQ, setCustomQ] = useState("");
   const nameManuallyEditedRef = useRef(false);
+  const greetingManuallyEditedRef = useRef(false);
+  const [greetingStyle, setGreetingStyle] = useState<GreetingStyle>("friendly");
+  const [includeName, setIncludeName] = useState<boolean>(true);
+  const [disclosureMode, setDisclosureMode] = useState<boolean>(false);
 
   useEffect(() => {
     if (!user) return;
@@ -101,6 +105,30 @@ export default function Settings() {
       const savedName = (cRows?.[0] as ConfigRow | undefined)?.assistant_name?.trim() ?? "";
       const matchesVoice = !!savedName && VOICES.some((v) => v.label.toLowerCase() === savedName.toLowerCase());
       nameManuallyEditedRef.current = !!savedName && !matchesVoice;
+      // Hydrate greeting controls from notification_settings.greeting (if any)
+      const notif = ((cRows?.[0] as ConfigRow | undefined)?.notification_settings ?? {}) as Record<string, unknown>;
+      const g = (notif.greeting ?? {}) as {
+        greeting_style?: GreetingStyle;
+        include_name?: boolean;
+        disclosure_mode?: boolean;
+        final_greeting_text?: string;
+      };
+      if (g.greeting_style) setGreetingStyle(g.greeting_style);
+      if (typeof g.include_name === "boolean") setIncludeName(g.include_name);
+      if (typeof g.disclosure_mode === "boolean") setDisclosureMode(g.disclosure_mode);
+      const savedGreeting = (cRows?.[0] as ConfigRow | undefined)?.greeting?.trim() ?? "";
+      // If saved greeting differs from any composed variant, treat as manually edited.
+      if (savedGreeting) {
+        const bizName = (bRows?.[0] as BusinessRow | undefined)?.business_name ?? "";
+        const composed = buildGreeting(
+          g.greeting_style ?? "friendly",
+          g.include_name ?? true,
+          g.disclosure_mode ?? false,
+          bizName,
+          savedName,
+        );
+        greetingManuallyEditedRef.current = savedGreeting !== composed;
+      }
       setLoading(false);
     })();
   }, [user]);
