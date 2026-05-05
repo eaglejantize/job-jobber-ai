@@ -19,6 +19,8 @@ type Client = {
   subscription_status: string | null;
   alert_phone: string;
   business_name: string;
+  assigned_callcapture_number?: string | null;
+  number_status?: string | null;
 };
 
 type Lead = {
@@ -118,7 +120,7 @@ export default function Dashboard() {
     const fetchClient = async () => {
       let { data } = await supabase
         .from("callcapture_clients")
-        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name")
+        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -127,7 +129,7 @@ export default function Dashboard() {
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
-          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id")
+          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })
           .limit(1)
