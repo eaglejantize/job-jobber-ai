@@ -12,6 +12,7 @@ import { Plus, X, Loader2, Phone, PhoneIncoming, Bot, ClipboardList, MessageSqua
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { Link } from "react-router-dom";
 import VoicePicker from "@/components/VoicePicker";
+import PhoneNumberPicker from "@/components/PhoneNumberPicker";
 import { DEFAULT_VOICE_ID, VOICES, getVoiceById, type VoicePersona } from "@/lib/voices";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -83,6 +84,15 @@ export default function Settings() {
   const [biz, setBiz] = useState<BusinessRow | null>(null);
   const [cfg, setCfg] = useState<ConfigRow | null>(null);
   const [alertPhone, setAlertPhone] = useState("");
+  const [clientRow, setClientRow] = useState<{
+    id: string;
+    alert_phone?: string | null;
+    assigned_callcapture_number?: string | null;
+    number_status?: string | null;
+    preferred_area_code?: string | null;
+    business_phone?: string | null;
+    phone_mode?: string | null;
+  } | null>(null);
   const [customQ, setCustomQ] = useState("");
   const nameManuallyEditedRef = useRef(false);
   const greetingManuallyEditedRef = useRef(false);
@@ -96,11 +106,12 @@ export default function Settings() {
       const [{ data: bRows }, { data: cRows }, { data: client }] = await Promise.all([
         supabase.from("callcapture_businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1),
         supabase.from("callcapture_assistant_configs").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1),
-        supabase.from("callcapture_clients").select("alert_phone").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("callcapture_clients").select("id, alert_phone, assigned_callcapture_number, number_status, preferred_area_code, business_phone, phone_mode").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       setBiz((bRows?.[0] as BusinessRow) ?? null);
       setCfg((cRows?.[0] as ConfigRow) ?? null);
       setAlertPhone(client?.alert_phone ?? "");
+      setClientRow(client ?? null);
       // If the saved name doesn't match any known voice and isn't empty, treat it as user-edited.
       const savedName = (cRows?.[0] as ConfigRow | undefined)?.assistant_name?.trim() ?? "";
       const matchesVoice = !!savedName && VOICES.some((v) => v.label.toLowerCase() === savedName.toLowerCase());
@@ -408,22 +419,20 @@ export default function Settings() {
               </div>
 
               {phoneMode === "new" && (
-                <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
-                  <div className="space-y-2 max-w-xs">
-                    <Label>Preferred area code</Label>
-                    <Input
-                      inputMode="numeric"
-                      maxLength={3}
-                      placeholder="904"
-                      value={preferredAreaCode}
-                      onChange={(e) => setCfgField("call_rules", { ...callRules, preferred_area_code: e.target.value.replace(/\D/g, "").slice(0, 3) } as ConfigRow["call_rules"])}
-                    />
-                  </div>
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Your CallCapture number</p>
-                    <p className="text-lg font-semibold mt-1">{assignedCallcaptureNumber || "(XXX) XXX-XXXX"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">We'll assign this during setup.</p>
-                  </div>
+                <div className="rounded-xl border border-border bg-secondary/30 p-4">
+                  <PhoneNumberPicker
+                    clientId={clientRow?.id ?? null}
+                    preferredAreaCode={clientRow?.preferred_area_code ?? preferredAreaCode}
+                    onAreaCodeChange={(v) => {
+                      setCfgField("call_rules", { ...callRules, preferred_area_code: v } as ConfigRow["call_rules"]);
+                      setClientRow((c) => c ? { ...c, preferred_area_code: v } : c);
+                    }}
+                    assignedNumber={clientRow?.assigned_callcapture_number ?? null}
+                    numberStatus={clientRow?.number_status ?? null}
+                    onProvisioned={(phone, _sid, status) => {
+                      setClientRow((c) => c ? { ...c, assigned_callcapture_number: phone, number_status: status } : c);
+                    }}
+                  />
                 </div>
               )}
 

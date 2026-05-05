@@ -19,6 +19,8 @@ type Client = {
   subscription_status: string | null;
   alert_phone: string;
   business_name: string;
+  assigned_callcapture_number?: string | null;
+  number_status?: string | null;
 };
 
 type Lead = {
@@ -118,7 +120,7 @@ export default function Dashboard() {
     const fetchClient = async () => {
       let { data } = await supabase
         .from("callcapture_clients")
-        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name")
+        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -127,7 +129,7 @@ export default function Dashboard() {
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
-          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id")
+          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -175,7 +177,17 @@ export default function Dashboard() {
     ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
     : "bg-muted text-muted-foreground";
 
-  const phoneToShow = businessPhone || client?.alert_phone || null;
+  const assignedNumber = client?.assigned_callcapture_number ?? null;
+  const numberStatus = client?.number_status ?? null;
+  const phoneToShow = assignedNumber || businessPhone || client?.alert_phone || null;
+  const numberStatusLabel =
+    numberStatus === "active" ? "Active" :
+    numberStatus === "needs_configuration" ? "Needs Configuration" :
+    numberStatus ? numberStatus : "—";
+  const numberStatusColor =
+    numberStatus === "active" ? "bg-primary/15 text-primary" :
+    numberStatus === "needs_configuration" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" :
+    "bg-muted text-muted-foreground";
 
   return (
     <Layout>
@@ -239,11 +251,20 @@ export default function Dashboard() {
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Call Setup</h2>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/settings">Edit Call Settings</Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/settings">Edit Phone Setup</Link>
+              </Button>
+            </div>
           </div>
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">CallCapture Number</p>
+              <p className="mt-2 font-medium">{assignedNumber ?? <span className="text-muted-foreground">—</span>}</p>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold mt-2 ${numberStatusColor}`}>
+                {numberStatusLabel}
+              </span>
+            </div>
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Phone Number</p>
               <p className="mt-2 font-medium">{phoneToShow ?? <span className="text-muted-foreground">—</span>}</p>

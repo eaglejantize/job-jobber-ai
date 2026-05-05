@@ -18,6 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import PhoneNumberPicker from "@/components/PhoneNumberPicker";
 
 const STEPS = [
   "Business Info",
@@ -230,7 +231,7 @@ export default function Setup() {
 
           {/* Step 2: Phone Setup */}
           {step === 1 && (
-            <PhoneSetupStep state={state} set={set} />
+            <PhoneSetupStep state={state} set={set} clientId={clientId} />
           )}
 
           {/* Step 3: Call Handling */}
@@ -498,12 +499,13 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
 function PhoneSetupStep({
   state,
   set,
+  clientId,
 }: {
   state: WizardState;
   set: <K extends keyof WizardState>(k: K, v: WizardState[K]) => void;
+  clientId: string | null;
 }) {
   const mode = state.phoneMode ?? "new";
-  const placeholderAssigned = state.assignedCallcaptureNumber || "(XXX) XXX-XXXX";
 
   function setMode(m: "new" | "existing" | "test") {
     set("phoneMode", m);
@@ -542,23 +544,18 @@ function PhoneSetupStep({
       {/* Section 2: Dynamic inputs */}
       <div className="rounded-xl border border-border bg-secondary/30 p-4">
         {mode === "new" && (
-          <div className="space-y-4">
-            <div className="space-y-2 max-w-xs">
-              <Label>Preferred area code</Label>
-              <Input
-                inputMode="numeric"
-                maxLength={3}
-                placeholder="904"
-                value={state.preferredAreaCode ?? ""}
-                onChange={(e) => set("preferredAreaCode", e.target.value.replace(/\D/g, "").slice(0, 3))}
-              />
-            </div>
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Your CallCapture number</p>
-              <p className="text-xl font-semibold mt-1">{placeholderAssigned}</p>
-              <p className="text-xs text-muted-foreground mt-1">We'll assign this during setup.</p>
-            </div>
-          </div>
+          <PhoneNumberPicker
+            clientId={clientId}
+            preferredAreaCode={state.preferredAreaCode ?? ""}
+            onAreaCodeChange={(v) => set("preferredAreaCode", v)}
+            assignedNumber={state.assignedCallcaptureNumber || null}
+            numberStatus={(state as unknown as { numberStatus?: string }).numberStatus ?? null}
+            onProvisioned={(phone, _sid, _status) => {
+              set("assignedCallcaptureNumber", phone);
+              set("phone", phone);
+              set("phoneMode", "new");
+            }}
+          />
         )}
 
         {mode === "existing" && (

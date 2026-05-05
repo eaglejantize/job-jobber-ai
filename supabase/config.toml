@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.search-twilio-numbers]
+verify_jwt = false
+
+[functions.provision-twilio-number]
+verify_jwt = false
