@@ -12,6 +12,7 @@ import { Plus, X, Loader2, Phone, PhoneIncoming, Bot, ClipboardList, MessageSqua
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
 import { Link } from "react-router-dom";
 import VoicePicker from "@/components/VoicePicker";
+import PhoneNumberPicker from "@/components/PhoneNumberPicker";
 import { DEFAULT_VOICE_ID, VOICES, getVoiceById, type VoicePersona } from "@/lib/voices";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
