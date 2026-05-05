@@ -115,49 +115,70 @@ export type Database = {
       callcapture_clients: {
         Row: {
           alert_phone: string
+          assigned_callcapture_number: string | null
           business_name: string
+          business_phone: string | null
           created_at: string
           email: string
           id: string
+          number_provisioned_at: string | null
+          number_status: string | null
           owner_name: string
           payment_status: string
+          phone_mode: string | null
+          preferred_area_code: string | null
           setup_status: string
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string | null
+          twilio_phone_number_sid: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
           alert_phone: string
+          assigned_callcapture_number?: string | null
           business_name: string
+          business_phone?: string | null
           created_at?: string
           email: string
           id?: string
+          number_provisioned_at?: string | null
+          number_status?: string | null
           owner_name: string
           payment_status?: string
+          phone_mode?: string | null
+          preferred_area_code?: string | null
           setup_status?: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
           alert_phone?: string
+          assigned_callcapture_number?: string | null
           business_name?: string
+          business_phone?: string | null
           created_at?: string
           email?: string
           id?: string
+          number_provisioned_at?: string | null
+          number_status?: string | null
           owner_name?: string
           payment_status?: string
+          phone_mode?: string | null
+          preferred_area_code?: string | null
           setup_status?: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
         }
