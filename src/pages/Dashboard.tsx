@@ -177,7 +177,17 @@ export default function Dashboard() {
     ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
     : "bg-muted text-muted-foreground";
 
-  const phoneToShow = businessPhone || client?.alert_phone || null;
+  const assignedNumber = client?.assigned_callcapture_number ?? null;
+  const numberStatus = client?.number_status ?? null;
+  const phoneToShow = assignedNumber || businessPhone || client?.alert_phone || null;
+  const numberStatusLabel =
+    numberStatus === "active" ? "Active" :
+    numberStatus === "needs_configuration" ? "Needs Configuration" :
+    numberStatus ? numberStatus : "—";
+  const numberStatusColor =
+    numberStatus === "active" ? "bg-primary/15 text-primary" :
+    numberStatus === "needs_configuration" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" :
+    "bg-muted text-muted-foreground";
 
   return (
     <Layout>
