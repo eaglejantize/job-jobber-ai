@@ -96,11 +96,12 @@ export default function Settings() {
       const [{ data: bRows }, { data: cRows }, { data: client }] = await Promise.all([
         supabase.from("callcapture_businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1),
         supabase.from("callcapture_assistant_configs").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1),
-        supabase.from("callcapture_clients").select("alert_phone").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("callcapture_clients").select("id, alert_phone, assigned_callcapture_number, number_status, preferred_area_code, business_phone, phone_mode").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       setBiz((bRows?.[0] as BusinessRow) ?? null);
       setCfg((cRows?.[0] as ConfigRow) ?? null);
       setAlertPhone(client?.alert_phone ?? "");
+      setClientRow(client ?? null);
       // If the saved name doesn't match any known voice and isn't empty, treat it as user-edited.
       const savedName = (cRows?.[0] as ConfigRow | undefined)?.assistant_name?.trim() ?? "";
       const matchesVoice = !!savedName && VOICES.some((v) => v.label.toLowerCase() === savedName.toLowerCase());
