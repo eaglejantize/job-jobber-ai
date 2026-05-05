@@ -418,22 +418,20 @@ export default function Settings() {
               </div>
 
               {phoneMode === "new" && (
-                <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
-                  <div className="space-y-2 max-w-xs">
-                    <Label>Preferred area code</Label>
-                    <Input
-                      inputMode="numeric"
-                      maxLength={3}
-                      placeholder="904"
-                      value={preferredAreaCode}
-                      onChange={(e) => setCfgField("call_rules", { ...callRules, preferred_area_code: e.target.value.replace(/\D/g, "").slice(0, 3) } as ConfigRow["call_rules"])}
-                    />
-                  </div>
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Your CallCapture number</p>
-                    <p className="text-lg font-semibold mt-1">{assignedCallcaptureNumber || "(XXX) XXX-XXXX"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">We'll assign this during setup.</p>
-                  </div>
+                <div className="rounded-xl border border-border bg-secondary/30 p-4">
+                  <PhoneNumberPicker
+                    clientId={clientRow?.id ?? null}
+                    preferredAreaCode={clientRow?.preferred_area_code ?? preferredAreaCode}
+                    onAreaCodeChange={(v) => {
+                      setCfgField("call_rules", { ...callRules, preferred_area_code: v } as ConfigRow["call_rules"]);
+                      setClientRow((c) => c ? { ...c, preferred_area_code: v } : c);
+                    }}
+                    assignedNumber={clientRow?.assigned_callcapture_number ?? null}
+                    numberStatus={clientRow?.number_status ?? null}
+                    onProvisioned={(phone, _sid, status) => {
+                      setClientRow((c) => c ? { ...c, assigned_callcapture_number: phone, number_status: status } : c);
+                    }}
+                  />
                 </div>
               )}
 
