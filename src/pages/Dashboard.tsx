@@ -251,11 +251,20 @@ export default function Dashboard() {
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Call Setup</h2>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/settings">Edit Call Settings</Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/settings">Edit Phone Setup</Link>
+              </Button>
+            </div>
           </div>
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">CallCapture Number</p>
+              <p className="mt-2 font-medium">{assignedNumber ?? <span className="text-muted-foreground">—</span>}</p>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold mt-2 ${numberStatusColor}`}>
+                {numberStatusLabel}
+              </span>
+            </div>
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Phone Number</p>
               <p className="mt-2 font-medium">{phoneToShow ?? <span className="text-muted-foreground">—</span>}</p>
