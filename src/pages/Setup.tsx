@@ -230,7 +230,7 @@ export default function Setup() {
 
           {/* Step 2: Phone Setup */}
           {step === 1 && (
-            <PhoneSetupStep state={state} set={set} />
+            <PhoneSetupStep state={state} set={set} clientId={clientId} />
           )}
 
           {/* Step 3: Call Handling */}
