@@ -83,6 +83,15 @@ export default function Settings() {
   const [biz, setBiz] = useState<BusinessRow | null>(null);
   const [cfg, setCfg] = useState<ConfigRow | null>(null);
   const [alertPhone, setAlertPhone] = useState("");
+  const [clientRow, setClientRow] = useState<{
+    id: string;
+    alert_phone?: string | null;
+    assigned_callcapture_number?: string | null;
+    number_status?: string | null;
+    preferred_area_code?: string | null;
+    business_phone?: string | null;
+    phone_mode?: string | null;
+  } | null>(null);
   const [customQ, setCustomQ] = useState("");
   const nameManuallyEditedRef = useRef(false);
   const greetingManuallyEditedRef = useRef(false);
