@@ -19,7 +19,7 @@ export default function Pricing() {
       <section className="bg-hero">
         <div className="container py-16 md:py-20 text-center max-w-2xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">One simple plan</h1>
-          <p className="mt-4 text-primary text-lg font-semibold">Pays for itself with 1–2 captured jobs.</p>
+          <p className="mt-4 text-primary text-lg font-semibold">Pays for itself with 1–2 captured consultations.</p>
         </div>
       </section>
 
@@ -27,7 +27,7 @@ export default function Pricing() {
         <div className="max-w-md mx-auto rounded-2xl border-2 border-primary bg-card p-8 shadow-glow">
           <p className="text-xs uppercase tracking-widest text-primary font-semibold">TryCallCapture Pro</p>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-5xl font-bold">$197</span>
+            <span className="text-5xl font-bold">$249</span>
             <span className="text-muted-foreground">/month</span>
           </div>
           <p className="text-sm text-muted-foreground mt-1">+ $99 one-time setup fee</p>

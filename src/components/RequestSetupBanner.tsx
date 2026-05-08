@@ -38,7 +38,7 @@ export default function RequestSetupBanner({
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-12 px-8">
-            <Link to="/start">Get Started — $99 + $197/mo</Link>
+            <Link to="/start">Get Started — $99 + $249/mo</Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="text-base h-12 px-8">
             <Link to="/support">Talk to a human</Link>

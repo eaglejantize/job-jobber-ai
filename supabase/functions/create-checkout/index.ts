@@ -62,7 +62,8 @@ Deno.serve(async (req) => {
           price_data: {
             currency: "usd",
             recurring: { interval: "month" },
-            unit_amount: 19700,
+            // $249/month subscription
+            unit_amount: 24900,
             product_data: {
               name: "CallCapture Pro — Monthly",
               description: "AI receptionist that answers calls 24/7.",
@@ -73,6 +74,7 @@ Deno.serve(async (req) => {
           quantity: 1,
           price_data: {
             currency: "usd",
+            // $99 one-time setup fee
             unit_amount: 9900,
             product_data: {
               name: "CallCapture Setup Fee",
