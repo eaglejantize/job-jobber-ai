@@ -1,42 +1,35 @@
 ## Goal
-Update `src/components/SampleLeadCard.tsx` to display a med-spa lead instead of a home-services lead. Layout, styling, and component structure remain unchanged.
+Update `src/components/SampleConversation.tsx` to display a med spa conversation instead of a home services conversation. Styling, layout, and component structure remain unchanged.
 
-## Exact replacements in `src/components/SampleLeadCard.tsx`
+## Exact replacements in `src/components/SampleConversation.tsx`
 
-### 1. Lucide imports (line 1)
-- From: `import { User, Phone, MapPin, Wrench, AlertCircle, FileText } from "lucide-react";`
-- To: `import { User, Phone, Sparkles, Calendar, UserPlus, FileText } from "lucide-react";`
-
-### 2. Rows array (lines 4-11)
+### 1. `lines` array (lines 1-8)
 - From:
   ```ts
-  const rows = [
-    { icon: User, label: "Name", value: "Sarah Johnson" },
-    { icon: Phone, label: "Phone", value: "(904) 555-0198" },
-    { icon: MapPin, label: "Address", value: "123 Main St, Jacksonville, FL" },
-    { icon: Wrench, label: "Service", value: "Refrigerator not cooling" },
-    { icon: AlertCircle, label: "Urgency", value: "High" },
-    { icon: FileText, label: "Call Summary", value: "Caller needs refrigerator repair and wants a callback today." },
+  const lines: { who: "customer" | "ai"; text: string }[] = [
+    { who: "customer", text: "Hi, I need my refrigerator repaired." },
+    { who: "ai", text: "Sure — happy to help. Can I get your name and the best phone number to reach you?" },
+    { who: "customer", text: "Sarah Johnson, (904) 555-0198." },
+    { who: "ai", text: "Thanks Sarah. What's the address, and what's the fridge doing?" },
+    { who: "customer", text: "123 Main St, Jacksonville. It's not cooling at all." },
+    { who: "ai", text: "Got it. Sounds urgent — I'll send this to the team right now and someone will call you back today." },
   ];
   ```
 - To:
   ```ts
-  const rows = [
-    { icon: User, label: "Name", value: "Sarah Johnson" },
-    { icon: Phone, label: "Phone", value: "(904) 555-0198" },
-    { icon: Sparkles, label: "Treatment Interest", value: "Botox (first-time client)" },
-    { icon: Calendar, label: "Preferred Timing", value: "Within 2 weeks, flexible on day" },
-    { icon: UserPlus, label: "Referral Source", value: "Instagram" },
-    { icon: FileText, label: "Call Summary", value: "New client interested in Botox consultation. Asked about pricing for forehead and crow's feet. Flexible on timing within the next 2 weeks. Found us on Instagram." },
+  const lines: { who: "customer" | "ai"; text: string }[] = [
+    { who: "customer", text: "Hi, I'm interested in getting Botox." },
+    { who: "ai", text: "Great — happy to help. Have you been to us before, or is this your first visit?" },
+    { who: "customer", text: "First time." },
+    { who: "ai", text: "Welcome! Can I get your name and the best number to reach you?" },
+    { who: "customer", text: "Sarah Johnson, (904) 555-0198." },
+    { who: "ai", text: "Thanks Sarah. When were you hoping to come in — this week, the next couple of weeks, or are you flexible?" },
+    { who: "customer", text: "Sometime in the next two weeks would be great." },
+    { who: "ai", text: "Got it. Last question — how did you hear about us?" },
+    { who: "customer", text: "Your Instagram." },
+    { who: "ai", text: "Perfect, I have everything I need. I'll send your info to the team and someone will reach out today to confirm your consultation. Thanks Sarah!" },
   ];
   ```
 
-### What this achieves
-- Removes the home-services fields: **Address**, **Service**, **Urgency**.
-- Adds med-spa fields: **Treatment Interest** (Sparkles), **Preferred Timing** (Calendar), **Referral Source** (UserPlus).
-- Keeps **Name** (User) and **Phone** (Phone) unchanged.
-- Updates **Call Summary** to a med-spa-appropriate description.
-- The card header `"New Lead Captured"` already implies "New Client"; no badge change is needed because there is no separate badge in this component.
-
 ## Scope
-Only `src/components/SampleLeadCard.tsx` is modified. No other files are touched. The card's layout, styling, and component structure remain identical.
+Only `src/components/SampleConversation.tsx` is modified. No other files are touched. The component's styling, layout, animation, and visual treatment remain identical.
