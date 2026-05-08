@@ -1,13 +1,13 @@
-import { User, Phone, MapPin, Wrench, AlertCircle, FileText } from "lucide-react";
+import { User, Phone, Sparkles, Calendar, UserPlus, FileText } from "lucide-react";
 
 export default function SampleLeadCard() {
   const rows = [
     { icon: User, label: "Name", value: "Sarah Johnson" },
     { icon: Phone, label: "Phone", value: "(904) 555-0198" },
-    { icon: MapPin, label: "Address", value: "123 Main St, Jacksonville, FL" },
-    { icon: Wrench, label: "Service", value: "Refrigerator not cooling" },
-    { icon: AlertCircle, label: "Urgency", value: "High" },
-    { icon: FileText, label: "Call Summary", value: "Caller needs refrigerator repair and wants a callback today." },
+    { icon: Sparkles, label: "Treatment Interest", value: "Botox (first-time client)" },
+    { icon: Calendar, label: "Preferred Timing", value: "Within 2 weeks, flexible on day" },
+    { icon: UserPlus, label: "Referral Source", value: "Instagram" },
+    { icon: FileText, label: "Call Summary", value: "New client interested in Botox consultation. Asked about pricing for forehead and crow's feet. Flexible on timing within the next 2 weeks. Found us on Instagram." },
   ];
   return (
     <div className="rounded-2xl border border-border bg-card shadow-card-soft overflow-hidden">
