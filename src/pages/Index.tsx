@@ -30,7 +30,7 @@ const industries = [
 
 const features = [
   "24/7 call answering — never miss another call",
-  "Lead capture (name, phone, address, treatment)",
+  "Lead capture (name, phone, treatment, timing, referral source)",
   "SMS lead notifications",
   "Call forwarding from your existing number",
   "Custom script for your business",
@@ -300,7 +300,7 @@ export default function Index() {
         <div className="max-w-md mx-auto rounded-2xl border-2 border-primary bg-card p-8 shadow-glow">
             <p className="text-xs uppercase tracking-widest text-primary font-semibold">TryCallCapture Pro</p>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-5xl font-bold">$197</span>
+            <span className="text-5xl font-bold">$249</span>
             <span className="text-muted-foreground">/month</span>
           </div>
           <p className="text-sm text-muted-foreground mt-1">+ $99 one-time setup fee</p>
