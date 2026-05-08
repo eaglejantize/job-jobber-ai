@@ -18,19 +18,19 @@ import {
 } from "@/components/ui/accordion";
 
 const industries = [
-  { name: "Appliance Repair", icon: Wrench },
-  { name: "HVAC", icon: Snowflake },
-  { name: "Plumbing", icon: Droplet },
-  { name: "Electrical", icon: Zap },
-  { name: "Locksmiths", icon: KeyRound },
   { name: "Med Spas", icon: Sparkles },
-  { name: "Law Firms", icon: Scale },
-  { name: "Local Service", icon: Building2 },
+  { name: "Aesthetic Clinics", icon: Sparkles },
+  { name: "Wellness Practices", icon: HandHeart },
+  { name: "Skin Care", icon: Droplet },
+  { name: "Laser Clinics", icon: Zap },
+  { name: "IV Therapy", icon: Sparkles },
+  { name: "Cosmetic Surgery", icon: Scale },
+  { name: "Day Spas", icon: Building2 },
 ];
 
 const features = [
   "24/7 call answering — never miss another call",
-  "Lead capture (name, phone, address, job)",
+  "Lead capture (name, phone, address, treatment)",
   "SMS lead notifications",
   "Call forwarding from your existing number",
   "Custom script for your business",
@@ -45,19 +45,19 @@ export default function Index() {
         <div className="container pt-12 pb-8 md:pt-16 md:pb-10 grid lg:grid-cols-2 gap-10 items-center">
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase text-primary mb-4">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Turn missed calls into booked jobs
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Turn missed calls into booked consultations
             </p>
             <h1 className="text-4xl md:text-6xl font-bold leading-[1.05] tracking-tight">
-              Stop Missing Service Calls — <span className="text-primary">Even After Hours</span>
+              Stop Missing Consultation Calls — <span className="text-primary">Even After Hours</span>
             </h1>
             <p className="mt-5 text-lg md:text-2xl font-semibold">
-              Answer every call. Capture details. Get booked jobs.
+              Answer every call. Capture details. Book consultations.
             </p>
             <p className="mt-3 text-base md:text-lg text-primary font-semibold">
-              Every missed call is a lost $150–$500 job.
+              Every missed call is a lost $400–$2,000 consultation.
             </p>
             <p className="mt-2 text-sm md:text-base text-foreground font-semibold">
-              Miss just 2 calls a day = $6,000–$15,000/month lost.
+              Miss just 2 calls a day = $24,000–$120,000/month in lost consultations.
             </p>
             <div className="mt-7 flex flex-col sm:flex-row gap-4">
               <div className="flex flex-col">
@@ -74,7 +74,7 @@ export default function Index() {
               </div>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              Built for appliance repair, HVAC, plumbing, electrical, and local service businesses.
+              Built for med spas, aesthetic clinics, wellness practices, and appointment-based businesses.
             </p>
           </div>
           <div className="lg:pl-8">
@@ -85,7 +85,7 @@ export default function Index() {
           <div className="container py-3 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> No contracts</span>
             <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Live in 24 hours</span>
-            <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Pays for itself with 1–2 jobs</span>
+            <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Pays for itself with 1–2 consultations</span>
           </div>
         </div>
       </section>
@@ -203,7 +203,7 @@ export default function Index() {
         <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
           {[
             { stat: "62%", label: "of calls to small businesses go unanswered" },
-            { stat: "$150–$500", label: "average value of a single service call" },
+            { stat: "$400–$2,000", label: "average value of a single med spa consultation" },
           ].map((s) => (
             <div key={s.stat} className="rounded-2xl border border-border bg-card p-6 text-center shadow-card-soft">
               <p className="text-4xl font-bold text-primary">{s.stat}</p>
@@ -239,7 +239,7 @@ export default function Index() {
       {/* WHO IT'S FOR */}
       <section className="container py-20">
         <div className="text-center max-w-2xl mx-auto mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Built for service businesses</h2>
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Built for med spas</h2>
           <p className="mt-3 text-muted-foreground">If you live or die by the phone, this is for you.</p>
         </div>
         <div className="flex flex-wrap justify-center gap-3">
@@ -280,7 +280,7 @@ export default function Index() {
             ))}
           </ul>
           <p className="mt-6 text-base md:text-lg text-primary font-semibold">
-            You just forward your number and start getting jobs.
+            You just forward your number and start booking consultations.
           </p>
           <div className="mt-8">
             <Button asChild size="lg" className="bg-cta hover:opacity-90 shadow-glow text-base h-14 px-8 font-bold">
@@ -295,7 +295,7 @@ export default function Index() {
       <section className="container py-20">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Simple pricing</h2>
-          <p className="mt-3 text-muted-foreground">One plan. Pays for itself with 1–2 captured jobs.</p>
+          <p className="mt-3 text-muted-foreground">One plan. Pays for itself with 1–2 captured consultations.</p>
         </div>
         <div className="max-w-md mx-auto rounded-2xl border-2 border-primary bg-card p-8 shadow-glow">
             <p className="text-xs uppercase tracking-widest text-primary font-semibold">TryCallCapture Pro</p>
@@ -313,8 +313,8 @@ export default function Index() {
             ))}
           </ul>
           <div className="mt-6 rounded-xl bg-primary/10 border border-primary/30 p-4 space-y-1.5">
-            <p className="text-sm font-semibold">Most customers recover their cost with the first 1–2 calls.</p>
-            <p className="text-sm text-muted-foreground">If you miss even one job per day, this pays for itself fast.</p>
+            <p className="text-sm font-semibold">Most customers recover their cost with the first 1–2 consultations.</p>
+            <p className="text-sm text-muted-foreground">If you miss even one consultation per day, this pays for itself fast.</p>
           </div>
           <Button asChild size="lg" className="w-full mt-6 bg-cta hover:opacity-90 shadow-glow h-12">
             <Link to="/support">Get Set Up in 24 Hours</Link>
@@ -359,7 +359,7 @@ function HearInAction() {
         <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Real call, real flow</p>
         <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Hear CallCapture in Action</h2>
         <p className="mt-4 text-muted-foreground text-lg">
-          Listen to a real-style service call handled by the AI receptionist.
+          Listen to a real-style consultation call handled by the AI receptionist.
         </p>
       </div>
       <div className="max-w-2xl mx-auto rounded-2xl border border-border bg-card p-6 md:p-8 shadow-card-soft">
@@ -385,13 +385,13 @@ function HearInAction() {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-3 text-sm text-foreground/90">
-                <p><span className="font-semibold">Customer:</span> "Hi, my dryer isn't heating."</p>
+                <p><span className="font-semibold">Customer:</span> "Hi, I'd like to book a Botox consultation."</p>
                 <p><span className="font-semibold text-primary">AI Receptionist:</span> "Thanks for calling. I can help with that. Can I get your name?"</p>
                 <p><span className="font-semibold">Customer:</span> "John Smith."</p>
                 <p><span className="font-semibold text-primary">AI Receptionist:</span> "Thanks John. What's the best phone number to reach you?"</p>
                 <p><span className="font-semibold">Customer:</span> "904-555-1234."</p>
-                <p><span className="font-semibold text-primary">AI Receptionist:</span> "Got it. What's the issue with the dryer?"</p>
-                <p><span className="font-semibold">Customer:</span> "It runs but doesn't heat."</p>
+                <p><span className="font-semibold text-primary">AI Receptionist:</span> "Got it. What treatment are you interested in?"</p>
+                <p><span className="font-semibold">Customer:</span> "Botox for forehead lines, and maybe lip filler."</p>
                 <p><span className="font-semibold text-primary">AI Receptionist:</span> "Thanks. I'll send this over so someone can follow up shortly."</p>
               </div>
             </AccordionContent>
