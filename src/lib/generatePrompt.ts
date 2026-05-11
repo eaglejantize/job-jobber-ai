@@ -1,6 +1,13 @@
 import type { WizardState } from "@/lib/wizardSchema";
 import { buildReceptionistSystemPrompt, RECEPTIONIST_FIELDS } from "@/lib/receptionistScript";
 
+function naturalList(items: string[], conjunction: string): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} ${conjunction} ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, ${conjunction} ${items[items.length - 1]}`;
+}
+
 export function generateAssistantPrompt(s: WizardState): string {
   const baseFields = RECEPTIONIST_FIELDS.map((f) => `- ${f}`).join("\n");
   const customFields = s.intakeQuestions
@@ -26,7 +33,22 @@ export function generateAssistantPrompt(s: WizardState): string {
       ? "email"
       : "the team";
 
-  return `${buildReceptionistSystemPrompt(s.businessName)}
+  const ownerCallbackName = s.ownerName?.trim() || "the team";
+  const treatmentsNatural = naturalList((s.primaryTreatments || []).map(t => t.toLowerCase()), "or");
+  const daysNatural = naturalList((s.closedDays || []).map(d => d + "s"), "and");
+
+  let basePrompt = buildReceptionistSystemPrompt(s.businessName, s.industry);
+  basePrompt = basePrompt
+    .replace(/\{\{businessName\}\}/g, s.businessName || "[Business Name]")
+    .replace(/\{\{primaryTreatments_natural\}\}/g, treatmentsNatural)
+    .replace(/\{\{businessHours\}\}/g, s.businessHours || "[Hours]")
+    .replace(/\{\{closedDays_natural\}\}/g, daysNatural)
+    .replace(/\{\{callbackTimeline\}\}/g, s.callbackTimeline || "within 24 hours")
+    .replace(/\{\{ownerCallbackName\}\}/g, ownerCallbackName)
+    .replace(/\{\{timeOfDayGreeting\}\}/g, "today");
+  // {{callerName}} is intentionally left unreplaced — the LLM fills it in dynamically during the call
+
+  return `${basePrompt}
 
 ---
 
