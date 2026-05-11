@@ -32,6 +32,13 @@ const STEPS = [
 const CALL_GOALS = ["Capture leads", "Existing customers", "Info calls"] as const;
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
+const PRIMARY_TREATMENT_OPTIONS = [
+  "Botox", "Filler", "Microneedling", "Laser hair removal", "Laser skin resurfacing",
+  "Hydrafacial", "Body contouring", "Chemical peels", "IPL", "PRP", "Threads",
+  "IV therapy", "Dermaplaning", "B12 injections",
+] as const;
+const CLOSED_DAY_OPTIONS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+const CALLBACK_TIMELINE_OPTIONS = ["today", "within 24 hours", "by tomorrow", "shortly"] as const;
 
 const STEP_KEY = "callcapture.wizard.step";
 
@@ -154,6 +161,9 @@ export default function Setup() {
             transfer_enabled: state.transferEnabled || existingCustomerForward,
             transfer_phone: state.transferPhone || null,
             intake_questions: state.intakeQuestions,
+            primary_treatments: state.primaryTreatments,
+            callback_timeline: state.callbackTimeline,
+            closed_days: state.closedDays,
             call_rules: {
               transferTriggers: state.transferTriggers,
               fallbackAction: state.fallbackAction,
@@ -226,6 +236,23 @@ export default function Setup() {
               <Field label="Service area" placeholder="e.g. Jacksonville + 30 mi" value={state.serviceArea ?? ""} onChange={(v) => set("serviceArea", v)} />
               <Field label="Hours" placeholder="Mon–Fri 8am–6pm" value={state.businessHours ?? ""} onChange={(v) => set("businessHours", v)} />
               <Field label="Business email" type="email" value={state.email} onChange={(v) => set("email", v)} />
+              <div className="md:col-span-2 space-y-2">
+                <Label>Closed days</Label>
+                <div className="grid sm:grid-cols-4 gap-2">
+                  {CLOSED_DAY_OPTIONS.map((d) => (
+                    <CheckRow
+                      key={d}
+                      label={d}
+                      checked={state.closedDays.includes(d)}
+                      onChange={(c) =>
+                        set("closedDays", c
+                          ? [...state.closedDays, d]
+                          : state.closedDays.filter((x) => x !== d))
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -278,6 +305,13 @@ export default function Setup() {
                 value={state.fallbackAction}
                 onChange={(v) => set("fallbackAction", v)}
                 options={FALLBACK_ACTIONS as readonly string[]}
+              />
+
+              <SelectField
+                label="Callback promise"
+                value={state.callbackTimeline}
+                onChange={(v) => set("callbackTimeline", v as WizardState["callbackTimeline"])}
+                options={CALLBACK_TIMELINE_OPTIONS as readonly string[]}
               />
             </div>
           )}
@@ -359,6 +393,26 @@ export default function Setup() {
                         set("transferTriggers", c
                           ? [...state.transferTriggers, t]
                           : state.transferTriggers.filter((x) => x !== t))
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Treatments your spa offers (helps the AI answer service questions naturally)
+                </p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {PRIMARY_TREATMENT_OPTIONS.map((t) => (
+                    <CheckRow
+                      key={t}
+                      label={t}
+                      checked={state.primaryTreatments.includes(t)}
+                      onChange={(c) =>
+                        set("primaryTreatments", c
+                          ? [...state.primaryTreatments, t]
+                          : state.primaryTreatments.filter((x) => x !== t))
                       }
                     />
                   ))}
