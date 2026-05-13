@@ -187,38 +187,64 @@ export type Database = {
       callcapture_leads: {
         Row: {
           address: string | null
+          business_id: string | null
           created_at: string
           id: string
           issue: string | null
           name: string | null
+          new_or_returning: string | null
           phone: string | null
           raw_payload: Json | null
+          referral: string | null
+          summary: string | null
+          timing: string | null
+          treatment: string | null
           type: string | null
           urgency: string | null
         }
         Insert: {
           address?: string | null
+          business_id?: string | null
           created_at?: string
           id?: string
           issue?: string | null
           name?: string | null
+          new_or_returning?: string | null
           phone?: string | null
           raw_payload?: Json | null
+          referral?: string | null
+          summary?: string | null
+          timing?: string | null
+          treatment?: string | null
           type?: string | null
           urgency?: string | null
         }
         Update: {
           address?: string | null
+          business_id?: string | null
           created_at?: string
           id?: string
           issue?: string | null
           name?: string | null
+          new_or_returning?: string | null
           phone?: string | null
           raw_payload?: Json | null
+          referral?: string | null
+          summary?: string | null
+          timing?: string | null
+          treatment?: string | null
           type?: string | null
           urgency?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_businesses"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       callcapture_support_requests: {
         Row: {

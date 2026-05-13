@@ -1,0 +1,88 @@
+We need to update the Lead Inbox to support med spa fields and ensure leads from Vapi calls get written to the database. Three changes needed.
+
+============================================
+CHANGE 1: Database migration — add med spa columns to callcapture_leads
+============================================
+
+Create a new migration file in supabase/migrations/ with the next available timestamp.
+
+Add these columns to callcapture_leads (use IF NOT EXISTS):
+
+- treatment TEXT (nullable) — what treatment the caller wants
+- new_or_returning TEXT (nullable) — "new" or "returning"
+- timing TEXT (nullable) — when they want to come in
+- referral TEXT (nullable) — how they heard about the spa
+- summary TEXT (nullable) — AI-generated call summary
+- business_id UUID REFERENCES callcapture_businesses(id) ON DELETE CASCADE (nullable) — for multi-tenant scoping later
+
+Do NOT drop or rename any existing columns (name, phone, issue, type, urgency, address, raw_payload all stay). The old columns remain for backward compatibility with existing home-services leads.
+
+Add an index on (business_id, created_at DESC) for fast scoped queries.
+
+============================================
+CHANGE 2: Update LeadInbox.tsx to display med spa fields
+============================================
+
+Update src/pages/LeadInbox.tsx:
+
+1. Change the Supabase query to also select: treatment, new_or_returning, timing, referral, summary, business_id
+
+2. Update the table to display these columns in this order:
+   - Name (existing)
+   - Phone (existing)
+   - Treatment (new — from treatment column. If null, fall back to showing the issue column for backward compat with old home-services leads)
+   - Timing (new)
+   - Referral (new)
+   - Summary (new — show first 80 chars truncated with "..." if longer)
+   - Received (existing — relative time from created_at)
+
+3. Remove the "Urgency" and "Issue" columns from the visible table. Keep them in the query for the fallback logic but don't show them as their own columns.
+
+4. If a lead has treatment=null AND issue!=null, show the issue value in the Treatment column (backward compat for old leads).
+
+5. Add a simple urgency badge: if urgency column is truthy, show a small red dot or "Urgent" badge next to the Name.
+
+============================================
+CHANGE 3: Update the send-demo-sms edge function to accept med spa fields
+============================================
+
+In supabase/functions/send-demo-sms/index.ts, update the lead insert to also write the new columns when they're present in the Vapi payload:
+
+- Look for treatment, newOrReturning, timing, referral, summary in the structured data extracted from the Vapi payload (same places it currently looks for name, phone, issue, etc.)
+- Map them to the snake_case DB columns: treatment, new_or_returning, timing, referral, summary
+- Keep the existing field extraction working too — don't break backward compat
+
+Also add a new code path: if the incoming request has a property toolCallId or tool_call_id (indicating it came from a Vapi tool call rather than an end-of-call webhook), extract the fields from the tool call parameters instead of the webhook payload format. The tool call will send parameters matching the extract_customer_info schema: name, phone, treatment, newOrReturning, timing, referral, summary.
+
+============================================
+CHANGE 4: Update Supabase types
+============================================
+
+In src/integrations/supabase/types.ts, add the new columns to the callcapture_leads type:
+- treatment: string | null
+- new_or_returning: string | null
+- timing: string | null
+- referral: string | null
+- summary: string | null
+- business_id: string | null
+
+============================================
+WHAT NOT TO DO
+============================================
+
+- Do NOT modify the RLS policies (separate task)
+- Do NOT modify receptionistScript.ts or generatePrompt.ts
+- Do NOT modify wizardSchema.ts or Setup.tsx
+- Do NOT delete any existing columns from callcapture_leads
+- Do NOT run the migration — just create the file
+- Do NOT run npm install or npm run build
+
+============================================
+WHEN DONE
+============================================
+
+Summarize:
+- Which files you changed and a 1-line description of each
+- The exact migration filename
+- How the send-demo-sms function now handles tool call payloads vs webhook payloads
+- Confirm: "I did NOT modify RLS policies, receptionistScript.ts, generatePrompt.ts, wizardSchema.ts, or Setup.tsx"

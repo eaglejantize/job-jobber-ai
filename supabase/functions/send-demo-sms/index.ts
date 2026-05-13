@@ -14,10 +14,15 @@ const GATEWAY_URL = "https://connector-gateway.lovable.dev/twilio";
 const PayloadSchema = z.object({
   name: z.string().trim().min(1).max(120),
   phone: z.string().trim().min(5).max(25),
-  issue: z.string().trim().min(1).max(800),
+  issue: z.string().trim().min(1).max(800).optional(),
   urgency: z.union([z.boolean(), z.string()]).optional(),
   type: z.string().trim().max(80).optional(),
   address: z.string().trim().max(300).optional(),
+  treatment: z.string().trim().max(300).optional(),
+  new_or_returning: z.string().trim().max(80).optional(),
+  timing: z.string().trim().max(300).optional(),
+  referral: z.string().trim().max(300).optional(),
+  summary: z.string().trim().max(2000).optional(),
 });
 
 function pick<T>(...vals: (T | undefined | null)[]): T | undefined {
@@ -25,6 +30,27 @@ function pick<T>(...vals: (T | undefined | null)[]): T | undefined {
     if (v !== undefined && v !== null && `${v}`.trim() !== "") return v;
   }
   return undefined;
+}
+
+function isToolCall(body: any): boolean {
+  return !!(body?.toolCallId || body?.tool_call_id);
+}
+
+function extractFromToolCall(body: any) {
+  const p = body?.parameters ?? body;
+  return {
+    name: pick<string>(p.name),
+    phone: pick<string>(p.phone),
+    issue: pick<string>(p.issue),
+    urgency: pick<boolean | string>(p.urgency),
+    type: pick<string>(p.type),
+    address: pick<string>(p.address),
+    treatment: pick<string>(p.treatment),
+    new_or_returning: pick<string>(p.newOrReturning, p.new_or_returning),
+    timing: pick<string>(p.timing),
+    referral: pick<string>(p.referral),
+    summary: pick<string>(p.summary),
+  };
 }
 
 function extractFromVapi(body: any) {
@@ -60,6 +86,11 @@ function extractFromVapi(body: any) {
       body?.address,
       m?.customer?.address,
     ),
+    treatment: pick<string>(sd.treatment, body?.treatment),
+    new_or_returning: pick<string>(sd.newOrReturning, sd.new_or_returning, body?.newOrReturning, body?.new_or_returning),
+    timing: pick<string>(sd.timing, body?.timing),
+    referral: pick<string>(sd.referral, body?.referral),
+    summary: pick<string>(sd.summary, m?.analysis?.summary, body?.summary),
   };
 }
 
@@ -103,7 +134,7 @@ serve(async (req) => {
     }
 
     const raw = await req.json().catch(() => ({}));
-    const extracted = extractFromVapi(raw);
+    const extracted = isToolCall(raw) ? extractFromToolCall(raw) : extractFromVapi(raw);
     const parsed = PayloadSchema.safeParse(extracted);
 
     if (!parsed.success) {
@@ -121,7 +152,7 @@ serve(async (req) => {
       );
     }
 
-    const { name, phone, issue, urgency, type, address } = parsed.data;
+    const { name, phone, issue, urgency, type, address, treatment, new_or_returning, timing, referral, summary } = parsed.data;
     const urgent = isUrgent(urgency);
 
     const lines = [
@@ -130,8 +161,13 @@ serve(async (req) => {
       `Phone: ${phone}`,
     ];
     if (type) lines.push(`Type: ${type}`);
+    if (treatment) lines.push(`Treatment: ${treatment}`);
+    if (timing) lines.push(`Timing: ${timing}`);
+    if (new_or_returning) lines.push(`Status: ${new_or_returning}`);
+    if (referral) lines.push(`Heard via: ${referral}`);
     if (urgent) lines.push("⚠️ URGENT");
-    lines.push(`Issue: ${issue}`);
+    if (issue) lines.push(`Issue: ${issue}`);
+    if (summary) lines.push(`Summary: ${summary}`);
     const body = lines.join("\n").slice(0, 1500);
 
     const twilioRes = await fetch(`${GATEWAY_URL}/Messages.json`, {
@@ -170,10 +206,15 @@ serve(async (req) => {
           .insert({
             name,
             phone,
-            issue,
+            issue: issue ?? null,
             type: type ?? null,
             urgency: urgency === undefined || urgency === null ? null : String(urgency),
             address: address ?? null,
+            treatment: treatment ?? null,
+            new_or_returning: new_or_returning ?? null,
+            timing: timing ?? null,
+            referral: referral ?? null,
+            summary: summary ?? null,
             raw_payload: raw,
           })
           .select("id")

@@ -20,6 +20,12 @@ type Lead = {
   issue: string | null;
   urgency: string | null;
   created_at: string;
+  treatment: string | null;
+  new_or_returning: string | null;
+  timing: string | null;
+  referral: string | null;
+  summary: string | null;
+  business_id: string | null;
 };
 
 function isUrgent(value: string | null): boolean {
@@ -51,7 +57,7 @@ export default function LeadInbox() {
     if (!user) return;
     supabase
       .from("callcapture_leads")
-      .select("id, name, phone, issue, urgency, created_at")
+      .select("id, name, phone, issue, urgency, created_at, treatment, new_or_returning, timing, referral, summary, business_id")
       .order("created_at", { ascending: false })
       .limit(200)
       .then(({ data }) => setLeads((data as Lead[]) ?? []));
@@ -91,39 +97,56 @@ export default function LeadInbox() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead>Issue</TableHead>
-                  <TableHead>Urgency</TableHead>
+                  <TableHead>Treatment / Issue</TableHead>
+                  <TableHead>Timing</TableHead>
+                  <TableHead>Referral</TableHead>
+                  <TableHead>Summary</TableHead>
                   <TableHead>Received</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leads.map((lead) => (
+                {leads.map((lead) => {
+                  const treatmentDisplay = lead.treatment ?? lead.issue;
+                  const summaryText = lead.summary
+                    ? lead.summary.length > 80
+                      ? lead.summary.slice(0, 80) + "..."
+                      : lead.summary
+                    : null;
+                  return (
                   <TableRow key={lead.id}>
-                    <TableCell className="font-medium">
-                      {lead.name || <span className="text-muted-foreground">—</span>}
+                    <TableCell className="font-medium whitespace-nowrap">
+                      <span className="flex items-center gap-1.5">
+                        {isUrgent(lead.urgency) && (
+                          <Badge variant="destructive" className="px-1.5 py-0 text-xs">Urgent</Badge>
+                        )}
+                        {lead.name || <span className="text-muted-foreground">—</span>}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {lead.phone || <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="max-w-md">
+                    <TableCell className="max-w-xs">
                       <span className="line-clamp-2 text-sm">
-                        {lead.issue || <span className="text-muted-foreground">—</span>}
+                        {treatmentDisplay || <span className="text-muted-foreground">—</span>}
                       </span>
                     </TableCell>
                     <TableCell>
-                      {lead.urgency ? (
-                        <Badge variant={isUrgent(lead.urgency) ? "destructive" : "secondary"}>
-                          {lead.urgency}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      {lead.timing || <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {lead.referral || <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="max-w-sm">
+                      <span className="text-sm text-muted-foreground">
+                        {summaryText || "—"}
+                      </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       {formatReceived(lead.created_at)}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

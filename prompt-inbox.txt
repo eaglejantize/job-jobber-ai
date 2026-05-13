@@ -1,0 +1,13 @@
+Read these files and summarize what exists. Don't change anything.
+
+1. Look at the callcapture_leads table schema — check supabase/migrations/ for any migration that creates or alters this table. What columns does it have?
+
+2. Read src/pages/LeadInbox.tsx — what columns does it display? What query does it use to fetch leads?
+
+3. Read supabase/functions/send-demo-sms/index.ts — does this function write to callcapture_leads? If so, what fields does it write?
+
+4. Is there any other edge function or code path that writes to callcapture_leads?
+
+5. What is the current RLS policy on callcapture_leads?
+
+Format your answer with clear numbered sections matching the questions above.
