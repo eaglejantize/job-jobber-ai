@@ -20,12 +20,15 @@ export type Database = {
           assistant_name: string | null
           business_id: string
           call_rules: Json | null
+          callback_timeline: string | null
+          closed_days: string[] | null
           created_at: string
           generated_prompt: string | null
           greeting: string | null
           id: string
           intake_questions: Json | null
           notification_settings: Json | null
+          primary_treatments: string[] | null
           tone: string | null
           transfer_enabled: boolean | null
           transfer_phone: string | null
@@ -37,12 +40,15 @@ export type Database = {
           assistant_name?: string | null
           business_id: string
           call_rules?: Json | null
+          callback_timeline?: string | null
+          closed_days?: string[] | null
           created_at?: string
           generated_prompt?: string | null
           greeting?: string | null
           id?: string
           intake_questions?: Json | null
           notification_settings?: Json | null
+          primary_treatments?: string[] | null
           tone?: string | null
           transfer_enabled?: boolean | null
           transfer_phone?: string | null
@@ -54,12 +60,15 @@ export type Database = {
           assistant_name?: string | null
           business_id?: string
           call_rules?: Json | null
+          callback_timeline?: string | null
+          closed_days?: string[] | null
           created_at?: string
           generated_prompt?: string | null
           greeting?: string | null
           id?: string
           intake_questions?: Json | null
           notification_settings?: Json | null
+          primary_treatments?: string[] | null
           tone?: string | null
           transfer_enabled?: boolean | null
           transfer_phone?: string | null
@@ -243,7 +252,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "callcapture_businesses"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       callcapture_support_requests: {
