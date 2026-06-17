@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Phone, Check, ArrowRight, Wrench, Snowflake, Zap, KeyRound, Sparkles, Scale, Building2, Droplet, HandHeart, X } from "lucide-react";
+import { Phone, Check, ArrowRight, HandHeart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Layout from "@/components/Layout";
 import DemoNumberCard from "@/components/DemoNumberCard";
@@ -16,17 +16,6 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
-
-const industries = [
-  { name: "Med Spas", icon: Sparkles },
-  { name: "Aesthetic Clinics", icon: Sparkles },
-  { name: "Wellness Practices", icon: HandHeart },
-  { name: "Skin Care", icon: Droplet },
-  { name: "Laser Clinics", icon: Zap },
-  { name: "IV Therapy", icon: Sparkles },
-  { name: "Cosmetic Surgery", icon: Scale },
-  { name: "Day Spas", icon: Building2 },
-];
 
 const features = [
   "24/7 call answering — never miss another call",
@@ -45,19 +34,13 @@ export default function Index() {
         <div className="container pt-12 pb-8 md:pt-16 md:pb-10 grid lg:grid-cols-2 gap-10 items-center">
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase text-primary mb-4">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Turn missed calls into booked consultations
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Never miss another call
             </p>
             <h1 className="text-4xl md:text-6xl font-bold leading-[1.05] tracking-tight">
-              Stop Missing Consultation Calls — <span className="text-primary">Even After Hours</span>
+              24/7 <span className="text-primary">AI Receptionist</span> for Service Businesses
             </h1>
-            <p className="mt-5 text-lg md:text-2xl font-semibold">
-              Answer every call. Capture details. Book consultations.
-            </p>
-            <p className="mt-3 text-base md:text-lg text-primary font-semibold">
-              Every missed call is a lost $400–$2,000 consultation.
-            </p>
-            <p className="mt-2 text-sm md:text-base text-foreground font-semibold">
-              Miss just 2 calls a day = $24,000–$120,000/month in lost consultations.
+            <p className="mt-5 text-lg md:text-2xl text-muted-foreground">
+              Vektuor answers every call, captures customer details, and notifies you instantly — so you never miss a job.
             </p>
             <div className="mt-7 flex flex-col sm:flex-row gap-4">
               <div className="flex flex-col">
@@ -73,9 +56,6 @@ export default function Index() {
                 <p className="mt-1.5 text-xs text-muted-foreground text-center">We'll handle everything for you</p>
               </div>
             </div>
-            <p className="mt-4 text-xs text-muted-foreground">
-              Built for med spas, aesthetic clinics, wellness practices, and appointment-based businesses.
-            </p>
           </div>
           <div className="lg:pl-8">
             <DemoNumberCard />
@@ -85,7 +65,7 @@ export default function Index() {
           <div className="container py-3 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> No contracts</span>
             <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Live in 24 hours</span>
-            <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Pays for itself with 1–2 consultations</span>
+            <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" /> Cancel anytime</span>
           </div>
         </div>
       </section>
@@ -221,7 +201,7 @@ export default function Index() {
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            "Forward your business number to TryCallCapture",
+            "Forward your business number to Vektuor",
             "We set up your AI receptionist with your script",
             "Calls get answered 24/7 — even after hours",
             "Get new leads sent to your phone instantly",
@@ -238,17 +218,8 @@ export default function Index() {
 
       {/* WHO IT'S FOR */}
       <section className="container py-20">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Built for med spas</h2>
-          <p className="mt-3 text-muted-foreground">If you live or die by the phone, this is for you.</p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-3">
-          {industries.map((i) => (
-            <div key={i.name} className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm">
-              <i.icon className="h-4 w-4 text-primary" />
-              {i.name}
-            </div>
-          ))}
+        <div className="text-center max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Built for service businesses of every size.</h2>
         </div>
       </section>
 
@@ -298,7 +269,7 @@ export default function Index() {
           <p className="mt-3 text-muted-foreground">One plan. Pays for itself with 1–2 captured consultations.</p>
         </div>
         <div className="max-w-md mx-auto rounded-2xl border-2 border-primary bg-card p-8 shadow-glow">
-            <p className="text-xs uppercase tracking-widest text-primary font-semibold">TryCallCapture Pro</p>
+            <p className="text-xs uppercase tracking-widest text-primary font-semibold">Vektuor Pro</p>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-5xl font-bold">$249</span>
             <span className="text-muted-foreground">/month</span>
@@ -357,7 +328,7 @@ function HearInAction() {
     <section className="container py-20">
       <div className="text-center max-w-2xl mx-auto mb-8">
         <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Real call, real flow</p>
-        <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Hear CallCapture in Action</h2>
+        <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Hear Vektuor in Action</h2>
         <p className="mt-4 text-muted-foreground text-lg">
           Listen to a real-style consultation call handled by the AI receptionist.
         </p>
