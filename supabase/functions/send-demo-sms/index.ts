@@ -194,12 +194,19 @@ serve(async (req) => {
 
     // Persist lead (best-effort — never fail the webhook if DB insert fails)
     let leadId: string | undefined;
+    let dbError: { message: string; code?: string; details?: string; hint?: string } | undefined;
     try {
       const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
       const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
           auth: { persistSession: false },
+        });
+        console.log("lead insert attempt", {
+          phone,
+          hasIssue: !!issue,
+          hasSummary: !!summary,
+          isToolCall: isToolCall(raw),
         });
         const { data: inserted, error: insertError } = await supabase
           .from("callcapture_leads")
@@ -220,21 +227,29 @@ serve(async (req) => {
           .select("id")
           .single();
         if (insertError) {
-          console.error("lead insert failed", insertError.message);
+          dbError = {
+            message: insertError.message,
+            code: (insertError as any).code,
+            details: (insertError as any).details,
+            hint: (insertError as any).hint,
+          };
+          console.error("lead insert failed", JSON.stringify(dbError));
         } else {
           leadId = inserted?.id;
           console.log("lead inserted", { id: leadId, phone });
         }
       } else {
         console.error("lead insert skipped: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing");
+        dbError = { message: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing" };
       }
     } catch (dbErr) {
       const msg = dbErr instanceof Error ? dbErr.message : "unknown db error";
       console.error("lead insert threw", msg);
+      dbError = { message: msg };
     }
 
     return new Response(
-      JSON.stringify({ success: true, sid: data.sid, urgent, leadId }),
+      JSON.stringify({ success: true, sid: data.sid, urgent, leadId, dbError }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
