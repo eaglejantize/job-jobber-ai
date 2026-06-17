@@ -589,7 +589,7 @@ function PhoneSetupStep({
           onValueChange={(v) => setMode(v as "new" | "existing" | "test")}
           className="grid gap-2"
         >
-          <PhoneOption value="new" title="Get a new CallCapture number" hint="Recommended" current={mode} />
+          <PhoneOption value="new" title="Get a new Vektuor number" hint="Recommended" current={mode} />
           <PhoneOption value="existing" title="Use my existing business number" hint="Forward missed calls to your AI receptionist" current={mode} />
           <PhoneOption value="test" title="Test mode for now" hint="Use the demo number while setup is being finalized" current={mode} />
         </RadioGroup>

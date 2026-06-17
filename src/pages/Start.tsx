@@ -254,7 +254,7 @@ export default function Start() {
           </form>
 
           <aside className="rounded-2xl border border-primary/30 bg-primary/5 p-6 space-y-4">
-            <h3 className="font-semibold">CallCapture Pro</h3>
+            <h3 className="font-semibold">Vektuor Pro</h3>
             <ul className="space-y-2 text-sm">
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" /> $99 one-time setup</li>
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" /> $197/month after</li>

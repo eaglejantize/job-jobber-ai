@@ -396,7 +396,7 @@ export default function Settings() {
               </div>
               <div className="grid gap-2">
                 {[
-                  { v: "new", title: "Get a new CallCapture number", hint: "Recommended" },
+                  { v: "new", title: "Get a new Vektuor number", hint: "Recommended" },
                   { v: "existing", title: "Use my existing business number", hint: "Forward missed calls to your AI receptionist" },
                   { v: "test", title: "Test mode for now", hint: "Use the demo number while setup is being finalized" },
                 ].map((o) => {
