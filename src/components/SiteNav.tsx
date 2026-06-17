@@ -1,10 +1,9 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Menu } from "lucide-react";
+import { Menu, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import vektuorLogo from "@/assets/vektuor-logo.png";
 
 const links = [
   { to: "/", label: "Home" },
@@ -20,8 +19,11 @@ export default function SiteNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2 font-bold text-lg" aria-label="Vektuor home">
-          <img src={vektuorLogo} alt="Vektuor" className="h-8 w-auto" width={1536} height={1024} />
+        <Link to="/" className="flex items-center gap-2" aria-label="Vektuor home">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-brand text-white shadow-soft">
+            <PhoneCall className="h-4 w-4" />
+          </span>
+          <span className="text-lg font-semibold tracking-tight text-navy">Vektuor</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">
@@ -32,8 +34,8 @@ export default function SiteNav() {
               end={l.to === "/"}
               className={({ isActive }) =>
                 cn(
-                  "text-sm font-medium transition-colors hover:text-foreground",
-                  isActive ? "text-foreground" : "text-muted-foreground",
+                  "text-sm font-medium transition-colors hover:text-navy",
+                  isActive ? "text-navy" : "text-ink",
                 )
               }
             >
@@ -44,19 +46,19 @@ export default function SiteNav() {
 
         <div className="hidden md:flex items-center gap-3">
           {user ? (
-            <Button onClick={() => navigate("/dashboard")} className="bg-cta hover:opacity-90 shadow-glow">
+            <Button onClick={() => navigate("/dashboard")} className="bg-navy hover:bg-navy-deep text-white rounded-xl">
               Dashboard
             </Button>
           ) : (
             <>
               <Link
                 to="/login"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                className="text-sm font-medium text-ink hover:text-navy transition-colors"
               >
-                Login
+                Sign in
               </Link>
-              <Button onClick={() => navigate("/start")} className="bg-cta hover:opacity-90 shadow-glow">
-                Get Started
+              <Button onClick={() => navigate("/auth")} className="bg-navy hover:bg-navy-deep text-white rounded-xl">
+                Start Free Trial
               </Button>
             </>
           )}
@@ -71,7 +73,7 @@ export default function SiteNav() {
         </button>
       </div>
       {open && (
-        <div className="md:hidden border-t border-border bg-card">
+        <div className="md:hidden border-t border-border bg-background">
           <div className="container py-3 flex flex-col gap-2">
             {links.map((l) => (
               <NavLink
@@ -82,7 +84,7 @@ export default function SiteNav() {
                 className={({ isActive }) =>
                   cn(
                     "py-2 text-sm",
-                    isActive ? "text-foreground" : "text-muted-foreground",
+                    isActive ? "text-navy" : "text-ink",
                   )
                 }
               >
@@ -92,7 +94,7 @@ export default function SiteNav() {
             {user ? (
               <Button
                 onClick={() => { setOpen(false); navigate("/dashboard"); }}
-                className="bg-cta hover:opacity-90 shadow-glow mt-2"
+                className="bg-navy hover:bg-navy-deep text-white rounded-xl mt-2"
               >
                 Dashboard
               </Button>
@@ -101,15 +103,15 @@ export default function SiteNav() {
                 <NavLink
                   to="/login"
                   onClick={() => setOpen(false)}
-                  className="py-2 text-sm font-medium text-foreground"
+                  className="py-2 text-sm font-medium text-navy"
                 >
-                  Login
+                  Sign in
                 </NavLink>
                 <Button
-                  onClick={() => { setOpen(false); navigate("/start"); }}
-                  className="bg-cta hover:opacity-90 shadow-glow mt-2"
+                  onClick={() => { setOpen(false); navigate("/auth"); }}
+                  className="bg-navy hover:bg-navy-deep text-white rounded-xl mt-2"
                 >
-                  Get Started
+                  Start Free Trial
                 </Button>
               </>
             )}
