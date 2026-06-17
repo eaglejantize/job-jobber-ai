@@ -85,7 +85,7 @@ export default function PhoneNumberPicker({
       const d = data as any;
       if (d?.error) throw new Error(d.error);
       onProvisioned(d.phone_number, d.sid, d.status);
-      toast({ title: "Number reserved", description: d.message ?? "Your CallCapture number is set." });
+      toast({ title: "Number reserved", description: d.message ?? "Your Vektuor number is set." });
       setResults(null);
       setSelected(null);
     } catch (e) {
@@ -105,7 +105,7 @@ export default function PhoneNumberPicker({
           <div className="flex items-start gap-3">
             <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
             <div className="flex-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Your CallCapture number</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Your Vektuor number</p>
               <p className="text-xl font-semibold mt-1">{formatUS(assignedNumber)}</p>
               <div className="mt-2">
                 <Badge variant={isActive ? "default" : "secondary"}>

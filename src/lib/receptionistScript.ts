@@ -1,4 +1,4 @@
-// Single source of truth for the CallCapture AI receptionist.
+// Single source of truth for the Vektuor AI receptionist.
 // Used by both the Setup wizard prompt generator and the homepage display.
 
 export const RECEPTIONIST_GOALS = [
@@ -69,7 +69,7 @@ export const EXISTING_CUSTOMER_FIELDS = [
 
 export function buildHomeServicesPrompt(businessName?: string): string {
   const biz = businessName?.trim() || "[Business Name]";
-  return `You are the CallCapture AI Receptionist for ${biz}, a local service business.
+  return `You are the Vektuor AI Receptionist for ${biz}, a local service business.
 
 Your job is to answer calls, capture customer information, and ensure no job opportunity is missed.
 

@@ -1,9 +1,10 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Phone, Menu, LogOut } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import vektuorLogo from "@/assets/vektuor-logo.png";
 
 const links = [
   { to: "/dashboard", label: "Dashboard" },
@@ -23,11 +24,8 @@ export default function AppNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
-        <Link to="/dashboard" className="flex items-center gap-2 font-bold text-lg">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-cta text-primary-foreground shadow-glow">
-            <Phone className="h-4 w-4" />
-          </span>
-          <span>TryCallCapture</span>
+        <Link to="/dashboard" className="flex items-center gap-2 font-bold text-lg" aria-label="Vektuor home">
+          <img src={vektuorLogo} alt="Vektuor" className="h-8 w-auto" width={1536} height={1024} />
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">

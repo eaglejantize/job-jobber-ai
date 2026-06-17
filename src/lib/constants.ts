@@ -7,13 +7,10 @@ export const INDUSTRIES = [
   "HVAC",
   "Plumbing",
   "Electrical",
-  "Locksmith",
-  "Med Spa",
   "Law Firm",
-  "Roofing",
-  "Garage Door",
-  "Pest Control",
-  "Other Local Service",
+  "Med Spa",
+  "General Contractor",
+  "Other",
 ];
 
 export const TONES = ["Friendly", "Professional", "Direct", "Warm"] as const;

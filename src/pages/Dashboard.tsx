@@ -259,7 +259,7 @@ export default function Dashboard() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">CallCapture Number</p>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Vektuor Number</p>
               <p className="mt-2 font-medium">{assignedNumber ?? <span className="text-muted-foreground">—</span>}</p>
               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold mt-2 ${numberStatusColor}`}>
                 {numberStatusLabel}

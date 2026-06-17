@@ -118,11 +118,11 @@ If the caller is upset, in an emergency, or repeatedly asks for a human, transfe
 `;
 }
 
-export const VAPI_INSTRUCTIONS = `# Connect CallCapture to Vapi
+export const VAPI_INSTRUCTIONS = `# Connect Vektuor to Vapi
 
 1. Create a free account at vapi.ai (or sign in).
 2. In the dashboard, click **Assistants → New Assistant**.
-3. Paste your CallCapture instructions into the **System Prompt** field.
+3. Paste your Vektuor instructions into the **System Prompt** field.
 4. Pick a voice (we recommend a clear, friendly voice — e.g. ElevenLabs "Sarah" or "Adam").
 5. Set **Max call duration** to 120 seconds. Calls should be short and natural.
 6. Set the **First message** to: "What can I help you with today?"
