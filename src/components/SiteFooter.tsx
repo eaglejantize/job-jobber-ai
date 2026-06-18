@@ -16,6 +16,7 @@ export default function SiteFooter() {
           <Link to="/pricing" className="hover:text-navy">Pricing</Link>
           <Link to="/demo" className="hover:text-navy">Demo</Link>
           <Link to="/support" className="hover:text-navy">Support</Link>
+          <Link to="/trust" className="hover:text-navy">Trust</Link>
         </div>
       </div>
     </footer>
