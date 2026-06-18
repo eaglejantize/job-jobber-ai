@@ -11,6 +11,7 @@ import Settings from "./pages/Settings.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Support from "./pages/Support.tsx";
 import Start from "./pages/Start.tsx";
+import Signup from "./pages/Signup.tsx";
 import Confirm from "./pages/Confirm.tsx";
 import Auth from "./pages/Auth.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/demo" element={<RedirectIfAuthed><Demo /></RedirectIfAuthed>} />
           <Route path="/pricing" element={<RedirectIfAuthed><Pricing /></RedirectIfAuthed>} />
           <Route path="/start" element={<Start />} />
+          <Route path="/signup" element={<RedirectIfAuthed><Signup /></RedirectIfAuthed>} />
           <Route path="/confirm" element={<Confirm />} />
           <Route path="/setup" element={<RequireAuth><Setup /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />

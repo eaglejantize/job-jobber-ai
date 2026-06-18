@@ -33,7 +33,57 @@ Deno.serve(async (req) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const clientId = session.metadata?.client_id ?? null;
+        const meta = session.metadata ?? {};
+        const flow = meta.flow ?? null;
+
+        // ---------- NEW signup flow: create the tenant's business row ----------
+        if (flow === "signup") {
+          const userId = meta.user_id ?? null;
+          const businessName = meta.business_name ?? null;
+          const industry = meta.industry ?? null;
+          if (!userId || !businessName) {
+            console.error("signup checkout missing metadata", { userId, businessName });
+            break;
+          }
+          // Upsert by user_id so retries / multiple completions don't duplicate
+          const { data: existing, error: selErr } = await supabase
+            .from("callcapture_businesses")
+            .select("id")
+            .eq("user_id", userId)
+            .limit(1)
+            .maybeSingle();
+          if (selErr) console.error("business lookup failed", selErr);
+
+          const payload = {
+            user_id: userId,
+            business_name: businessName,
+            industry,
+            email: session.customer_details?.email ?? session.customer_email ?? null,
+            subscription_status: "active",
+            stripe_customer_id: (session.customer as string) ?? null,
+            stripe_subscription_id: (session.subscription as string) ?? null,
+            stripe_checkout_session_id: session.id,
+          };
+
+          if (existing?.id) {
+            const { error } = await supabase
+              .from("callcapture_businesses")
+              .update(payload)
+              .eq("id", existing.id);
+            if (error) console.error("business update failed", error);
+            else console.log("business activated (update)", { userId, id: existing.id });
+          } else {
+            const { error } = await supabase
+              .from("callcapture_businesses")
+              .insert(payload);
+            if (error) console.error("business insert failed", error);
+            else console.log("business activated (insert)", { userId });
+          }
+          break;
+        }
+
+        // ---------- LEGACY clientId flow (unchanged) ----------
+        const clientId = meta.client_id ?? null;
         const email =
           session.customer_details?.email ?? session.customer_email ?? null;
         const update = {
@@ -63,11 +113,18 @@ Deno.serve(async (req) => {
           : status === "past_due" || status === "unpaid" ? "past_due"
           : status === "canceled" || status === "incomplete_expired" ? "canceled"
           : "inactive";
+        // Legacy clients table
         const { error } = await supabase
           .from("callcapture_clients")
           .update({ payment_status, subscription_status: status })
           .eq("stripe_subscription_id", sub.id);
         if (error) console.error("sub update failed", error);
+        // New businesses table
+        const { error: bizErr } = await supabase
+          .from("callcapture_businesses")
+          .update({ subscription_status: status })
+          .eq("stripe_subscription_id", sub.id);
+        if (bizErr) console.error("business sub update failed", bizErr);
         break;
       }
       case "customer.subscription.deleted": {
@@ -77,6 +134,11 @@ Deno.serve(async (req) => {
           .update({ payment_status: "canceled", subscription_status: "canceled" })
           .eq("stripe_subscription_id", sub.id);
         if (error) console.error("sub delete update failed", error);
+        const { error: bizErr } = await supabase
+          .from("callcapture_businesses")
+          .update({ subscription_status: "canceled" })
+          .eq("stripe_subscription_id", sub.id);
+        if (bizErr) console.error("business sub delete update failed", bizErr);
         break;
       }
       default:

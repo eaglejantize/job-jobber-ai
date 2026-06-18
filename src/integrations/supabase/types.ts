@@ -95,6 +95,11 @@ export type Database = {
           industry: string | null
           phone: string | null
           service_area: string | null
+          stripe_checkout_session_id: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_status: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -106,6 +111,11 @@ export type Database = {
           industry?: string | null
           phone?: string | null
           service_area?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -117,6 +127,11 @@ export type Database = {
           industry?: string | null
           phone?: string | null
           service_area?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

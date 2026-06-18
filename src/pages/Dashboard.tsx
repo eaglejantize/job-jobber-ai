@@ -47,6 +47,7 @@ export default function Dashboard() {
   const [params, setParams] = useSearchParams();
   const [client, setClient] = useState<Client | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
+  const [businessExists, setBusinessExists] = useState<boolean | null>(null);
   const [hasConfig, setHasConfig] = useState(false);
   const [configFetched, setConfigFetched] = useState(false);
   const [voiceLabel, setVoiceLabel] = useState<string | null>(null);
@@ -98,12 +99,37 @@ export default function Dashboard() {
 
     void supabase
       .from("callcapture_businesses")
-      .select("phone")
+      .select("id, phone, subscription_status")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => { setBusinessPhone(data?.phone ?? null); });
+      .then(({ data }) => {
+        setBusinessPhone(data?.phone ?? null);
+        setBusinessExists(!!data?.id);
+      });
+
+    // If we just returned from checkout but the webhook hasn't created the
+    // business row yet, poll briefly so the page reflects it without a refresh.
+    if (params.get("checkout") === "success") {
+      let tries = 0;
+      const poll = async () => {
+        if (tries++ >= 15) return;
+        const { data } = await supabase
+          .from("callcapture_businesses")
+          .select("id, phone, subscription_status")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle();
+        if (data?.id) {
+          setBusinessPhone(data.phone ?? null);
+          setBusinessExists(true);
+        } else {
+          setTimeout(poll, 2000);
+        }
+      };
+      void poll();
+    }
 
     void supabase
       .from("callcapture_leads")
@@ -164,6 +190,37 @@ export default function Dashboard() {
 
   if (loading) return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
   if (!user) return <Navigate to="/auth" replace />;
+
+  // Tenant has signed up + paid but the webhook hasn't created their business
+  // row yet (or they haven't paid). Show a "finalizing" screen instead of an
+  // empty dashboard. Only triggers when there's also no legacy client row.
+  if (businessExists === false && client === null) {
+    const justPaid = params.get("checkout") === "success";
+    return (
+      <Layout>
+        <section className="container py-20 max-w-2xl">
+          <div className="rounded-2xl border border-border bg-card p-8 shadow-card-soft text-center">
+            <Loader2 className="h-8 w-8 text-primary mx-auto mb-4 animate-spin" />
+            <h1 className="text-2xl font-bold">
+              {justPaid ? "Finalizing your account…" : "Almost there"}
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              {justPaid
+                ? "We're activating your subscription. This page will refresh automatically."
+                : "Your account doesn't have an active subscription yet. Complete checkout to get started."}
+            </p>
+            {!justPaid && (
+              <div className="mt-6">
+                <Button asChild className="bg-cta hover:opacity-90 shadow-glow">
+                  <Link to="/signup">Complete signup</Link>
+                </Button>
+              </div>
+            )}
+          </div>
+        </section>
+      </Layout>
+    );
+  }
 
   const paymentActive = (client?.payment_status ?? "").toLowerCase() === "active";
   const status: string = client?.setup_status
