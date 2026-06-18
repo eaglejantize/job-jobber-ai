@@ -151,9 +151,12 @@ export default function Auth() {
                 </Button>
                 <p className="text-sm text-center text-muted-foreground">
                   Don't have an account?{" "}
-                  <Link to="/start" className="font-medium text-foreground hover:underline">
+                  <Link to="/start" state={{ prefill: {} }} className="font-medium text-foreground hover:underline">
                     Create account
                   </Link>
+                </p>
+                <p className="text-xs text-center text-muted-foreground">
+                  Need a separate sub-account? Use a different email address when creating it.
                 </p>
               </form>
             </>

@@ -1,35 +1,38 @@
-## Root cause
+## Problem
 
-`public.callcapture_leads` has **zero GRANTs** in `information_schema.role_table_grants` — not for `service_role`, `authenticated`, or `anon`. The edge function uses the service role key to insert, but PostgREST/Postgres rejects the write because the role has no table-level privilege. The insert silently fails and only the SMS goes through, which matches what we see: 1 manually-inserted test row, no rows from Vapi.
+Signup is failing silently from the user's perspective. Auth logs show two errors for `nfloridaallstar@gmail.com`:
+- `POST /signup → 422 user_already_exists`
+- `POST /token → 400 invalid_credentials` (fallback sign-in with the entered password fails)
 
-A secondary problem: the current `console.error("lead insert failed", insertError.message)` drops the Postgres `code`, `details`, and `hint`, so failures look like generic strings in the logs.
+`Start.tsx` then redirects to `/login?email=…` with only a generic toast, so it looks like "I can't create an account." Each auth user must have a unique email — to make a separate sub-account you need a different email.
 
-## Fix
+No data, RLS, or tenant-isolation changes are required. Each `callcapture_clients` row is already scoped by `user_id` with RLS, so a new auth user = a fully isolated tenant.
 
-### 1. Migration — add Data API grants on `callcapture_leads`
+## Fix (frontend only)
 
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.callcapture_leads TO authenticated;
-GRANT ALL ON public.callcapture_leads TO service_role;
-```
+Update `src/pages/Start.tsx` signup error handling:
 
-No `anon` grant (no anon-facing policy). RLS stays as-is — service_role bypasses it; the existing `authenticated can read leads` policy keeps inbox reads working.
+1. When `signUp` returns `user_already_exists`, do NOT silently attempt sign-in with the typed password. Instead show a clear dialog/toast:
+   > "An account already exists for **{email}**. To create a separate sub-account, use a different email address (e.g. `you+business2@gmail.com`). Or sign in to your existing account."
+   Provide two buttons: **Use a different email** (clears the email field, keeps other fields, stays on `/start`) and **Sign in instead** (navigates to `/login?email=…`).
+2. Keep the existing "link prior anon client row by email" path only when the signup actually succeeded — never auto-claim another user's client row.
+3. Surface other `signUp` errors verbatim in the toast (network, weak password, etc.) instead of swallowing them.
 
-### 2. Edge function — better error logging in `supabase/functions/send-demo-sms/index.ts`
+Update `src/pages/Auth.tsx` (login page) to add a small "Create a new account" link that routes to `/start` with no email prefill, so the user isn't stuck on the login screen with a prefilled email they don't want to reuse.
 
-In the lead-insert block:
+## Tenant isolation note (no change needed, just confirming)
 
-- Log full error object including `message`, `code`, `details`, `hint`, plus the row payload keys, so a future failure is debuggable from `edge_function_logs`.
-- Log a one-line `"lead insert attempt"` before the call with `{ phone, hasIssue, hasSummary, isToolCall }` so we can confirm the branch ran.
-- Keep best-effort behavior (do not fail the webhook on DB error).
-- Surface `leadId` and an `insertError` summary in the JSON response (already returns `leadId`; add `dbError` when present) so curl tests show DB status without needing log access.
+- `callcapture_clients`, `callcapture_businesses`, `callcapture_assistant_configs`, `callcapture_leads` are all keyed off `user_id` / `client_id` with RLS using `auth.uid()`.
+- A second auth user created with a different email will see only their own rows. No cross-tenant leakage.
+- Service-role edge functions (Vapi webhook, Stripe webhook) continue to write per-business and remain unaffected.
 
-No schema/business logic changes beyond the grants. No changes to extraction, SMS sending, or the leads UI.
+## What this does NOT change
 
-## Verification
+- No DB migrations, no RLS edits, no edge function edits.
+- No multi-business-under-one-login feature (you said separate accounts with separate emails).
+- Existing user `nfloridaallstar@gmail.com` and their data stay intact.
 
-1. Run migration; re-check `information_schema.role_table_grants` shows the new rows.
-2. `curl` the deployed function with a valid `x-webhook-secret` and a sample Vapi tool-call payload; expect 200 with `leadId` populated.
-3. `SELECT … FROM callcapture_leads ORDER BY created_at DESC LIMIT 5` — new row present.
-4. Check `edge_function_logs` for `"lead insert attempt"` and the absence of `"lead insert failed"`.
-5. Open `/leads` in the app — new row visible.
+## Files touched
+
+- `src/pages/Start.tsx` — replace the `alreadyExists` branch with a clear "use a different email / sign in" UX; stop attempting silent sign-in.
+- `src/pages/Auth.tsx` — add a "Create a new account" link that goes to `/start` without prefill.
