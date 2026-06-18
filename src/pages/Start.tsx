@@ -97,24 +97,26 @@ export default function Start() {
         const msg = signUpRes.error.message?.toLowerCase() ?? "";
         const alreadyExists = msg.includes("registered") || msg.includes("already") || msg.includes("exists");
         if (alreadyExists) {
-          // Try sign-in with the entered password.
-          const signInRes = await supabase.auth.signInWithPassword({
-            email: data.email,
-            password: data.password,
+          // Each sub-account needs its own email. Do NOT silently sign in or
+          // claim another user's client row — that would break tenant isolation.
+          setSubmitting(false);
+          setEmail("");
+          setErrors({ email: "This email already has an account. Use a different email for a new sub-account." });
+          toast({
+            title: "Account already exists",
+            description:
+              `An account already exists for ${data.email}. To create a separate sub-account, use a different email (e.g. you+business2@gmail.com). Or sign in to your existing account.`,
+            variant: "destructive",
           });
-          if (signInRes.error) {
-            setSubmitting(false);
-            toast({
-              title: "Account already exists",
-              description: "Use the login page to sign in, or use a different email.",
-              variant: "destructive",
-            });
-            navigate(`/login?email=${encodeURIComponent(data.email)}`);
-            return;
-          }
-          userId = signInRes.data.user?.id ?? null;
+          return;
         } else {
-          throw signUpRes.error;
+          setSubmitting(false);
+          toast({
+            title: "Couldn't create account",
+            description: signUpRes.error.message,
+            variant: "destructive",
+          });
+          return;
         }
       } else {
         userId = signUpRes.data.user?.id ?? null;
