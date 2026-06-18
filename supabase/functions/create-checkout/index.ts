@@ -112,6 +112,19 @@ Deno.serve(async (req) => {
     if (!parsed.success) return json({ error: "Invalid body" }, 400);
     const { clientId } = parsed.data;
 
+    // Require auth on legacy flow and verify ownership of the client record.
+    const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return json({ error: "Missing Authorization header" }, 401);
+    }
+    const legacyToken = authHeader.slice("Bearer ".length);
+    const { data: legacyUserData, error: legacyUserErr } = await supabase.auth.getUser(legacyToken);
+    if (legacyUserErr || !legacyUserData.user) {
+      console.error("legacy auth.getUser failed", legacyUserErr);
+      return json({ error: "Invalid session" }, 401);
+    }
+    const legacyUser = legacyUserData.user;
+
     const { data: client, error: clientErr } = await supabase
       .from("callcapture_clients")
       .select("*")
@@ -120,6 +133,15 @@ Deno.serve(async (req) => {
     if (clientErr || !client) {
       console.error("client lookup failed", clientErr);
       return json({ error: "Client not found" }, 404);
+    }
+
+    // Only the owner of the client record (or an unowned record matching their email) can checkout.
+    const ownsById = client.user_id && client.user_id === legacyUser.id;
+    const ownsByEmail = !client.user_id && client.email && legacyUser.email &&
+      client.email.toLowerCase() === legacyUser.email.toLowerCase();
+    if (!ownsById && !ownsByEmail) {
+      console.warn("legacy checkout forbidden", { clientId, userId: legacyUser.id });
+      return json({ error: "Forbidden" }, 403);
     }
 
     // Reuse customer if we already have one

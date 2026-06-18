@@ -143,7 +143,6 @@ serve(async (req) => {
         JSON.stringify({
           error: "Invalid payload",
           fields: parsed.error.flatten().fieldErrors,
-          received: extracted,
         }),
         {
           status: 400,
@@ -194,7 +193,7 @@ serve(async (req) => {
 
     // Persist lead (best-effort — never fail the webhook if DB insert fails)
     let leadId: string | undefined;
-    let dbError: { message: string; code?: string; details?: string; hint?: string } | undefined;
+    let dbSaved = false;
     try {
       const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
       const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -227,7 +226,7 @@ serve(async (req) => {
           .select("id")
           .single();
         if (insertError) {
-          dbError = {
+          const dbError = {
             message: insertError.message,
             code: (insertError as any).code,
             details: (insertError as any).details,
@@ -236,20 +235,19 @@ serve(async (req) => {
           console.error("lead insert failed", JSON.stringify(dbError));
         } else {
           leadId = inserted?.id;
+          dbSaved = true;
           console.log("lead inserted", { id: leadId, phone });
         }
       } else {
         console.error("lead insert skipped: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing");
-        dbError = { message: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing" };
       }
     } catch (dbErr) {
       const msg = dbErr instanceof Error ? dbErr.message : "unknown db error";
       console.error("lead insert threw", msg);
-      dbError = { message: msg };
     }
 
     return new Response(
-      JSON.stringify({ success: true, sid: data.sid, urgent, leadId, dbError }),
+      JSON.stringify({ success: true, sid: data.sid, urgent, leadId, dbSaved }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
