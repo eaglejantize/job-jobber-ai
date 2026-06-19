@@ -2,17 +2,26 @@ import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
+import { INDUSTRIES, INDUSTRY_VALUES, industryLabel } from "@/lib/industries";
 
 const schema = z
   .object({
     owner_name: z.string().trim().min(1, "Required").max(120),
     business_name: z.string().trim().min(1, "Required").max(160),
+    industry: z.enum(INDUSTRY_VALUES, { errorMap: () => ({ message: "Select your industry" }) }),
     email: z.string().trim().email("Enter a valid email").max(160),
     alert_phone: z.string().trim().min(7, "Enter a phone number").max(30),
     password: z.string().min(8, "At least 8 characters").max(72),
@@ -39,6 +48,7 @@ export default function Start() {
 
   const [owner_name, setOwner] = useState(prefill.owner_name ?? "");
   const [business_name, setBiz] = useState(prefill.business_name ?? "");
+  const [industry, setIndustry] = useState<string>(prefill.industry ?? "");
   const [email, setEmail] = useState(prefill.email ?? "");
   const [alert_phone, setPhone] = useState(prefill.alert_phone ?? "");
   const [password, setPassword] = useState("");
@@ -89,7 +99,7 @@ export default function Start() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (cooldownUntil && Date.now() < cooldownUntil) return;
-    const parsed = schema.safeParse({ owner_name, business_name, email, alert_phone, password, confirm_password });
+    const parsed = schema.safeParse({ owner_name, business_name, industry, email, alert_phone, password, confirm_password });
     if (!parsed.success) {
       const f: Record<string, string> = {};
       parsed.error.issues.forEach((i) => { f[i.path[0] as string] = i.message; });
@@ -216,15 +226,24 @@ export default function Start() {
             business_name: data.business_name,
             email: data.email,
             alert_phone: data.alert_phone,
+            industry: data.industry,
             setup_status: "Payment Pending",
             payment_status: "pending",
           });
         if (insErr) throw insErr;
       }
 
+      // Also persist industry on the existing branch
+      if (existing) {
+        await supabase
+          .from("callcapture_clients")
+          .update({ industry: data.industry })
+          .eq("id", existing.id);
+      }
+
       // 3. Stripe checkout.
       const { data: checkout, error: fnErr } = await supabase.functions.invoke("create-checkout", {
-        body: { clientId },
+        body: { clientId, industry: data.industry },
       });
       if (fnErr || !checkout?.url) throw fnErr ?? new Error("Could not start checkout");
 
@@ -263,6 +282,18 @@ export default function Start() {
             </Field>
             <Field label="Business name" error={errors.business_name}>
               <Input value={business_name} onChange={(e) => setBiz(e.target.value)} autoComplete="organization" required />
+            </Field>
+            <Field label="Your industry" error={errors.industry}>
+              <Select value={industry} onValueChange={setIndustry}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your industry" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INDUSTRIES.map((i) => (
+                    <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field label="Email" error={errors.email}>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
@@ -322,6 +353,9 @@ export default function Start() {
 
           <aside className="rounded-2xl border border-primary/30 bg-primary/5 p-6 space-y-4">
             <h3 className="font-semibold">Vektuor Pro</h3>
+            <p className="text-xs text-muted-foreground">
+              Built for {industryLabel(industry) ?? "service businesses"}
+            </p>
             <ul className="space-y-2 text-sm">
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" /> $99 one-time setup</li>
               <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" /> $197/month after</li>
