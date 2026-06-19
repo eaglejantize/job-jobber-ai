@@ -45,6 +45,21 @@ export default function Start() {
   const [confirm_password, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+  const [emailTaken, setEmailTaken] = useState(false);
+
+  useEffect(() => {
+    if (!cooldownUntil) return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setCooldownLeft(left);
+      if (left <= 0) setCooldownUntil(null);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
 
   useEffect(() => {
     if (canceled) {
@@ -73,6 +88,7 @@ export default function Start() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (cooldownUntil && Date.now() < cooldownUntil) return;
     const parsed = schema.safeParse({ owner_name, business_name, email, alert_phone, password, confirm_password });
     if (!parsed.success) {
       const f: Record<string, string> = {};
@@ -81,6 +97,7 @@ export default function Start() {
       return;
     }
     setErrors({});
+    setEmailTaken(false);
     setSubmitting(true);
     try {
       const data = parsed.data;
@@ -94,13 +111,35 @@ export default function Start() {
       });
 
       if (signUpRes.error) {
-        const msg = signUpRes.error.message?.toLowerCase() ?? "";
-        const alreadyExists = msg.includes("registered") || msg.includes("already") || msg.includes("exists");
+        const raw = signUpRes.error.message ?? "";
+        const lower = raw.toLowerCase();
+        const status = (signUpRes.error as { status?: number }).status;
+        const rateLimited =
+          status === 429 ||
+          lower.includes("for security purposes") ||
+          lower.includes("rate limit") ||
+          /after\s+\d+\s*seconds?/.test(lower);
+        const alreadyExists =
+          lower.includes("registered") || lower.includes("already") || lower.includes("exists");
+
+        if (rateLimited) {
+          const secMatch = lower.match(/after\s+(\d+)\s*seconds?/);
+          const secs = secMatch ? parseInt(secMatch[1], 10) : 60;
+          setCooldownUntil(Date.now() + secs * 1000);
+          setSubmitting(false);
+          toast({
+            title: `Please wait ${secs}s before trying again`,
+            description:
+              "Too many recent attempts for this email. If you already have an account, sign in instead.",
+            variant: "destructive",
+          });
+          return;
+        }
         if (alreadyExists) {
           // Each sub-account needs its own email. Do NOT silently sign in or
           // claim another user's client row — that would break tenant isolation.
           setSubmitting(false);
-          setEmail("");
+          setEmailTaken(true);
           setErrors({ email: "This email already has an account. Use a different email for a new sub-account." });
           toast({
             title: "Account already exists",
@@ -120,6 +159,21 @@ export default function Start() {
         }
       } else {
         userId = signUpRes.data.user?.id ?? null;
+        // Supabase quirk: with email confirmation on, signUp for an
+        // already-registered email returns success with a fake user whose
+        // identities array is empty. Treat that as "already exists".
+        const identities = signUpRes.data.user?.identities ?? [];
+        if (signUpRes.data.user && identities.length === 0) {
+          setSubmitting(false);
+          setEmailTaken(true);
+          setErrors({ email: "This email already has an account. Use a different email for a new sub-account." });
+          toast({
+            title: "Account already exists",
+            description: `An account already exists for ${data.email}. Sign in or use a different email.`,
+            variant: "destructive",
+          });
+          return;
+        }
       }
 
       if (!userId) {
@@ -212,6 +266,13 @@ export default function Start() {
             </Field>
             <Field label="Email" error={errors.email}>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+              {emailTaken && (
+                <p className="text-xs">
+                  <Link to={`/auth?email=${encodeURIComponent(email)}`} className="font-medium text-primary hover:underline">
+                    Sign in instead →
+                  </Link>
+                </p>
+              )}
             </Field>
             <Field label="Password" error={errors.password}>
               <Input
@@ -238,11 +299,15 @@ export default function Start() {
             </Field>
             <Button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || cooldownLeft > 0}
               size="lg"
               className="w-full bg-cta hover:opacity-90 shadow-glow h-12"
             >
-              {submitting ? "Starting checkout…" : "Continue to Setup & Payment"}
+              {cooldownLeft > 0
+                ? `Please wait ${cooldownLeft}s…`
+                : submitting
+                ? "Starting checkout…"
+                : "Continue to Setup & Payment"}
             </Button>
             <p className="text-xs text-muted-foreground text-center">
               Secure payment via Stripe. $99 one-time setup, then $197/month.
