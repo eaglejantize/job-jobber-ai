@@ -2,16 +2,9 @@ export const DEMO_NUMBER = "(904) 892-7004";
 export const DEMO_NUMBER_TEL = "+19048927004";
 export const DEMO_NUMBER_AVAILABLE = true;
 
-export const INDUSTRIES = [
-  "Appliance Repair",
-  "HVAC",
-  "Plumbing",
-  "Electrical",
-  "Law Firm",
-  "Med Spa",
-  "General Contractor",
-  "Other",
-];
+import { INDUSTRIES as INDUSTRY_OPTIONS } from "./industries";
+// Settings page uses string labels; derive from the canonical list.
+export const INDUSTRIES = INDUSTRY_OPTIONS.map((i) => i.label);
 
 export const TONES = ["Friendly", "Professional", "Direct", "Warm"] as const;
 export type Tone = typeof TONES[number];

@@ -139,13 +139,22 @@ export type Database = {
       callcapture_clients: {
         Row: {
           alert_phone: string
+          answer_after_hours: boolean
           assigned_callcapture_number: string | null
+          business_hours_24_7: boolean
+          business_hours_schedule: Json | null
           business_name: string
           business_phone: string | null
           created_at: string
           email: string
+          forward_first: boolean
+          forward_phone: string | null
+          greeting: string | null
+          human_pause: boolean
           id: string
+          include_business_name: boolean
           industry: string | null
+          intake_questions: Json | null
           is_super_admin: boolean | null
           number_provisioned_at: string | null
           number_status: string | null
@@ -153,24 +162,40 @@ export type Database = {
           payment_status: string
           phone_mode: string | null
           preferred_area_code: string | null
+          rings_before_answer: number
           setup_status: string
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string | null
+          timezone: string
+          tone: string
+          transfer_fallback: string
+          transfer_triggers: string[]
           twilio_phone_number_sid: string | null
           updated_at: string
           user_id: string | null
+          voice_id: string | null
+          voice_label: string | null
         }
         Insert: {
           alert_phone: string
+          answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
+          business_hours_24_7?: boolean
+          business_hours_schedule?: Json | null
           business_name: string
           business_phone?: string | null
           created_at?: string
           email: string
+          forward_first?: boolean
+          forward_phone?: string | null
+          greeting?: string | null
+          human_pause?: boolean
           id?: string
+          include_business_name?: boolean
           industry?: string | null
+          intake_questions?: Json | null
           is_super_admin?: boolean | null
           number_provisioned_at?: string | null
           number_status?: string | null
@@ -178,24 +203,40 @@ export type Database = {
           payment_status?: string
           phone_mode?: string | null
           preferred_area_code?: string | null
+          rings_before_answer?: number
           setup_status?: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          timezone?: string
+          tone?: string
+          transfer_fallback?: string
+          transfer_triggers?: string[]
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
+          voice_id?: string | null
+          voice_label?: string | null
         }
         Update: {
           alert_phone?: string
+          answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
+          business_hours_24_7?: boolean
+          business_hours_schedule?: Json | null
           business_name?: string
           business_phone?: string | null
           created_at?: string
           email?: string
+          forward_first?: boolean
+          forward_phone?: string | null
+          greeting?: string | null
+          human_pause?: boolean
           id?: string
+          include_business_name?: boolean
           industry?: string | null
+          intake_questions?: Json | null
           is_super_admin?: boolean | null
           number_provisioned_at?: string | null
           number_status?: string | null
@@ -203,14 +244,21 @@ export type Database = {
           payment_status?: string
           phone_mode?: string | null
           preferred_area_code?: string | null
+          rings_before_answer?: number
           setup_status?: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          timezone?: string
+          tone?: string
+          transfer_fallback?: string
+          transfer_triggers?: string[]
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
+          voice_id?: string | null
+          voice_label?: string | null
         }
         Relationships: []
       }
@@ -218,16 +266,20 @@ export type Database = {
         Row: {
           address: string | null
           business_id: string | null
+          client_id: string | null
           created_at: string
           id: string
+          intake_answers: Json | null
           issue: string | null
           name: string | null
           new_or_returning: string | null
           phone: string | null
           raw_payload: Json | null
           referral: string | null
+          status: string
           summary: string | null
           timing: string | null
+          transcript: string | null
           treatment: string | null
           type: string | null
           urgency: string | null
@@ -235,16 +287,20 @@ export type Database = {
         Insert: {
           address?: string | null
           business_id?: string | null
+          client_id?: string | null
           created_at?: string
           id?: string
+          intake_answers?: Json | null
           issue?: string | null
           name?: string | null
           new_or_returning?: string | null
           phone?: string | null
           raw_payload?: Json | null
           referral?: string | null
+          status?: string
           summary?: string | null
           timing?: string | null
+          transcript?: string | null
           treatment?: string | null
           type?: string | null
           urgency?: string | null
@@ -252,16 +308,20 @@ export type Database = {
         Update: {
           address?: string | null
           business_id?: string | null
+          client_id?: string | null
           created_at?: string
           id?: string
+          intake_answers?: Json | null
           issue?: string | null
           name?: string | null
           new_or_returning?: string | null
           phone?: string | null
           raw_payload?: Json | null
           referral?: string | null
+          status?: string
           summary?: string | null
           timing?: string | null
+          transcript?: string | null
           treatment?: string | null
           type?: string | null
           urgency?: string | null
@@ -272,6 +332,13 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "callcapture_businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "callcapture_leads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_clients"
             referencedColumns: ["id"]
           },
         ]

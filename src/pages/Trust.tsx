@@ -15,7 +15,7 @@ export default function Trust() {
           <h1 className="text-3xl md:text-4xl font-bold text-navy">Security &amp; Privacy at Vektuor</h1>
           <p className="mt-3 text-muted-foreground">
             This page is maintained by the Vektuor team to answer common security and privacy
-            questions about the Vektuor (CallCapture) service. It describes controls that are
+            questions about the Vektuor service. It describes controls that are
             currently enabled in the product. It is not an independent certification or audit,
             and it is not issued or verified by our hosting providers.
           </p>

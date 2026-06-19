@@ -1,71 +1,78 @@
-## Goal
-Build a Super Admin panel at `/admin`, gated by `callcapture_clients.is_super_admin`, plus an industry dropdown on `/start` and an "Admin" link in the main nav.
+## Plan: App-Wide Enhancement Pass (confirmed)
 
-## Blockers to confirm before building
+Brand: **Vektuor** (UI only; DB keeps `callcapture_` prefix). VAPI live fetch with fallback. SMS fires from the Vapi post-call webhook that writes the lead.
 
-1. **No `industry` column exists on `callcapture_clients`.** The spec requires showing Industry in the Subscribers table and Create Test Account form, and capturing it on `/start`. I'll add `industry text` to `callcapture_clients` via migration.
+---
 
-2. **Current RLS only lets a user see/update their own row** (`auth.uid() = user_id`). For admin list/edit/delete to work, I'll add admin-scoped policies using `is_super_admin`:
-   - `SELECT/UPDATE/DELETE` allowed when the calling user's row has `is_super_admin = true`.
-   - Implemented via a `SECURITY DEFINER` function `public.is_current_user_super_admin()` to avoid recursive RLS.
+### 1. Database migration
 
-3. **Hard delete from the client.** The spec says "Delete → hard delete with confirmation dialog." This will be a direct `supabase.from('callcapture_clients').delete()` call, allowed by the new admin DELETE policy. No Stripe/Auth cleanup — just the DB row, matching the spec.
+`callcapture_clients` — add: `business_hours_24_7 bool default true`, `business_hours_schedule jsonb`, `timezone text default 'America/New_York'`, `rings_before_answer int default 3`, `forward_first bool default false`, `forward_phone text`, `answer_after_hours bool default true`, `transfer_fallback text default 'Take a message'`, `transfer_triggers text[] default '{}'`, `greeting text`, `include_business_name bool default true`, `human_pause bool default true`, `voice_id text`, `voice_label text`, `intake_questions jsonb`, `tone text default 'Friendly'`.
 
-4. **Test accounts have no auth user.** `user_id` stays null. The existing "anon signup insert" policy permits this; admin insert path will use the standard client and rely on a new admin INSERT policy too (so authenticated admins can insert without `user_id = auth.uid()`).
+`callcapture_leads` — add: `client_id uuid references callcapture_clients(id) on delete cascade`, `status text default 'New'`, `transcript text`, `intake_answers jsonb`. Index `(client_id, created_at desc)`. RLS: owners select/update where `client_id` belongs to `auth.uid()`; admins via `is_current_user_super_admin()`; service_role full. Enable Realtime via publication add.
 
-If any of these are wrong, say so before I start.
+---
 
-## Plan
+### 2. Industries (`src/lib/industries.ts`)
 
-### Database migration
-- `ALTER TABLE callcapture_clients ADD COLUMN industry text;`
-- Create `public.is_current_user_super_admin()` `SECURITY DEFINER` returning bool — checks the caller's row by `auth.uid()` (preferred) or email fallback.
-- Add policies on `callcapture_clients`:
-  - `admin select all` — SELECT using `is_current_user_super_admin()`
-  - `admin update all` — UPDATE using/with-check `is_current_user_super_admin()`
-  - `admin delete all` — DELETE using `is_current_user_super_admin()`
-  - `admin insert any` — INSERT with check `is_current_user_super_admin()` (allows admin-created test accounts with null `user_id`)
+Replace with full 24-entry list per spec (excluding HIPAA-risk). Remove the duplicate `INDUSTRIES` array in `src/lib/constants.ts` and re-export from `industries.ts` to keep `/start`, Admin Create Test Account, and AI Settings in sync.
 
-### Frontend
+---
 
-**`src/hooks/useIsAdmin.tsx`** — React Query hook that, given a session, selects `is_super_admin` from `callcapture_clients` for the current user (by `user_id`, falling back to email). Returns `{ isAdmin, isLoading }`.
+### 3. Phone Setup Wizard
 
-**`src/components/ProtectedAdminRoute.tsx`** — Wraps children, reads session + `useIsAdmin`, shows spinner while loading, redirects to `/login` if unauthenticated or not admin.
+New `src/components/settings/PhoneSetupWizard.tsx` replacing the Phone tab in `Settings.tsx`. Four steps with progress bar:
+1. Number — radio (new / existing / test) + conditional existing-number input + optional area code.
+2. Hours — 24/7 toggle; weekly grid (Mon–Fri group with "Apply to weekdays", Sat, Sun), 30-min increments 6 AM–10 PM + Midnight, US timezone dropdown.
+3. Call Handling — rings 1–5, forward-first toggle + phone, after-hours toggle, fallback dropdown, transfer-trigger checkboxes.
+4. Review & Activate — summary card + "Save & Activate" → upsert all fields, set `setup_status='Active'`, `payment_status='active'`, redirect `/dashboard`.
 
-**`src/lib/industries.ts`** — Exported array of the 11 industries with `{ value, label }`.
+Remove duplicated settings across other tabs; consolidate to Phone / AI / Account.
 
-**`src/pages/Start.tsx`**
-- Add `industry` to Zod schema (required enum).
-- Add shadcn `Select` between Business Name and Email.
-- Pass `industry` in `create-checkout` body and in the direct `callcapture_clients` upsert.
-- Aside card: "Built for {industryLabel ?? 'service businesses'}".
+---
 
-**`supabase/functions/create-checkout/index.ts`** — Accept and forward `industry` into the client row write. (Minimal change; doesn't touch the broader RLS flow.)
+### 4. AI Settings rebuild
 
-**`src/components/Layout.tsx`** — Use `useIsAdmin` to conditionally render an "Admin" nav link to `/admin`.
+New `src/components/settings/AiSettingsPanel.tsx`.
 
-**`src/App.tsx`** — Add `/admin` route wrapped in `ProtectedAdminRoute`, rendering `AdminLayout` with nested tabs (or a single page with internal tab state — single page is simpler and matches the dark sidebar spec).
+- **Greeting**: textarea + "Help me write this" → new edge function `generate-greeting` (Lovable AI Gateway, `google/gemini-3-flash-preview`) returning 3 clickable options. Toggles: include-business-name, human-pause.
+- **Voice**: new edge function `list-vapi-voices` calling `GET https://api.vapi.ai/voice` with `VAPI_API_KEY`. Cards show name/provider/description + Preview button using `previewUrl`. Selected → emerald border, saved to `callcapture_clients.voice_id/voice_label`. On fetch failure → 6-voice fallback (Jasmine, Marcus, Claire, Nova, James, Luna) with ElevenLabs sample URLs.
+- **Intake questions**: `src/lib/intakeQuestions.ts` — universal (always pre-checked) + per-industry additions per spec. Industry from `callcapture_clients.industry`. Checkbox list + "+ Add custom question". Persists to `intake_questions jsonb`.
+- **Tone**: pills (Friendly/Professional/Direct/Cheerful/Calm) feeding prompt builder.
 
-### Admin UI (`src/pages/admin/`)
+---
 
-Single page `Admin.tsx` with internal tab state, plus tab components:
+### 5. Dashboard
 
-- `AdminLayout` (in `Admin.tsx`) — slate-900 bg, slate-800 sidebar with Vektuor wordmark, nav items (Overview, Subscribers, Create Test Account, Settings), emerald-500 active left border.
-- `OverviewTab.tsx` — 4 stat cards (total / active / pending / manual) + recent signups table (last 10, ordered by `created_at desc`).
-- `SubscribersTab.tsx` — search input, status filter pills, full table, per-row shadcn `DropdownMenu` actions (Activate / Set Pending / Suspend / Delete-with-AlertDialog). Color-coded badges.
-- `CreateTestAccountTab.tsx` — form (react-hook-form + zod), inserts with `crypto.randomUUID()` for `id`, null `user_id`, no Stripe. Toast with new id.
-- `SettingsTab.tsx` — placeholder card.
+`Dashboard.tsx`: query current user's `callcapture_clients` row; render real `setup_status`. Quick Actions branch on status (Active → Test/Edit; Payment Pending → Complete Payment; else → Continue Setup → `/settings`). Realtime subscription on `callcapture_leads` filtered by `client_id` shows toast + live count bump.
 
-All admin reads/writes go through the standard `supabase` client; the new admin RLS policies authorize them.
+---
 
-### Visual tokens
-Admin pages use literal slate/emerald Tailwind classes since the rest of the app's design tokens aren't dark-ops themed and the spec is explicit. (One scoped exception to the "no hardcoded colors" rule, contained to `/admin`.)
+### 6. Lead Inbox
 
-## Out of scope
-- No Stripe/Auth cleanup on hard delete.
-- No edge function for admin actions — RLS policies cover it.
-- No changes to the existing user-scoped policies.
+`LeadInbox.tsx`: query `callcapture_leads WHERE client_id = <my client id> ORDER BY created_at DESC`. Card per lead — name or "Unknown Caller", phone, industry-aware summary from `intake_answers`, timestamp, status badge (New/Contacted/Closed). Expand → transcript + full intake. "Mark as contacted" updates status. Empty state per spec.
 
-## Verification
-- Manually flip `is_super_admin = true` on one test row, sign in as that user, confirm `/admin` loads, list shows all rows, status changes persist, delete removes the row, non-admin users get redirected to `/login`.
-- `/start` requires industry selection; submitted value lands on the new client row.
+---
+
+### 7. Admin — View Leads slide-over
+
+`Admin.tsx` Subscribers table: per-row "View Leads" opens shadcn `Sheet` listing that client's leads (reuses lead card). Admin RLS already covers it.
+
+---
+
+### 8. SMS notification
+
+New `supabase/functions/send-sms/index.ts` (Twilio gateway, body `{client_id, lead_id}`, looks up `alert_phone`, sends formatted SMS).
+
+The existing Vapi post-call webhook (the one that inserts into `callcapture_leads`) — we'll locate or scaffold it and invoke `send-sms` right after the insert. No pg_net dependency. Dashboard toast continues to come from Realtime, not SMS.
+
+---
+
+### 9. Branding pass
+
+Find/replace user-visible "CallCapture" → "Vektuor" across components, pages, meta tags, footer, nav. Leave DB names, function names, and the `callcapture_` table prefix alone.
+
+---
+
+### Out of scope
+
+`/start` signup, `create-checkout`, `stripe-webhook`, admin auth guard, existing Twilio search/provision functions (wizard calls them with their current contracts).
