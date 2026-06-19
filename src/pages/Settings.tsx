@@ -16,6 +16,8 @@ import PhoneNumberPicker from "@/components/PhoneNumberPicker";
 import { DEFAULT_VOICE_ID, VOICES, getVoiceById, type VoicePersona } from "@/lib/voices";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import PhoneSetupWizard from "@/components/settings/PhoneSetupWizard";
+import AiSettingsPanel from "@/components/settings/AiSettingsPanel";
 
 const TONE_OPTIONS = ["Friendly", "Direct", "Helpful", "Professional", "Warm"] as const;
 const COLLECT_OPTIONS = ["Name", "Phone", "Issue", "Address", "Urgency"] as const;
