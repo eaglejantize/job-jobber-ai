@@ -1,47 +1,39 @@
-## Plan
+## Goal
+After saving AI Settings, the live Vapi agent should reflect the new prompt, greeting, tone, and intake questions — not just the database row.
 
-1. **Disable voice preview/audio paths**
-   - In `AiSettingsPanel`, stop calling `list-vapi-voices` and remove the `new Audio(...)` preview behavior.
-   - Keep voice selection visible using the existing fallback/static voice cards.
-   - Replace every voice preview/play button with a small `Preview coming soon` badge.
-   - Update `VoicePicker` the same way so no UI path attempts to play audio.
+## 1. New edge function: `supabase/functions/update-vapi-agent/index.ts`
 
-2. **Fix `/leads` inbox with a secure service-role read**
-   - Add a new backend function (for example `list-leads`) that uses the service-role client server-side, not in browser code.
-   - Validate the logged-in user from the request token, resolve their `callcapture_clients` row by `user_id` first and email fallback second.
-   - Fetch leads through the service-role client so RLS cannot hide them:
-     - leads matching the resolved `client_id`
-     - leads where `client_id IS NULL`
-     - temporary debug fallback: all recent leads found, deduped and sorted newest first, so the inbox can show the existing lead immediately
-   - Return the resolved `client_id` and lead rows to the frontend.
-   - Keep the SMS flow untouched.
+Input: `{ client_id: string }` (validated with Zod). Auth: require a logged-in user via `getClaims`; allow if `client_id` belongs to the caller OR caller is super admin (`is_current_user_super_admin`).
 
-3. **Update `/leads` UI display**
-   - Change `LeadInbox` to call the new backend function instead of querying `callcapture_leads` directly from the browser.
-   - Display every returned lead regardless of `client_id` match.
-   - Keep the debugging `client_id` line on each card.
-   - Extend `LeadCard` to show the requested fields clearly: caller name, phone, address, service type, issue description, and timestamp.
+Steps:
+1. Service-role fetch of the `callcapture_clients` row.
+2. Resolve the target phone number, preferring `assigned_callcapture_number`, falling back to `business_phone`. For Vektuor specifically, the linked number is `+1 (904) 893-3328`.
+3. `GET https://api.vapi.ai/phone-number` with `Authorization: Bearer ${VAPI_API_KEY}`. Match by E.164 normalization of `number` and read `assistantId`. Return a clear error if not found.
+4. Build the system prompt from client settings: `industry`, `tone`, `business_name` (only if `include_business_name`), enabled `intake_questions`, plus a short call-flow scaffold reused from `src/lib/receptionistScript.ts` patterns (kept inline in the function — edge functions can't import from `src/`).
+5. Build `firstMessage` from `greeting` (fall back to a default concierge line for `med_spa` if empty, matching existing AiSettingsPanel behavior).
+6. `PATCH https://api.vapi.ai/assistant/{assistantId}` with:
+   ```json
+   { "model": { "systemPrompt": "<built prompt>" }, "firstMessage": "<greeting>" }
+   ```
+7. Return `{ ok: true, assistant_id }` or `{ ok: false, error }` with the upstream message (status + body) so the toast can surface it.
 
-4. **Add industry editing to Settings Business Info**
-   - Use the existing 24-industry list from `src/lib/industries.ts` as the Business Info dropdown.
-   - Save the selected value to both the existing business record and `callcapture_clients.industry` so AI Settings sees the current industry.
+CORS + `verify_jwt = false` default is fine; we validate the JWT in code.
 
-5. **Med spa intake + greeting behavior**
-   - Update `questionsForIndustry('med_spa')` to include the requested pre-checked intake set:
-     - Caller name
-     - Phone number
-     - Best callback time
-     - Service interested in (Botox, filler, laser, facial, etc.)
-     - New or returning client
-     - Preferred provider or no preference
-     - Any allergies or skin sensitivities
-     - Preferred appointment day/time
-     - How did you hear about us
-   - Show the current industry label at the top of AI Settings.
-   - When the current industry is `med_spa` and no custom greeting has been set, use: `Thank you for calling [Business Name], your personal concierge is here. How may I assist you today?`
-   - Ensure saving AI Settings persists the selected intake questions and greeting on `callcapture_clients`.
+## 2. Auto-sync on Save in AI Settings
+In `src/components/settings/AiSettingsPanel.tsx`, after the existing successful DB update, call `supabase.functions.invoke('update-vapi-agent', { body: { client_id } })`. Toast `"Agent updated"` on success and `"Failed to update agent: <message>"` on error. DB save still counts as success even if Vapi sync fails (separate toast).
 
-6. **Validation**
-   - Verify `/leads` renders returned leads with debug `client_id` and required fields.
-   - Verify changing industry in Settings updates the AI Settings label and med spa defaults.
-   - Verify no voice preview/audio endpoint or playback path is triggered from the UI.
+## 3. Dashboard Quick Action
+In `src/pages/Dashboard.tsx`, add an "Update Agent" button to Quick Actions that invokes the same function for the current user's `client_id`, with the same toasts and a loading state.
+
+## 4. Admin "Sync Agent" per row
+In `src/pages/Admin.tsx`, add a "Sync Agent" action button on each subscriber row that calls `update-vapi-agent` with that row's `client_id`. Super-admin gate already enforced by RLS + the edge function's admin check.
+
+## 5. Technical notes
+- Secret `VAPI_API_KEY` already exists — no new secrets required.
+- No DB schema changes.
+- No new dependencies.
+- Edge function lives at `supabase/functions/update-vapi-agent/index.ts` only (no subfolders).
+
+## Out of scope
+- Voice ID syncing to Vapi (waiting on voice preview work).
+- Changing how leads or webhooks flow.

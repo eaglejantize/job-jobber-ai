@@ -316,6 +316,21 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
               <DropdownMenuItem onClick={() => openLeads(c)}>
                 View Leads
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  setBusyId(c.id);
+                  const { data, error } = await supabase.functions.invoke("update-vapi-agent", { body: { client_id: c.id } });
+                  setBusyId(null);
+                  if (error || !(data as { ok?: boolean })?.ok) {
+                    const msg = error?.message || (data as { error?: string })?.error || "Unknown error";
+                    toast({ title: "Sync failed", description: msg, variant: "destructive" });
+                  } else {
+                    toast({ title: "Agent synced" });
+                  }
+                }}
+              >
+                Sync Agent
+              </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-slate-700" />
               <DropdownMenuItem onClick={() => update(c.id, { payment_status: "active", setup_status: "Active" })}>
                 Activate
