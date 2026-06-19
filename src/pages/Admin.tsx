@@ -30,6 +30,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import LeadCard, { type Lead } from "@/components/LeadCard";
 
 type Client = {
   id: string;
@@ -207,6 +209,20 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
   const [filter, setFilter] = useState<"all" | "active" | "pending" | "manual" | "suspended">("all");
   const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<Client | null>(null);
+  const [leads, setLeads] = useState<Lead[] | null>(null);
+
+  async function openLeads(c: Client) {
+    setViewing(c);
+    setLeads(null);
+    const { data } = await supabase
+      .from("callcapture_leads")
+      .select("*")
+      .eq("client_id", c.id)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    setLeads((data as Lead[]) ?? []);
+  }
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -297,6 +313,10 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
+              <DropdownMenuItem onClick={() => openLeads(c)}>
+                View Leads
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-slate-700" />
               <DropdownMenuItem onClick={() => update(c.id, { payment_status: "active", setup_status: "Active" })}>
                 Activate
               </DropdownMenuItem>
@@ -339,6 +359,24 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet open={!!viewing} onOpenChange={(o) => { if (!o) { setViewing(null); setLeads(null); } }}>
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto bg-slate-900 text-slate-100 border-slate-700">
+          <SheetHeader>
+            <SheetTitle className="text-white">{viewing?.business_name} · Leads</SheetTitle>
+            <SheetDescription className="text-slate-400">{viewing?.email}</SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-3">
+            {leads === null ? (
+              <p className="text-sm text-slate-400">Loading…</p>
+            ) : leads.length === 0 ? (
+              <p className="text-sm text-slate-400">No leads captured yet.</p>
+            ) : (
+              leads.map((l) => <LeadCard key={l.id} lead={l} />)
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
