@@ -1,31 +1,42 @@
-## 1. Inbox: query table directly, drop the edge function
+## Goal
+Fix `vapi-webhook` so leads get linked to a client and the SMS alert fires with full lead details.
 
-**`src/pages/LeadInbox.tsx`**
-- Remove the `supabase.functions.invoke("list-leads")` call entirely.
-- Replace with:
-  ```ts
-  const { data, error } = await supabase
-    .from("callcapture_leads")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(50);
+## Changes
+
+### 1. `supabase/functions/vapi-webhook/index.ts` — rewrite client lookup + logging
+
+- Add `console.log` statements at every step (event type, dialed number, lookup results, insert result, SMS dispatch result) prefixed `[vapi-webhook]` so they show up in edge function logs.
+- Extract dialed assistant number from `event.phoneNumber.number` (fallbacks: `event.call.phoneNumber.number`, `event.call.phoneNumberId`, `event.call.to`, `event.to`).
+- Client lookup order:
+  1. `client_id` from `?client_id=` query or `metadata.client_id`.
+  2. Match by dialed digits against `business_phone`, `assigned_callcapture_number`, `alert_phone` (normalized to digits — same approach as today but logged).
+  3. **New fallback:** if no match and exactly one row exists in `callcapture_clients`, use that client_id.
+- Log each step: which number was matched, which column hit, or "no client match — using single-client fallback" / "no client found".
+- Expand `insertPayload` to also persist structured fields the SMS uses:
+  - `service` ← `structured.service ?? structured.service_type`
+  - `timing` ← `structured.timing ?? structured.appointment_preference`
+  - `new_or_returning` ← `structured.new_or_returning`
+  - `referral` ← `structured.referral ?? structured.how_heard`
+  Keep existing fields (`name`, `phone`, `issue`, `urgency`, `address`, `summary`, `transcript`, `intake_answers`, `raw_payload`, `status`).
+
+### 2. `supabase/functions/send-sms/index.ts` — richer SMS body
+
+- Select the additional fields from the lead row: `name, phone, summary, issue, service, timing, new_or_returning, referral`.
+- Build body lines (skip blanks):
   ```
-- No `client_id` filter — show all rows for debugging.
-- On error (including table-missing / RLS-empty), set `leads` to `[]` so the "No leads yet" empty state renders. Toast the error message so we still see it.
-- Remove the `clientId` state, the "your client_id" debug line, and the realtime subscription that depends on `clientId` (replace with a no-filter realtime subscription on `callcapture_leads` INSERTs so new leads still stream in).
+  New {business_name} lead
+  Name: {name}
+  Phone: {phone}
+  Service: {service ?? issue}
+  When: {timing}
+  Status: {new_or_returning}
+  Heard via: {referral}
+  ```
+- Log Twilio response status + body with `[send-sms]` prefix so failures surface in logs.
 
-## 2. Lead card: show every captured column
+### 3. Webhook → SMS invocation
 
-**`src/components/LeadCard.tsx`**
-- Extend the `Lead` type to include all DB columns: `business_id`, `new_or_returning`, `timing`, `referral`, `raw_payload`.
-- In the expanded "Details" section, render a complete field list:
-  - caller_name (`name`), phone, address, service (`treatment`/`type`), issue, urgency, summary, new_or_returning, timing, referral, status, client_id, business_id, created_at.
-  - Full `intake_answers` JSON (pretty-printed in a `<pre>` block, not just key/value grid).
-  - Transcript (already shown).
-  - `raw_payload` JSON pretty-printed in a `<pre>` block so we can inspect exactly what Vapi sent.
-- Keep collapsed summary view as-is.
+- After successful insert, log `clientId` + `lead.id` and the SMS response status/body (await + read response instead of fire-and-forget) so we can see in `vapi-webhook` logs whether send-sms succeeded.
 
 ## Out of scope
-- `update-vapi-agent` function and AI Settings — untouched.
-- `list-leads` edge function — left in place (just no longer called); not deleted.
-- No schema or RLS changes. If RLS blocks the direct read we'll see an empty list + toast and address it in a follow-up.
+Inbox, AI settings, `update-vapi-agent`, schema migrations. Plan assumes the new structured columns referenced (`service`, `timing`, `new_or_returning`, `referral`) already exist on `callcapture_leads` (confirmed via existing `LeadCard.tsx` typing — the table has `new_or_returning`, `timing`, `referral`, etc.). `service` falls back to `issue` if the column is absent.
