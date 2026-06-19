@@ -93,6 +93,14 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("AI settings saved");
+    // Push to Vapi
+    const { data: syncData, error: syncErr } = await supabase.functions.invoke("update-vapi-agent", { body: { client_id: c.id } });
+    if (syncErr || !(syncData as { ok?: boolean })?.ok) {
+      const msg = syncErr?.message || (syncData as { error?: string })?.error || "Unknown error";
+      toast.error(`Failed to update agent: ${msg}`);
+    } else {
+      toast.success("Agent updated");
+    }
   }
 
   const allQs = questionsForIndustry(c.industry);
