@@ -266,6 +266,13 @@ export default function Start() {
             </Field>
             <Field label="Email" error={errors.email}>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+              {emailTaken && (
+                <p className="text-xs">
+                  <Link to={`/auth?email=${encodeURIComponent(email)}`} className="font-medium text-primary hover:underline">
+                    Sign in instead →
+                  </Link>
+                </p>
+              )}
             </Field>
             <Field label="Password" error={errors.password}>
               <Input
@@ -292,11 +299,15 @@ export default function Start() {
             </Field>
             <Button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || cooldownLeft > 0}
               size="lg"
               className="w-full bg-cta hover:opacity-90 shadow-glow h-12"
             >
-              {submitting ? "Starting checkout…" : "Continue to Setup & Payment"}
+              {cooldownLeft > 0
+                ? `Please wait ${cooldownLeft}s…`
+                : submitting
+                ? "Starting checkout…"
+                : "Continue to Setup & Payment"}
             </Button>
             <p className="text-xs text-muted-foreground text-center">
               Secure payment via Stripe. $99 one-time setup, then $197/month.
