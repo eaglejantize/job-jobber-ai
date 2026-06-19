@@ -5,11 +5,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Loader2, Play, Sparkles, Plus } from "lucide-react";
+import { Loader2, Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { questionsForIndustry, UNIVERSAL_QUESTIONS } from "@/lib/intakeQuestions";
+import { industryLabel } from "@/lib/industries";
+import { VOICES as STATIC_VOICES } from "@/lib/voices";
 
-type Voice = { id: string; name: string; provider: string; description: string; previewUrl: string | null };
+type Voice = { id: string; name: string; provider: string; description: string };
+
+const STATIC_VOICE_LIST: Voice[] = STATIC_VOICES.map((v) => ({
+  id: v.id,
+  name: v.label,
+  provider: v.persona,
+  description: v.description,
+}));
 
 const TONES = ["Friendly", "Professional", "Direct", "Cheerful", "Calm"];
 
@@ -30,28 +39,26 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [c, setC] = useState<ClientRow | null>(null);
-  const [voices, setVoices] = useState<Voice[]>([]);
   const [genLoading, setGenLoading] = useState(false);
+  const voices = STATIC_VOICE_LIST;
   const [options, setOptions] = useState<string[]>([]);
   const [customQ, setCustomQ] = useState("");
 
   useEffect(() => {
     (async () => {
-      const [{ data }, voicesRes] = await Promise.all([
-        supabase.from("callcapture_clients")
-          .select("id, business_name, industry, greeting, include_business_name, human_pause, voice_id, voice_label, intake_questions, tone")
-          .eq("id", clientId).maybeSingle(),
-        supabase.functions.invoke("list-vapi-voices"),
-      ]);
+      const { data } = await supabase.from("callcapture_clients")
+        .select("id, business_name, industry, greeting, include_business_name, human_pause, voice_id, voice_label, intake_questions, tone")
+        .eq("id", clientId).maybeSingle();
       if (data) {
         const row = data as ClientRow;
         if (!row.intake_questions || row.intake_questions.length === 0) {
           row.intake_questions = questionsForIndustry(row.industry);
         }
+        if (!row.greeting && row.industry === "med_spa") {
+          row.greeting = `Thank you for calling ${row.business_name}, your personal concierge is here. How may I assist you today?`;
+        }
         setC(row);
       }
-      const v = (voicesRes.data as { voices?: Voice[] } | null)?.voices ?? [];
-      setVoices(v);
       setLoading(false);
     })();
   }, [clientId]);
@@ -69,12 +76,6 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
     setGenLoading(false);
     if (error) { toast.error(error.message); return; }
     setOptions((data as { options?: string[] })?.options ?? []);
-  }
-
-  function previewVoice(v: Voice) {
-    if (!v.previewUrl) { toast.info("No preview available"); return; }
-    const a = new Audio(v.previewUrl);
-    void a.play().catch(() => toast.error("Preview failed to play"));
   }
 
   async function save() {
@@ -100,6 +101,9 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-8">
+      <div className="rounded-lg border border-border bg-secondary/30 px-4 py-2 text-xs">
+        Current industry: <span className="font-semibold text-foreground">{industryLabel(c.industry) ?? "—"}</span>
+      </div>
       {/* Greeting */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -143,9 +147,9 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
                     <p className="text-sm font-medium">{v.name}</p>
                     <p className="text-xs text-muted-foreground">{v.provider}{v.description ? ` · ${v.description}` : ""}</p>
                   </div>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => previewVoice(v)} className="h-7 w-7 shrink-0">
-                    <Play className="h-3.5 w-3.5" />
-                  </Button>
+                  <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground shrink-0">
+                    Preview coming soon
+                  </span>
                 </div>
                 <Button type="button" size="sm" variant={active ? "default" : "outline"} className="w-full mt-3"
                   onClick={() => { update("voice_id", v.id); update("voice_label", v.name); }}>

@@ -8,6 +8,9 @@ export type Lead = {
   client_id: string | null;
   name: string | null;
   phone: string | null;
+  address: string | null;
+  type: string | null;
+  treatment: string | null;
   issue: string | null;
   urgency: string | null;
   summary: string | null;
@@ -47,7 +50,17 @@ export default function LeadCard({ lead, onMarkContacted }: { lead: Lead; onMark
             {lead.name || "Unknown caller"}
             {lead.phone && <span className="text-muted-foreground font-normal"> · {lead.phone}</span>}
           </p>
-          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{lead.summary ?? lead.issue ?? "—"}</p>
+          {(lead.type || lead.treatment) && (
+            <p className="text-xs text-muted-foreground mt-1">
+              <span className="uppercase tracking-wide">Service:</span> {lead.treatment || lead.type}
+            </p>
+          )}
+          {lead.address && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              <span className="uppercase tracking-wide">Address:</span> {lead.address}
+            </p>
+          )}
+          <p className="text-sm text-foreground/90 mt-1 line-clamp-3">{lead.issue ?? lead.summary ?? "—"}</p>
           <p className="mt-1 text-[10px] font-mono text-muted-foreground/70">
             client_id: {lead.client_id ?? "unlinked"}
           </p>

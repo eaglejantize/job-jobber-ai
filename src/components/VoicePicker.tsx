@@ -1,10 +1,8 @@
-import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { VOICES, type VoicePersona } from "@/lib/voices";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 type Props = {
   value: string;
@@ -12,35 +10,10 @@ type Props = {
 };
 
 export default function VoicePicker({ value, onChange }: Props) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playingId, setPlayingId] = useState<string | null>(null);
-
-  function play(v: VoicePersona) {
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    if (playingId === v.id) {
-      setPlayingId(null);
-      return;
-    }
-    const audio = new Audio(v.previewUrl);
-    audioRef.current = audio;
-    audio.onended = () => setPlayingId((p) => (p === v.id ? null : p));
-    audio.onerror = () => {
-      setPlayingId(null);
-      toast("Preview audio not uploaded yet.");
-    };
-    audio.play().then(() => setPlayingId(v.id)).catch(() => {
-      setPlayingId(null);
-      toast("Preview audio not uploaded yet.");
-    });
-  }
-
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {VOICES.map((v) => {
         const selected = value === v.id;
-        const isPlaying = playingId === v.id;
         return (
           <div
             key={v.id}
@@ -61,15 +34,9 @@ export default function VoicePicker({ value, onChange }: Props) {
               )}
             </div>
             <p className="text-sm text-muted-foreground flex-1">{v.description}</p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => play(v)}
-              className="w-full"
-            >
-              {isPlaying ? <><Pause className="h-4 w-4" /> Pause</> : <><Play className="h-4 w-4" /> Play Preview</>}
-            </Button>
+            <span className="inline-flex w-full items-center justify-center rounded-md border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
+              Preview coming soon
+            </span>
             <Button
               type="button"
               size="sm"

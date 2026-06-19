@@ -189,16 +189,22 @@ export default function Settings() {
   async function saveBusiness() {
     if (!biz) return;
     setSaving(true);
-    const { error } = await supabase.from("callcapture_businesses").update({
-      business_name: biz.business_name,
-      industry: biz.industry,
-      phone: biz.phone,
-      email: biz.email,
-      service_area: biz.service_area,
-      business_hours: biz.business_hours,
-    }).eq("id", biz.id);
+    const [{ error }, clientUpdate] = await Promise.all([
+      supabase.from("callcapture_businesses").update({
+        business_name: biz.business_name,
+        industry: biz.industry,
+        phone: biz.phone,
+        email: biz.email,
+        service_area: biz.service_area,
+        business_hours: biz.business_hours,
+      }).eq("id", biz.id),
+      clientRow?.id
+        ? supabase.from("callcapture_clients").update({ industry: biz.industry, business_name: biz.business_name }).eq("id", clientRow.id)
+        : Promise.resolve({ error: null } as { error: null }),
+    ]);
+    const clientErr = (clientUpdate as { error: unknown } | undefined)?.error;
     setSaving(false);
-    if (error) toast({ title: "Couldn't save", description: error.message, variant: "destructive" });
+    if (error || clientErr) toast({ title: "Couldn't save", description: (error ?? (clientErr as Error))!.message, variant: "destructive" });
     else toast({ title: "Business info saved" });
   }
 
