@@ -28,12 +28,34 @@ Deno.serve(async (req) => {
     );
 
     const meta = event?.call?.metadata ?? event?.metadata ?? {};
-    const clientId: string | null = url.searchParams.get("client_id") ?? meta?.client_id ?? null;
+    let clientId: string | null = url.searchParams.get("client_id") ?? meta?.client_id ?? null;
     const analysis = event?.analysis ?? {};
     const structured = analysis?.structuredData ?? analysis?.structured_data ?? {};
     const transcript: string | null = event?.transcript ?? event?.call?.transcript ?? null;
     const summary: string | null = analysis?.summary ?? null;
     const caller = event?.customer ?? event?.call?.customer ?? {};
+
+    // Fallback: resolve client_id by the dialed number on the Vapi event.
+    if (!clientId) {
+      const dialed: string | null =
+        event?.phoneNumber?.number ??
+        event?.call?.phoneNumber?.number ??
+        event?.call?.to ??
+        event?.to ??
+        null;
+      const digits = (dialed ?? "").replace(/\D/g, "");
+      if (digits) {
+        const { data: clients } = await supabase
+          .from("callcapture_clients")
+          .select("id, assigned_callcapture_number, business_phone, alert_phone");
+        const norm = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+        const hit = (clients ?? []).find((c: any) =>
+          [c.assigned_callcapture_number, c.business_phone, c.alert_phone]
+            .some((p) => norm(p) && norm(p) === digits)
+        );
+        if (hit) clientId = hit.id;
+      }
+    }
 
     const insertPayload = {
       client_id: clientId,

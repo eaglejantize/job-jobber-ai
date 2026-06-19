@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Phone } from "lucide-react";
 
 export type Lead = {
   id: string;
+  client_id: string | null;
   name: string | null;
   phone: string | null;
   issue: string | null;
@@ -47,9 +48,15 @@ export default function LeadCard({ lead, onMarkContacted }: { lead: Lead; onMark
             {lead.phone && <span className="text-muted-foreground font-normal"> · {lead.phone}</span>}
           </p>
           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{lead.summary ?? lead.issue ?? "—"}</p>
+          <p className="mt-1 text-[10px] font-mono text-muted-foreground/70">
+            client_id: {lead.client_id ?? "unlinked"}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${statusColor(lead.status)}`}>{lead.status || "New"}</span>
+          {!lead.client_id && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] border bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30">Unlinked</span>
+          )}
           <span className="text-xs text-muted-foreground">{timeAgo(lead.created_at)}</span>
         </div>
       </div>

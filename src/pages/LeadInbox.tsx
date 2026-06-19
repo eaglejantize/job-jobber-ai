@@ -11,28 +11,52 @@ export default function LeadInbox() {
   const { user, loading } = useAuth();
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
+  // TODO(debug): remove `showUnlinked` and the IS NULL fallback fetch once
+  // new leads are confirmed to land with a proper client_id.
+  const [showUnlinked, setShowUnlinked] = useState(true);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data: client } = await supabase
+      let { data: client } = await supabase
         .from("callcapture_clients")
         .select("id")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1).maybeSingle();
+      if (!client && user.email) {
+        const { data: byEmail } = await supabase
+          .from("callcapture_clients")
+          .select("id")
+          .ilike("email", user.email)
+          .order("created_at", { ascending: false })
+          .limit(1).maybeSingle();
+        client = byEmail ?? null;
+      }
       const cid = client?.id ?? null;
       setClientId(cid);
-      if (!cid) { setLeads([]); return; }
-      const { data } = await supabase
-        .from("callcapture_leads")
-        .select("*")
-        .eq("client_id", cid)
-        .order("created_at", { ascending: false })
-        .limit(200);
-      setLeads((data as Lead[]) ?? []);
+      const owned = cid
+        ? (await supabase
+            .from("callcapture_leads")
+            .select("*")
+            .eq("client_id", cid)
+            .order("created_at", { ascending: false })
+            .limit(200)).data ?? []
+        : [];
+      const unlinked = showUnlinked
+        ? (await supabase
+            .from("callcapture_leads")
+            .select("*")
+            .is("client_id", null)
+            .order("created_at", { ascending: false })
+            .limit(200)).data ?? []
+        : [];
+      const merged = [...owned, ...unlinked].sort(
+        (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+      setLeads(merged as Lead[]);
     })();
-  }, [user]);
+  }, [user, showUnlinked]);
 
   useEffect(() => {
     if (!clientId) return;
@@ -61,6 +85,13 @@ export default function LeadInbox() {
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Call Inbox</h1>
           <p className="text-muted-foreground mt-1">Captured calls and customer requests appear here.</p>
+          <div className="mt-3 flex items-center gap-3 text-xs">
+            <label className="inline-flex items-center gap-2 text-muted-foreground">
+              <input type="checkbox" checked={showUnlinked} onChange={(e) => setShowUnlinked(e.target.checked)} />
+              Show unlinked leads (debug)
+            </label>
+            <span className="text-muted-foreground/70">your client_id: {clientId ?? "—"}</span>
+          </div>
         </div>
 
         {leads === null ? (
