@@ -145,6 +145,7 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          industry: string | null
           is_super_admin: boolean | null
           number_provisioned_at: string | null
           number_status: string | null
@@ -169,6 +170,7 @@ export type Database = {
           created_at?: string
           email: string
           id?: string
+          industry?: string | null
           is_super_admin?: boolean | null
           number_provisioned_at?: string | null
           number_status?: string | null
@@ -193,6 +195,7 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          industry?: string | null
           is_super_admin?: boolean | null
           number_provisioned_at?: string | null
           number_status?: string | null
@@ -314,7 +317,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_current_user_super_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
