@@ -56,6 +56,7 @@ export default function Dashboard() {
   const [aiAnswerMissed, setAiAnswerMissed] = useState<boolean>(true);
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [polling, setPolling] = useState(false);
+  const [syncingAgent, setSyncingAgent] = useState(false);
   const toastedRef = useRef(false);
 
   useEffect(() => {
@@ -303,6 +304,25 @@ export default function Dashboard() {
             <CallDemoButton className="bg-cta hover:opacity-90 shadow-glow">
               Test My Agent{"\u00a0"}
             </CallDemoButton>
+            <Button
+              variant="outline"
+              disabled={!client?.id || syncingAgent}
+              onClick={async () => {
+                if (!client?.id) return;
+                setSyncingAgent(true);
+                const { data, error } = await supabase.functions.invoke("update-vapi-agent", { body: { client_id: client.id } });
+                setSyncingAgent(false);
+                if (error || !(data as { ok?: boolean })?.ok) {
+                  const msg = error?.message || (data as { error?: string })?.error || "Unknown error";
+                  toast({ title: "Failed to update agent", description: msg, variant: "destructive" });
+                } else {
+                  toast({ title: "Agent updated" });
+                }
+              }}
+            >
+              {syncingAgent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+              Update Agent
+            </Button>
             <Button asChild variant="outline">
               <Link to="/settings">
                 <SettingsIcon className="h-4 w-4" /> Edit Settings
