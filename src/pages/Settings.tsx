@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { INDUSTRIES, DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIONS } from "@/lib/constants";
+import { DEFAULT_INTAKE_QUESTIONS, TRANSFER_TRIGGERS, FALLBACK_ACTIONS } from "@/lib/constants";
+import { INDUSTRIES } from "@/lib/industries";
 import { toast } from "@/hooks/use-toast";
 import { Plus, X, Loader2, Phone, PhoneIncoming, Bot, ClipboardList, MessageSquare, ArrowRight, Sparkles } from "lucide-react";
 import { generateAssistantPrompt } from "@/lib/generatePrompt";
@@ -387,7 +388,17 @@ export default function Settings() {
           <TabsContent value="business" className="rounded-2xl border border-border bg-card p-6 mt-4 shadow-card-soft">
             <div className="grid md:grid-cols-2 gap-4">
               <Field label="Business name" value={biz.business_name ?? ""} onChange={(v) => setBizField("business_name", v)} />
-              <SelectField label="Business type" value={biz.industry ?? ""} onChange={(v) => setBizField("industry", v)} options={INDUSTRIES} />
+              <div className="space-y-2">
+                <Label>Industry</Label>
+                <select
+                  value={biz.industry ?? ""}
+                  onChange={(e) => setBizField("industry", e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="" disabled>Pick one…</option>
+                  {INDUSTRIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
               <Field label="Service area" value={biz.service_area ?? ""} onChange={(v) => setBizField("service_area", v)} />
               <Field label="Hours" value={biz.business_hours ?? ""} onChange={(v) => setBizField("business_hours", v)} />
               <Field label="Business email" type="email" value={biz.email ?? ""} onChange={(v) => setBizField("email", v)} />
