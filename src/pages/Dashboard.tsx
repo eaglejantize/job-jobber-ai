@@ -188,6 +188,20 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  // Realtime: new leads → toast + bump recent list
+  useEffect(() => {
+    if (!client?.id) return;
+    const channel = supabase
+      .channel(`dash-leads:${client.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "callcapture_leads", filter: `client_id=eq.${client.id}` }, (payload) => {
+        const lead = payload.new as Lead;
+        setLeads((prev) => prev ? [lead, ...prev].slice(0, 5) : [lead]);
+        toast({ title: "New lead", description: lead.name || lead.phone || "A new call was captured." });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [client?.id]);
+
   if (loading) return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
   if (!user) return <Navigate to="/auth" replace />;
 
