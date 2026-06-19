@@ -145,6 +145,7 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          is_super_admin: boolean | null
           number_provisioned_at: string | null
           number_status: string | null
           owner_name: string
@@ -168,6 +169,7 @@ export type Database = {
           created_at?: string
           email: string
           id?: string
+          is_super_admin?: boolean | null
           number_provisioned_at?: string | null
           number_status?: string | null
           owner_name: string
@@ -191,6 +193,7 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          is_super_admin?: boolean | null
           number_provisioned_at?: string | null
           number_status?: string | null
           owner_name?: string
