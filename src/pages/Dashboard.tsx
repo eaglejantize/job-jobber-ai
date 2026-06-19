@@ -301,7 +301,7 @@ export default function Dashboard() {
           <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">Quick Actions</p>
           <div className="flex flex-wrap gap-3">
             <CallDemoButton className="bg-cta hover:opacity-90 shadow-glow">
-              <PhoneCall className="h-4 w-4" /> Test My Agent ({DEMO_NUMBER})
+              Test My Agent{"\u00a0"}
             </CallDemoButton>
             <Button asChild variant="outline">
               <Link to="/settings">
