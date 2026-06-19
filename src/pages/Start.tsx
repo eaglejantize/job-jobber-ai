@@ -45,6 +45,21 @@ export default function Start() {
   const [confirm_password, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+  const [emailTaken, setEmailTaken] = useState(false);
+
+  useEffect(() => {
+    if (!cooldownUntil) return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setCooldownLeft(left);
+      if (left <= 0) setCooldownUntil(null);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
 
   useEffect(() => {
     if (canceled) {
