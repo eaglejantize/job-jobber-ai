@@ -19,10 +19,11 @@ Deno.serve(async (req) => {
 
     const [{ data: client }, { data: lead }] = await Promise.all([
       supabase.from("callcapture_clients").select("alert_phone, business_name").eq("id", client_id).maybeSingle(),
-      supabase.from("callcapture_leads").select("name, phone, summary, issue").eq("id", lead_id).maybeSingle(),
+      supabase.from("callcapture_leads").select("name, phone, summary, issue, treatment, type, timing, new_or_returning, referral").eq("id", lead_id).maybeSingle(),
     ]);
 
     if (!client?.alert_phone || !lead) {
+      console.log("[send-sms] missing client phone or lead", { client_id, lead_id, hasClient: !!client, hasLead: !!lead });
       return new Response(JSON.stringify({ skipped: true, reason: "missing client phone or lead" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -40,9 +41,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    const body = `New ${client.business_name ?? "Vektuor"} lead:
-${lead.name ?? "Unknown caller"}${lead.phone ? " · " + lead.phone : ""}
-${lead.summary ?? lead.issue ?? "See dashboard for details."}`;
+    const lines = [
+      `New ${client.business_name ?? "CallCapture"} lead`,
+      lead.name ? `Name: ${lead.name}` : null,
+      lead.phone ? `Phone: ${lead.phone}` : null,
+      (lead.treatment ?? lead.type ?? lead.issue) ? `Service: ${lead.treatment ?? lead.type ?? lead.issue}` : null,
+      lead.timing ? `When: ${lead.timing}` : null,
+      lead.new_or_returning ? `Status: ${lead.new_or_returning}` : null,
+      lead.referral ? `Heard via: ${lead.referral}` : null,
+    ].filter(Boolean);
+    const body = lines.join("\n");
+    console.log("[send-sms] sending to", client.alert_phone, "body:", body);
 
     const auth = btoa(`${accountSid}:${authToken}`);
     const params = new URLSearchParams({ From: fromNumber, To: client.alert_phone, Body: body });
@@ -53,6 +62,7 @@ ${lead.summary ?? lead.issue ?? "See dashboard for details."}`;
       body: params.toString(),
     });
     const trBody = await tr.text();
+    console.log("[send-sms] twilio status:", tr.status, "body:", trBody);
     if (!tr.ok) {
       return new Response(JSON.stringify({ error: trBody }), {
         status: tr.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
