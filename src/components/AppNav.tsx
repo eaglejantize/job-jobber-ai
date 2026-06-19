@@ -1,9 +1,10 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Menu, LogOut, PhoneCall } from "lucide-react";
+import { Menu, LogOut, PhoneCall, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 const links = [
   { to: "/dashboard", label: "Dashboard" },
@@ -14,6 +15,7 @@ const links = [
 export default function AppNav() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { isAdmin } = useIsAdmin();
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -45,6 +47,19 @@ export default function AppNav() {
               {l.label}
             </NavLink>
           ))}
+          {isAdmin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                cn(
+                  "inline-flex items-center gap-1 text-sm font-medium transition-colors hover:text-emerald-600",
+                  isActive ? "text-emerald-600" : "text-emerald-700",
+                )
+              }
+            >
+              <Shield className="h-3.5 w-3.5" /> Admin
+            </NavLink>
+          )}
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
@@ -79,6 +94,15 @@ export default function AppNav() {
                 {l.label}
               </NavLink>
             ))}
+            {isAdmin && (
+              <NavLink
+                to="/admin"
+                onClick={() => setOpen(false)}
+                className="py-2 text-sm font-medium text-emerald-700"
+              >
+                Admin
+              </NavLink>
+            )}
             <Button
               variant="outline"
               onClick={() => { setOpen(false); void signOut(); }}
