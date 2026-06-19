@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Phone } from "lucide-react";
 export type Lead = {
   id: string;
   client_id: string | null;
+  business_id: string | null;
   name: string | null;
   phone: string | null;
   address: string | null;
@@ -14,8 +15,12 @@ export type Lead = {
   issue: string | null;
   urgency: string | null;
   summary: string | null;
+  new_or_returning: string | null;
+  timing: string | null;
+  referral: string | null;
   transcript: string | null;
   intake_answers: Record<string, unknown> | null;
+  raw_payload: Record<string, unknown> | null;
   status: string;
   created_at: string;
 };
@@ -86,23 +91,47 @@ export default function LeadCard({ lead, onMarkContacted }: { lead: Lead; onMark
       </div>
       {open && (
         <div className="mt-4 pt-4 border-t border-border space-y-3 text-sm">
-          {Object.keys(intake).length > 0 && (
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Intake</p>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-                {Object.entries(intake).map(([k, v]) => (
-                  <div key={k} className="flex gap-2">
-                    <dt className="text-muted-foreground">{k}:</dt>
-                    <dd className="font-medium">{String(v ?? "—")}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )}
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Fields</p>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {([
+                ["caller_name", lead.name],
+                ["phone", lead.phone],
+                ["address", lead.address],
+                ["service (treatment)", lead.treatment],
+                ["service (type)", lead.type],
+                ["issue", lead.issue],
+                ["urgency", lead.urgency],
+                ["summary", lead.summary],
+                ["new_or_returning", lead.new_or_returning],
+                ["timing", lead.timing],
+                ["referral", lead.referral],
+                ["status", lead.status],
+                ["client_id", lead.client_id],
+                ["business_id", lead.business_id],
+                ["created_at", lead.created_at],
+              ] as const).map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <dt className="text-muted-foreground">{k}:</dt>
+                  <dd className="font-medium break-all">{v == null || v === "" ? "—" : String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Intake answers (JSON)</p>
+            <pre className="whitespace-pre-wrap text-xs bg-muted/50 rounded-md p-3 max-h-60 overflow-auto">{JSON.stringify(intake, null, 2)}</pre>
+          </div>
           {lead.transcript && (
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Transcript</p>
               <pre className="whitespace-pre-wrap text-xs bg-muted/50 rounded-md p-3 max-h-60 overflow-auto">{lead.transcript}</pre>
+            </div>
+          )}
+          {lead.raw_payload && (
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Raw payload (Vapi)</p>
+              <pre className="whitespace-pre-wrap text-xs bg-muted/50 rounded-md p-3 max-h-80 overflow-auto">{JSON.stringify(lead.raw_payload, null, 2)}</pre>
             </div>
           )}
         </div>

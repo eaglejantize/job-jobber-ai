@@ -10,35 +10,36 @@ import { toast } from "sonner";
 export default function LeadInbox() {
   const { user, loading } = useAuth();
   const [leads, setLeads] = useState<Lead[] | null>(null);
-  const [clientId, setClientId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data, error } = await supabase.functions.invoke("list-leads");
+      const { data, error } = await supabase
+        .from("callcapture_leads")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
       if (error) {
         toast.error(error.message);
         setLeads([]);
         return;
       }
-      const payload = data as { client_id: string | null; leads: Lead[] };
-      setClientId(payload?.client_id ?? null);
-      setLeads(payload?.leads ?? []);
+      setLeads((data ?? []) as Lead[]);
     })();
   }, [user]);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!user) return;
     const channel = supabase
-      .channel(`leads:${clientId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "callcapture_leads", filter: `client_id=eq.${clientId}` }, (payload) => {
+      .channel(`leads:all`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "callcapture_leads" }, (payload) => {
         const lead = payload.new as Lead;
         setLeads((prev) => prev ? [lead, ...prev] : [lead]);
         toast.success(`New lead: ${lead.name ?? "Unknown caller"}`);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [clientId]);
+  }, [user]);
 
   async function markContacted(id: string) {
     await supabase.from("callcapture_leads").update({ status: "Contacted" }).eq("id", id);
@@ -54,7 +55,6 @@ export default function LeadInbox() {
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Call Inbox</h1>
           <p className="text-muted-foreground mt-1">Captured calls and customer requests appear here.</p>
-          <p className="mt-3 text-xs text-muted-foreground/70">your client_id: {clientId ?? "—"}</p>
         </div>
 
         {leads === null ? (

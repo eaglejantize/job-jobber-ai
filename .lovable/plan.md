@@ -1,39 +1,31 @@
-## Goal
-After saving AI Settings, the live Vapi agent should reflect the new prompt, greeting, tone, and intake questions — not just the database row.
+## 1. Inbox: query table directly, drop the edge function
 
-## 1. New edge function: `supabase/functions/update-vapi-agent/index.ts`
+**`src/pages/LeadInbox.tsx`**
+- Remove the `supabase.functions.invoke("list-leads")` call entirely.
+- Replace with:
+  ```ts
+  const { data, error } = await supabase
+    .from("callcapture_leads")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  ```
+- No `client_id` filter — show all rows for debugging.
+- On error (including table-missing / RLS-empty), set `leads` to `[]` so the "No leads yet" empty state renders. Toast the error message so we still see it.
+- Remove the `clientId` state, the "your client_id" debug line, and the realtime subscription that depends on `clientId` (replace with a no-filter realtime subscription on `callcapture_leads` INSERTs so new leads still stream in).
 
-Input: `{ client_id: string }` (validated with Zod). Auth: require a logged-in user via `getClaims`; allow if `client_id` belongs to the caller OR caller is super admin (`is_current_user_super_admin`).
+## 2. Lead card: show every captured column
 
-Steps:
-1. Service-role fetch of the `callcapture_clients` row.
-2. Resolve the target phone number, preferring `assigned_callcapture_number`, falling back to `business_phone`. For Vektuor specifically, the linked number is `+1 (904) 893-3328`.
-3. `GET https://api.vapi.ai/phone-number` with `Authorization: Bearer ${VAPI_API_KEY}`. Match by E.164 normalization of `number` and read `assistantId`. Return a clear error if not found.
-4. Build the system prompt from client settings: `industry`, `tone`, `business_name` (only if `include_business_name`), enabled `intake_questions`, plus a short call-flow scaffold reused from `src/lib/receptionistScript.ts` patterns (kept inline in the function — edge functions can't import from `src/`).
-5. Build `firstMessage` from `greeting` (fall back to a default concierge line for `med_spa` if empty, matching existing AiSettingsPanel behavior).
-6. `PATCH https://api.vapi.ai/assistant/{assistantId}` with:
-   ```json
-   { "model": { "systemPrompt": "<built prompt>" }, "firstMessage": "<greeting>" }
-   ```
-7. Return `{ ok: true, assistant_id }` or `{ ok: false, error }` with the upstream message (status + body) so the toast can surface it.
-
-CORS + `verify_jwt = false` default is fine; we validate the JWT in code.
-
-## 2. Auto-sync on Save in AI Settings
-In `src/components/settings/AiSettingsPanel.tsx`, after the existing successful DB update, call `supabase.functions.invoke('update-vapi-agent', { body: { client_id } })`. Toast `"Agent updated"` on success and `"Failed to update agent: <message>"` on error. DB save still counts as success even if Vapi sync fails (separate toast).
-
-## 3. Dashboard Quick Action
-In `src/pages/Dashboard.tsx`, add an "Update Agent" button to Quick Actions that invokes the same function for the current user's `client_id`, with the same toasts and a loading state.
-
-## 4. Admin "Sync Agent" per row
-In `src/pages/Admin.tsx`, add a "Sync Agent" action button on each subscriber row that calls `update-vapi-agent` with that row's `client_id`. Super-admin gate already enforced by RLS + the edge function's admin check.
-
-## 5. Technical notes
-- Secret `VAPI_API_KEY` already exists — no new secrets required.
-- No DB schema changes.
-- No new dependencies.
-- Edge function lives at `supabase/functions/update-vapi-agent/index.ts` only (no subfolders).
+**`src/components/LeadCard.tsx`**
+- Extend the `Lead` type to include all DB columns: `business_id`, `new_or_returning`, `timing`, `referral`, `raw_payload`.
+- In the expanded "Details" section, render a complete field list:
+  - caller_name (`name`), phone, address, service (`treatment`/`type`), issue, urgency, summary, new_or_returning, timing, referral, status, client_id, business_id, created_at.
+  - Full `intake_answers` JSON (pretty-printed in a `<pre>` block, not just key/value grid).
+  - Transcript (already shown).
+  - `raw_payload` JSON pretty-printed in a `<pre>` block so we can inspect exactly what Vapi sent.
+- Keep collapsed summary view as-is.
 
 ## Out of scope
-- Voice ID syncing to Vapi (waiting on voice preview work).
-- Changing how leads or webhooks flow.
+- `update-vapi-agent` function and AI Settings — untouched.
+- `list-leads` edge function — left in place (just no longer called); not deleted.
+- No schema or RLS changes. If RLS blocks the direct read we'll see an empty list + toast and address it in a follow-up.
