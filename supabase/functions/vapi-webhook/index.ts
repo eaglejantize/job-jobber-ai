@@ -48,26 +48,31 @@ Deno.serve(async (req) => {
       const digits = (dialed ?? "").replace(/\D/g, "");
       const { data: clients, error: clientsErr } = await supabase
         .from("callcapture_clients")
-        .select("id, assigned_callcapture_number, business_phone, alert_phone");
+        .select("id, business_phone, alert_phone, is_super_admin");
       if (clientsErr) console.log("[vapi-webhook] clients lookup error:", clientsErr.message);
       console.log("[vapi-webhook] total clients in db:", clients?.length ?? 0);
       const norm = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+
+      // First try: match by business_phone
       if (digits) {
-        const hit = (clients ?? []).find((c: any) =>
-          [c.assigned_callcapture_number, c.business_phone, c.alert_phone]
-            .some((p) => norm(p) && norm(p) === digits)
+        const hit = (clients ?? []).find(
+          (c: any) => norm(c.business_phone) && norm(c.business_phone) === digits,
         );
         if (hit) {
           clientId = hit.id;
-          console.log("[vapi-webhook] matched client by dialed number:", clientId);
-        } else {
-          console.log("[vapi-webhook] no client matched dialed digits:", digits);
+          console.log("[vapi-webhook] matched by business_phone ->", clientId);
         }
       }
-      if (!clientId && (clients?.length ?? 0) === 1) {
-        clientId = clients![0].id;
-        console.log("[vapi-webhook] single-client fallback ->", clientId);
+
+      // Second try: single super admin fallback
+      if (!clientId) {
+        const admin = (clients ?? []).find((c: any) => c.is_super_admin === true);
+        if (admin) {
+          clientId = admin.id;
+          console.log("[vapi-webhook] matched by super_admin fallback ->", clientId);
+        }
       }
+
       if (!clientId) console.log("[vapi-webhook] no client could be resolved");
     }
 
@@ -106,6 +111,14 @@ Deno.serve(async (req) => {
     console.log("[vapi-webhook] lead inserted:", lead?.id);
 
     if (clientId && lead?.id) {
+      // Explicit linkage update so the lead row's client_id is guaranteed set.
+      const { error: linkErr } = await supabase
+        .from("callcapture_leads")
+        .update({ client_id: clientId })
+        .eq("id", lead.id);
+      if (linkErr) console.log("[vapi-webhook] lead link update error:", linkErr.message);
+      else console.log("[vapi-webhook] lead linked to client:", clientId);
+
       try {
         const smsRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-sms`, {
           method: "POST",
