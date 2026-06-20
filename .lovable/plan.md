@@ -1,42 +1,54 @@
-## Goal
-Fix `vapi-webhook` so leads get linked to a client and the SMS alert fires with full lead details.
+## Plan: Fix lead capture flow end-to-end
 
-## Changes
+### 1. `supabase/functions/vapi-webhook/index.ts` — rewrite client lookup
 
-### 1. `supabase/functions/vapi-webhook/index.ts` — rewrite client lookup + logging
+Replace the dialed-number matching block with the two-tier lookup the user specified:
 
-- Add `console.log` statements at every step (event type, dialed number, lookup results, insert result, SMS dispatch result) prefixed `[vapi-webhook]` so they show up in edge function logs.
-- Extract dialed assistant number from `event.phoneNumber.number` (fallbacks: `event.call.phoneNumber.number`, `event.call.phoneNumberId`, `event.call.to`, `event.to`).
-- Client lookup order:
-  1. `client_id` from `?client_id=` query or `metadata.client_id`.
-  2. Match by dialed digits against `business_phone`, `assigned_callcapture_number`, `alert_phone` (normalized to digits — same approach as today but logged).
-  3. **New fallback:** if no match and exactly one row exists in `callcapture_clients`, use that client_id.
-- Log each step: which number was matched, which column hit, or "no client match — using single-client fallback" / "no client found".
-- Expand `insertPayload` to also persist structured fields the SMS uses:
-  - `service` ← `structured.service ?? structured.service_type`
-  - `timing` ← `structured.timing ?? structured.appointment_preference`
-  - `new_or_returning` ← `structured.new_or_returning`
-  - `referral` ← `structured.referral ?? structured.how_heard`
-  Keep existing fields (`name`, `phone`, `issue`, `urgency`, `address`, `summary`, `transcript`, `intake_answers`, `raw_payload`, `status`).
+- **First try:** match dialed `phoneNumber` from the Vapi payload against `callcapture_clients.business_phone` (digits-normalized). Log `[vapi-webhook] matched by business_phone`.
+- **Second try:** `is_super_admin = true` (single-owner fallback). Log `[vapi-webhook] matched by super_admin fallback`.
+- Keep `?client_id=` / `metadata.client_id` as highest precedence (explicit override).
+- If a match is found *after* insert (i.e. clientId resolved late), `UPDATE callcapture_leads SET client_id = ... WHERE id = lead.id`. In practice we resolve before insert, but we'll still do an UPDATE step explicitly so the flow matches the spec and survives future refactors.
+- After insert + linkage, fetch `alert_phone` from the matched client and POST to `send-sms` (already in place; we'll keep but ensure it runs after the linkage UPDATE).
 
-### 2. `supabase/functions/send-sms/index.ts` — richer SMS body
+### 2. New edge function: `supabase/functions/submit-intake/index.ts`
 
-- Select the additional fields from the lead row: `name, phone, summary, issue, service, timing, new_or_returning, referral`.
-- Build body lines (skip blanks):
-  ```
-  New {business_name} lead
-  Name: {name}
-  Phone: {phone}
-  Service: {service ?? issue}
-  When: {timing}
-  Status: {new_or_returning}
-  Heard via: {referral}
-  ```
-- Log Twilio response status + body with `[send-sms]` prefix so failures surface in logs.
+Called by the Vapi agent as a tool at end of conversation.
 
-### 3. Webhook → SMS invocation
+Accepts POST JSON:
+```
+{
+  business_phone, caller_name, caller_phone,
+  service_requested, appointment_preference,
+  new_or_returning, referral_source, notes
+}
+```
 
-- After successful insert, log `clientId` + `lead.id` and the SMS response status/body (await + read response instead of fire-and-forget) so we can see in `vapi-webhook` logs whether send-sms succeeded.
+Logic:
+- CORS preflight handler.
+- Zod-validate body; 400 on failure.
+- Service-role Supabase client.
+- Look up client: `callcapture_clients` where digits(`business_phone`) = digits(input business_phone). If none, fall back to `is_super_admin = true`. Log which matched.
+- Insert into `callcapture_leads`:
+  - `client_id`, `name: caller_name`, `phone: caller_phone`,
+  - `treatment: service_requested`, `timing: appointment_preference`,
+  - `new_or_returning`, `referral: referral_source`,
+  - `summary: notes`, `status: "New"`,
+  - `raw_payload: { source: "submit-intake", ...body }`.
+- If `client.alert_phone` present, call `send-sms` with `{ client_id, lead_id }` (reuses existing SMS function — no duplicate Twilio logic).
+- Return `{ success: true, lead_id }`.
+- Deploy with `verify_jwt = false` (public — Vapi calls it). Will be added to `supabase/config.toml`.
 
-## Out of scope
-Inbox, AI settings, `update-vapi-agent`, schema migrations. Plan assumes the new structured columns referenced (`service`, `timing`, `new_or_returning`, `referral`) already exist on `callcapture_leads` (confirmed via existing `LeadCard.tsx` typing — the table has `new_or_returning`, `timing`, `referral`, etc.). `service` falls back to `issue` if the column is absent.
+### 3. Vapi tool definition (output in chat after build)
+
+After the function deploys, I'll output the exact JSON to paste into the Vapi assistant's Tools section, including:
+- `type: "function"`, `name: "submitIntake"`
+- `description` instructing the agent to call it once all intake fields are collected and before closing the call
+- `parameters` schema for all 8 fields (all required except `notes`)
+- `server.url` pointing at `<SUPABASE_URL>/functions/v1/submit-intake`
+- `messages` for `request-start` / `request-complete` so the agent says a brief confirmation while the tool runs
+
+I'll also note that the user should add a sentence to the assistant's system prompt: *"Once you have collected the caller's name, phone, service requested, appointment preference, whether they're new or returning, and how they heard about us, call the submitIntake tool with the business_phone of this assistant before saying goodbye."*
+
+### Out of scope
+- No changes to inbox, AI Settings, `update-vapi-agent`, or `send-sms` body formatting (already structured).
+- No schema migrations — all target columns already exist on `callcapture_leads`.
