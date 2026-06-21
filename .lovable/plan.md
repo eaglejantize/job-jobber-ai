@@ -1,53 +1,42 @@
-## Audit of `supabase/functions/send-sms/index.ts`
+## Greeting Preview Feature
 
-### 1. Every `Deno.env.get()` call
-- `Deno.env.get("SUPABASE_URL")` ✅ present
-- `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` ✅ present
-- `Deno.env.get("TWILIO_API_KEY")?.split(":")[0]` → tries to parse `accountSid` from `"SID:TOKEN"` format
-- `Deno.env.get("TWILIO_ACCOUNT_SID")` (fallback) ❌ not set
-- `Deno.env.get("TWILIO_API_KEY")?.split(":")[1]` → tries to parse `authToken` from `"SID:TOKEN"` format
-- `Deno.env.get("TWILIO_AUTH_TOKEN")` (fallback) ❌ not set
-- `Deno.env.get("TWILIO_FROM_NUMBER")` ✅ present
+Add a "Preview Greeting" control next to the Greeting field so business owners can type a greeting, hear it aloud, adjust speaking rate, and insert SSML-style pauses.
 
-### 2. Why it returns `"Twilio not configured"`
-`TWILIO_API_KEY` is supplied by the **Lovable Twilio connector**. That value is a single connector key — **not** a `"SID:TOKEN"` string. So:
-- `split(":")[0]` returns the whole key (accountSid ends up = the connector key, wrong but truthy)
-- `split(":")[1]` returns `undefined` → `authToken` is `undefined`
-- The `!authToken` branch fires → `"Twilio not configured"`
+### Where it appears
+- **Setup wizard** — Step 5 ("Voice & Greeting") in `src/pages/Setup.tsx`, directly under the Greeting input.
+- **Settings page** — Existing greeting editor in `src/pages/Settings.tsx`, same component reused.
 
-### 3. Variable names the code looks for
-`TWILIO_API_KEY` (expects `SID:TOKEN` form), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`. It does **not** look for `TWILIO_PHONE_NUMBER`, `TWILIO_SID`, or `TWILIO_TOKEN`.
+### UI (new component `src/components/GreetingPreview.tsx`)
+- **Greeting textarea** (controlled by parent; we replace the current single-line Field for greeting).
+- **Pause inserter buttons**: "Short pause (300ms)", "Medium (600ms)", "Long (1s)". Each inserts `<break time="300ms"/>` etc. at the cursor position.
+- **Speaking rate slider**: 0.7× – 1.2×, default 1.0× (matches Lovable AI TTS `speed` range).
+- **Play / Stop button** with loading state.
+- Helper text showing SSML example: `Thanks for calling <break time="300ms"/> Roofing Guy. How can I help you?`
+- Plays MP3 returned from edge function via `<audio>` element.
 
-### 4. Fix — use the existing connector secrets via the Lovable gateway
+### Backend — new edge function `supabase/functions/preview-greeting/index.ts`
+- POST `{ text: string, speed: number, voiceId?: string }`.
+- Auth: require Supabase JWT (verify with anon client, reject if no user) — preview is for signed-in users only to prevent abuse.
+- Validate with Zod: text 1–500 chars, speed 0.7–1.2.
+- Convert SSML-style `<break time="Xms"/>` (and `Xs`) tags into natural pause cues for the TTS model:
+  - Strip the tags from the text sent to TTS.
+  - Replace each break with proportional ellipses/commas (`,` for ≤300ms, `...` for ≤700ms, `... ...` for >700ms) since `openai/gpt-4o-mini-tts` does not parse SSML but does respect punctuation pauses.
+- Call Lovable AI Gateway `POST https://ai.gateway.lovable.dev/v1/audio/speech` with:
+  - `model: "openai/gpt-4o-mini-tts"`, `voice: "alloy"` (or mapped from voiceId), `speed`, `response_format: "mp3"`, no `stream_format` (one-shot file is simpler for preview ≤500 chars).
+- Return raw `audio/mpeg` bytes; handle 402/429/500 with explicit error JSON.
+- CORS headers; deploy via `supabase--deploy_edge_functions`.
 
-The Twilio connector is designed to be called through `https://connector-gateway.lovable.dev/twilio/...` with:
-- `Authorization: Bearer ${LOVABLE_API_KEY}`
-- `X-Connection-Api-Key: ${TWILIO_API_KEY}`
+### Client wiring
+- `GreetingPreview` calls `supabase.functions.invoke("preview-greeting", { body: { text, speed } })` (set `responseType` via `fetch` directly, since `invoke` parses JSON — use `fetch` to `${VITE_SUPABASE_URL}/functions/v1/preview-greeting` with the user's access token, read blob, create object URL).
+- Show toast on errors (out of credits, rate limit, etc.).
 
-The gateway injects the Account SID automatically. No `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` secret needs to be added.
+### Files changed
+- **add** `src/components/GreetingPreview.tsx`
+- **add** `supabase/functions/preview-greeting/index.ts`
+- **edit** `src/pages/Setup.tsx` — replace single-line Greeting Field with `<GreetingPreview value={state.greeting} onChange={(v)=>set("greeting",v)} />`
+- **edit** `src/pages/Settings.tsx` — replace the greeting textarea with `<GreetingPreview ... />` (keeping the existing style/manual-edit logic intact)
 
-**Rewrite `send-sms/index.ts`** to:
-1. Keep the existing lead/client lookup and message-body composition.
-2. Replace the `accountSid` / `authToken` block and the direct `api.twilio.com` fetch with a single gateway call:
-   ```ts
-   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-   const TWILIO_API_KEY  = Deno.env.get("TWILIO_API_KEY");
-   const fromNumber      = Deno.env.get("TWILIO_FROM_NUMBER");
-   if (!LOVABLE_API_KEY || !TWILIO_API_KEY || !fromNumber) {
-     return 500 { error: "Twilio not configured", missing: [...] };
-   }
-   await fetch("https://connector-gateway.lovable.dev/twilio/Messages.json", {
-     method: "POST",
-     headers: {
-       Authorization: `Bearer ${LOVABLE_API_KEY}`,
-       "X-Connection-Api-Key": TWILIO_API_KEY,
-       "Content-Type": "application/x-www-form-urlencoded",
-     },
-     body: new URLSearchParams({ From: fromNumber, To: client.alert_phone, Body: body }).toString(),
-   });
-   ```
-3. Report the exact missing variable name in the error response so future misconfig is obvious.
-4. Deploy `send-sms` and curl-test it against a known lead/client.
-
-### No additional secrets required
-All three needed env vars (`LOVABLE_API_KEY`, `TWILIO_API_KEY`, `TWILIO_FROM_NUMBER`) are already configured.
+### Non-goals
+- No persistent storage of audio previews.
+- No per-break adjustable durations beyond the three preset buttons (users can still hand-edit `<break time="..."/>` values in the textarea).
+- Voice selection stays where it already is; preview uses the currently selected voice.
