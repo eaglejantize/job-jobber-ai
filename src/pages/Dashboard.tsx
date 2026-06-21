@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate, Link, useSearchParams } from "react-router-dom";
+import { Navigate, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight, Bot } from "lucide-react";
