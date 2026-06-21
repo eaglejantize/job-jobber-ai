@@ -1,54 +1,29 @@
-## Plan: Fix lead capture flow end-to-end
+## Problem
 
-### 1. `supabase/functions/vapi-webhook/index.ts` — rewrite client lookup
+Test calls reach the webhook and the lead row is created with `transcript` + `phone`, but every other column is empty. Root cause: Vapi is returning `analysis.structuredData = {}` (no schema attached to the assistant), so the webhook has nothing to write into `name`, `address`, `treatment`, `timing`, etc.
 
-Replace the dialed-number matching block with the two-tier lookup the user specified:
+## Fix — LLM extraction fallback in `vapi-webhook`
 
-- **First try:** match dialed `phoneNumber` from the Vapi payload against `callcapture_clients.business_phone` (digits-normalized). Log `[vapi-webhook] matched by business_phone`.
-- **Second try:** `is_super_admin = true` (single-owner fallback). Log `[vapi-webhook] matched by super_admin fallback`.
-- Keep `?client_id=` / `metadata.client_id` as highest precedence (explicit override).
-- If a match is found *after* insert (i.e. clientId resolved late), `UPDATE callcapture_leads SET client_id = ... WHERE id = lead.id`. In practice we resolve before insert, but we'll still do an UPDATE step explicitly so the flow matches the spec and survives future refactors.
-- After insert + linkage, fetch `alert_phone` from the matched client and POST to `send-sms` (already in place; we'll keep but ensure it runs after the linkage UPDATE).
+Edit `supabase/functions/vapi-webhook/index.ts`:
 
-### 2. New edge function: `supabase/functions/submit-intake/index.ts`
+1. After resolving `clientId` and computing `structured` from Vapi, check whether structured is empty (or missing key fields) AND a `transcript` is available.
+2. If so, call Lovable AI Gateway (`google/gemini-3-flash-preview`) with a strict extraction prompt that returns JSON with:
+   - `name`, `phone`, `address`, `issue`, `urgency`, `treatment` (service), `type`, `timing` (appointment preference), `new_or_returning`, `referral`, `summary`
+3. Robust parse: strip code fences, `JSON.parse` in a try/catch, log failures, never throw.
+4. Merge: prefer Vapi `structured` values when present, fall back to LLM-extracted values. Phone falls back to the caller number we already have.
+5. Build `insertPayload` from the merged object (same columns as today).
+6. Keep all existing logging, client lookup, UPDATE-client-id, and `send-sms` invocation untouched.
 
-Called by the Vapi agent as a tool at end of conversation.
+Uses existing `LOVABLE_API_KEY` secret. No schema changes, no frontend changes, no touching `update-vapi-agent` / AI Settings, no Vapi tool wiring (deferred per the user — that's the "Vapi schema later" half).
 
-Accepts POST JSON:
-```
-{
-  business_phone, caller_name, caller_phone,
-  service_requested, appointment_preference,
-  new_or_returning, referral_source, notes
-}
-```
+## Verification
 
-Logic:
-- CORS preflight handler.
-- Zod-validate body; 400 on failure.
-- Service-role Supabase client.
-- Look up client: `callcapture_clients` where digits(`business_phone`) = digits(input business_phone). If none, fall back to `is_super_admin = true`. Log which matched.
-- Insert into `callcapture_leads`:
-  - `client_id`, `name: caller_name`, `phone: caller_phone`,
-  - `treatment: service_requested`, `timing: appointment_preference`,
-  - `new_or_returning`, `referral: referral_source`,
-  - `summary: notes`, `status: "New"`,
-  - `raw_payload: { source: "submit-intake", ...body }`.
-- If `client.alert_phone` present, call `send-sms` with `{ client_id, lead_id }` (reuses existing SMS function — no duplicate Twilio logic).
-- Return `{ success: true, lead_id }`.
-- Deploy with `verify_jwt = false` (public — Vapi calls it). Will be added to `supabase/config.toml`.
+- Use `supabase--curl_edge_functions` to POST a synthetic end-of-call payload with the captured transcript from the screenshot.
+- Query `callcapture_leads` to confirm `name`, `address`, `treatment`, `timing`, etc. are populated.
+- Inbox card should now show all fields.
 
-### 3. Vapi tool definition (output in chat after build)
+## Out of scope
 
-After the function deploys, I'll output the exact JSON to paste into the Vapi assistant's Tools section, including:
-- `type: "function"`, `name: "submitIntake"`
-- `description` instructing the agent to call it once all intake fields are collected and before closing the call
-- `parameters` schema for all 8 fields (all required except `notes`)
-- `server.url` pointing at `<SUPABASE_URL>/functions/v1/submit-intake`
-- `messages` for `request-start` / `request-complete` so the agent says a brief confirmation while the tool runs
-
-I'll also note that the user should add a sentence to the assistant's system prompt: *"Once you have collected the caller's name, phone, service requested, appointment preference, whether they're new or returning, and how they heard about us, call the submitIntake tool with the business_phone of this assistant before saying goodbye."*
-
-### Out of scope
-- No changes to inbox, AI Settings, `update-vapi-agent`, or `send-sms` body formatting (already structured).
-- No schema migrations — all target columns already exist on `callcapture_leads`.
+- `update-vapi-agent`, AI Settings, Vapi `structuredDataSchema` / `submitIntake` tool attachment (the "later" half of the chosen approach).
+- Inbox UI changes.
+- `send-sms` body.
