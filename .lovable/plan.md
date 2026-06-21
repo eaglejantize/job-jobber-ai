@@ -1,42 +1,55 @@
-## Greeting Preview Feature
+## Goal
 
-Add a "Preview Greeting" control next to the Greeting field so business owners can type a greeting, hear it aloud, adjust speaking rate, and insert SSML-style pauses.
+Remove the unfinished TTS preview (returning 400) and replace it with a "Place Test Call" button that triggers a real outbound Vapi call using the currently-saved assistant, greeting, voice, and industry settings — so business owners hear the live production voice experience.
 
-### Where it appears
-- **Setup wizard** — Step 5 ("Voice & Greeting") in `src/pages/Setup.tsx`, directly under the Greeting input.
-- **Settings page** — Existing greeting editor in `src/pages/Settings.tsx`, same component reused.
+Out of scope: intake extraction, SMS alerts, lead creation, call routing.
 
-### UI (new component `src/components/GreetingPreview.tsx`)
-- **Greeting textarea** (controlled by parent; we replace the current single-line Field for greeting).
-- **Pause inserter buttons**: "Short pause (300ms)", "Medium (600ms)", "Long (1s)". Each inserts `<break time="300ms"/>` etc. at the cursor position.
-- **Speaking rate slider**: 0.7× – 1.2×, default 1.0× (matches Lovable AI TTS `speed` range).
-- **Play / Stop button** with loading state.
-- Helper text showing SSML example: `Thanks for calling <break time="300ms"/> Roofing Guy. How can I help you?`
-- Plays MP3 returned from edge function via `<audio>` element.
+## Changes
 
-### Backend — new edge function `supabase/functions/preview-greeting/index.ts`
-- POST `{ text: string, speed: number, voiceId?: string }`.
-- Auth: require Supabase JWT (verify with anon client, reject if no user) — preview is for signed-in users only to prevent abuse.
-- Validate with Zod: text 1–500 chars, speed 0.7–1.2.
-- Convert SSML-style `<break time="Xms"/>` (and `Xs`) tags into natural pause cues for the TTS model:
-  - Strip the tags from the text sent to TTS.
-  - Replace each break with proportional ellipses/commas (`,` for ≤300ms, `...` for ≤700ms, `... ...` for >700ms) since `openai/gpt-4o-mini-tts` does not parse SSML but does respect punctuation pauses.
-- Call Lovable AI Gateway `POST https://ai.gateway.lovable.dev/v1/audio/speech` with:
-  - `model: "openai/gpt-4o-mini-tts"`, `voice: "alloy"` (or mapped from voiceId), `speed`, `response_format: "mp3"`, no `stream_format` (one-shot file is simpler for preview ≤500 chars).
-- Return raw `audio/mpeg` bytes; handle 402/429/500 with explicit error JSON.
-- CORS headers; deploy via `supabase--deploy_edge_functions`.
+### 1. New edge function `supabase/functions/place-test-call/index.ts`
 
-### Client wiring
-- `GreetingPreview` calls `supabase.functions.invoke("preview-greeting", { body: { text, speed } })` (set `responseType` via `fetch` directly, since `invoke` parses JSON — use `fetch` to `${VITE_SUPABASE_URL}/functions/v1/preview-greeting` with the user's access token, read blob, create object URL).
-- Show toast on errors (out of credits, rate limit, etc.).
+- POST `{ client_id, to_number }`, JWT-authenticated (verify owner or super admin, mirroring `update-vapi-agent`).
+- Validate `to_number` is E.164 (Zod).
+- Load `callcapture_clients` row to get `assigned_callcapture_number` / `business_phone`, `business_name`, `greeting`, `voice_id`, `industry`.
+- Look up the matching Vapi `phoneNumberId` and `assistantId` via `GET https://api.vapi.ai/phone-number` (same matching logic as `update-vapi-agent`).
+- Place the call: `POST https://api.vapi.ai/call` with
+  ```json
+  {
+    "phoneNumberId": "<vapi phone id>",
+    "assistantId": "<vapi assistant id>",
+    "customer": { "number": "<to_number>" }
+  }
+  ```
+- `console.log` (visible in edge logs): `assistantId`, `voice_id`, `greeting`, `to_number`, full Vapi response.
+- Return `{ ok, callId, assistantId, voiceId, greeting, to: to_number, vapi }` or `{ ok: false, error, vapi }` on failure.
+- Deploy via `supabase--deploy_edge_functions`.
 
-### Files changed
-- **add** `src/components/GreetingPreview.tsx`
-- **add** `supabase/functions/preview-greeting/index.ts`
-- **edit** `src/pages/Setup.tsx` — replace single-line Greeting Field with `<GreetingPreview value={state.greeting} onChange={(v)=>set("greeting",v)} />`
-- **edit** `src/pages/Settings.tsx` — replace the greeting textarea with `<GreetingPreview ... />` (keeping the existing style/manual-edit logic intact)
+Note: the assistant on Vapi already holds the saved greeting/voice/prompt (kept in sync by `update-vapi-agent` on save), so the test call automatically uses the current business name, greeting, voice, and industry settings.
 
-### Non-goals
-- No persistent storage of audio previews.
-- No per-break adjustable durations beyond the three preset buttons (users can still hand-edit `<break time="..."/>` values in the textarea).
-- Voice selection stays where it already is; preview uses the currently selected voice.
+### 2. New component `src/components/TestCallButton.tsx`
+
+- "Place Test Call" button.
+- On click, opens a small dialog with a phone number input (default to the owner's phone if available) and a Call button.
+- Calls `supabase.functions.invoke("place-test-call", { body: { client_id, to_number } })`.
+- Status display states: `Calling…` → `Connected` → `Completed` / `Failed`.
+  - `Calling…` while the invoke promise is pending.
+  - On success response, switch to `Connected` (Vapi returns immediately once the call is dialing).
+  - Poll `GET https://api.vapi.ai/call/{id}` via a tiny passthrough? Out of scope — instead show `Completed` after a short delay or when user dismisses, and `Failed` if invoke errors. (Live status updates beyond the initial dial would require a Vapi webhook subscription; not in scope.)
+- Show a collapsible "Details" block with: Assistant ID, Voice ID, Greeting used, Destination number, raw Vapi response.
+
+### 3. Wire into Settings + Setup
+
+- `src/components/settings/AiSettingsPanel.tsx`: remove `<GreetingPreview>` import/usage, restore a plain `<Textarea>` for the greeting, and render `<TestCallButton clientId={c.id} defaultTo={ownerPhone} />` next to it. Add a small "Live preview coming soon — use Test Call to hear the real voice" hint.
+- `src/pages/Setup.tsx`: same swap — `<Textarea>` for greeting + `<TestCallButton>` (only enabled once the client row is saved and a number is assigned; otherwise show disabled with tooltip "Save and assign a number first").
+
+### 4. Cleanup
+
+- Delete `src/components/GreetingPreview.tsx`.
+- Delete `supabase/functions/preview-greeting/` and remove its `[functions.preview-greeting]` block from `supabase/config.toml`.
+
+## Technical notes
+
+- Authentication: reuse `update-vapi-agent` auth pattern (Bearer JWT, owner-or-super-admin check via `callcapture_clients`).
+- Vapi call API ref: https://docs.vapi.ai/api-reference/calls/create
+- All Vapi response and request metadata is logged server-side; the UI surfaces a summary so the user can verify which assistant/voice/greeting was used.
+- No DB schema changes. No new secrets (uses existing `VAPI_API_KEY`).

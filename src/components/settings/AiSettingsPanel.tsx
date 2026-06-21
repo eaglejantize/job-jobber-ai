@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { questionsForIndustry, UNIVERSAL_QUESTIONS } from "@/lib/intakeQuestions";
 import { industryLabel } from "@/lib/industries";
 import { VOICES as STATIC_VOICES } from "@/lib/voices";
-import { GreetingPreview } from "@/components/GreetingPreview";
+import { TestCallButton } from "@/components/TestCallButton";
 
 type Voice = { id: string; name: string; provider: string; description: string };
 
@@ -124,12 +124,18 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
             {genLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Help me write this
           </Button>
         </div>
-        <GreetingPreview
+        <Textarea
           value={c.greeting ?? ""}
-          onChange={(v) => update("greeting", v)}
-          voice={c.voice_label ?? undefined}
+          onChange={(e) => update("greeting", e.target.value)}
           placeholder={`Thanks for calling ${c.business_name}, how can I help you today?`}
+          rows={3}
         />
+        <div className="flex items-center gap-3 pt-1">
+          <TestCallButton clientId={c.id} />
+          <p className="text-xs text-muted-foreground">
+            Live in-browser preview coming soon — use Test Call to hear the real voice.
+          </p>
+        </div>
         {options.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Tap to use</p>
