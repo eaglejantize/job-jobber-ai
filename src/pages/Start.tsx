@@ -186,12 +186,15 @@ export default function Start() {
         }
       }
 
-      if (!userId) {
-        // Fallback: read current session.
-        const { data: sess } = await supabase.auth.getSession();
-        userId = sess.session?.user.id ?? null;
-      }
+      // Detect whether signUp returned an active session. With email
+      // confirmation ON, there is no session yet → inserts must run as anon
+      // with user_id = null (the trg_link_user_to_clients trigger on
+      // auth.users back-fills user_id by email match later).
+      const { data: sess } = await supabase.auth.getSession();
+      const hasSession = !!sess.session?.user?.id;
+      if (hasSession) userId = sess.session!.user.id;
       if (!userId) throw new Error("Could not create account");
+      const insertUserId: string | null = hasSession ? userId : null;
 
       // 2. Find existing client row by email (covers prior anon signups).
       const { data: existing } = await supabase
@@ -208,7 +211,7 @@ export default function Start() {
         const { error: updErr } = await supabase
           .from("callcapture_clients")
           .update({
-            user_id: userId,
+            ...(hasSession ? { user_id: userId } : {}),
             owner_name: data.owner_name,
             business_name: data.business_name,
             alert_phone: data.alert_phone,
@@ -221,7 +224,7 @@ export default function Start() {
           .from("callcapture_clients")
           .insert({
             id: clientId,
-            user_id: userId,
+            user_id: insertUserId,
             owner_name: data.owner_name,
             business_name: data.business_name,
             email: data.email,

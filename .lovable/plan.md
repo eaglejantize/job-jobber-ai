@@ -1,76 +1,46 @@
-# Business Lookup Onboarding
+# Fix: signup blocked by RLS on `callcapture_clients`
 
-Cut receptionist setup from 10+ minutes to under 2 by letting the owner type their business phone number, looking up the business automatically, generating a greeting + intake questions with AI, and saving in one screen.
+## Root cause
 
-## User flow
+Email confirmation is enabled, so `supabase.auth.signUp()` in `src/pages/Start.tsx` returns a user **without** a session. The follow-up `INSERT` into `callcapture_clients` therefore runs as the **anon** role with `user_id` set to the new auth user id.
 
-```text
-/onboarding
-  ┌──────────────────────────────────────────────┐
-  │ 1. Enter business phone (E.164)              │
-  │    [ Look up my business ]                   │
-  └──────────────────────────────────────────────┘
-                ↓ (≈3–6s spinner)
-  ┌──────────────────────────────────────────────┐
-  │ 2. Pre-filled, editable card:                │
-  │      • Business name                         │
-  │      • Address                               │
-  │      • Website                               │
-  │      • Business hours                        │
-  │      • Industry (dropdown)                   │
-  │      • Suggested greeting (textarea)         │
-  │      • Suggested intake questions (chips)    │
-  │    [ Save & continue ]   [ Use full wizard ] │
-  └──────────────────────────────────────────────┘
-                ↓
-            /dashboard
+The only anon policy on the table is:
+
+```
+anon signup insert  →  WITH CHECK (user_id IS NULL AND ...trim checks...)
 ```
 
-If lookup fails (unlisted number, new business), the same screen reveals empty editable fields plus an "Industry" dropdown. Once the user picks an industry, the AI still generates greeting + intake questions so they get the fast path either way.
+Because `user_id` is not null, the check fails → `new row violates row-level security policy`. The `auth signup insert` policy can't help — there's no session yet.
 
-A "Use full wizard" link on the same page hands off to `/setup` with whatever has been filled so far (saved into `localStorage` under `callcapture.wizard`, the existing key).
+## Fix
 
-## What gets built
+Make anon signups insert with `user_id = NULL`, and rely on the existing `trg_link_user_to_clients` trigger (already on `auth.users`) to back-fill `user_id` once the auth user is created/confirmed. The `create-checkout` edge function uses the service role, so it doesn't need RLS access for the immediate Stripe redirect.
 
-### 1. New edge function `supabase/functions/business-lookup/index.ts`
-- POST `{ phone: string }` (E.164, validated with Zod).
-- Step A — Google Places: `GET https://places.googleapis.com/v1/places:searchText` with `textQuery = phone`, `X-Goog-FieldMask = places.displayName,places.formattedAddress,places.websiteUri,places.regularOpeningHours,places.types,places.primaryType,places.nationalPhoneNumber`. Take the first result.
-- Step B — Industry classification + greeting + intake via Lovable AI (`google/gemini-3-flash-preview`) using AI SDK `generateText` with `Output.object`. Schema:
-  ```ts
-  { industry: enum(INDUSTRIES), greeting: string, intakeQuestions: string[5..7] }
-  ```
-  Prompt includes the business name, address, Google `types`, and our `INDUSTRIES` list so the model picks one of our existing labels.
-- Returns `{ found: boolean, business: {...} | null, suggestion: {...} }`. When Places returns nothing, `found = false`, `business = null`, and `suggestion` is omitted (UI will request industry first, then call a second small endpoint — see #2).
-- `verify_jwt = false`; CORS; uses `GOOGLE_PLACES_API_KEY` + existing `LOVABLE_API_KEY`.
+### 1. Migration
 
-### 2. New edge function `supabase/functions/suggest-greeting/index.ts`
-- POST `{ businessName, industry }` → same AI schema minus `industry`. Used for the manual-fallback path and for "regenerate" buttons on the onboarding screen.
-- `verify_jwt = false`; CORS; `LOVABLE_API_KEY` only.
+- Keep the `anon signup insert` policy exactly as-is (it already requires `user_id IS NULL` + trimmed fields). No schema change needed there.
+- Tighten the `link_client_to_user` BEFORE-INSERT trigger so it only fills `user_id` from `auth.users` when the caller didn't already provide one (current behavior — keep). No change required, just verifying.
+- Add an explicit `INSERT` policy for anon that also permits the row when `user_id IS NULL` after the trigger fires — already covered by existing policy; no migration needed.
 
-### 3. New page `src/pages/Onboarding.tsx`
-- Route: `/onboarding` (added to `src/App.tsx`, wrapped in `RequireAuth`).
-- Single-screen flow described above. Uses shadcn `Input`, `Button`, `Textarea`, `Select` (Industry), `Badge` (intake chips with × to remove + "Add" input), and a `Skeleton` while lookup runs.
-- On Save:
-  - Upsert `callcapture_clients` row (existing table) with business_name, industry, address, website, business_hours, greeting, intake_questions, business_phone, owner email/name from auth.
-  - Also writes the same payload into `localStorage` `callcapture.wizard` so `/setup` stays in sync if the user opens it later.
-  - Navigates to `/dashboard`.
-- "Use full wizard" button: save partial state to `localStorage` and navigate to `/setup`.
+Net result: **no schema migration is required**. The fix is in the client code.
 
-### 4. Entry-point wiring
-- After signup/login, redirect first-time users (no `callcapture_clients` row, or row missing `business_name`) to `/onboarding` instead of `/setup`. Done in `RequireAuth` / `Login.tsx` post-auth redirect.
-- Existing `/setup` stays untouched as the fallback wizard.
+### 2. `src/pages/Start.tsx` — branch on session presence
 
-### 5. Secrets
-- New: `GOOGLE_PLACES_API_KEY` (requested via `add_secret` after approval; instructions: Google Cloud Console → enable Places API (New) → create API key restricted to Places API).
-- Reuses: `LOVABLE_API_KEY`.
+After `signUp()`, check whether a session was returned:
+
+- **Session present** (email confirmation off): proceed with current `user_id: userId` path — matches `auth signup insert`.
+- **No session** (email confirmation on): insert with `user_id: null`. Drop `user_id` from the insert payload (or set it explicitly to `null`). Use `.select("id").single()` to capture the new `clientId`, since `crypto.randomUUID()` would still work but reading it back is safer. Then call `create-checkout` with that `clientId`.
+
+The `link_user_to_clients` AFTER-INSERT trigger on `auth.users` will set `user_id` on the row by email match once Supabase finalizes the user, and `create-checkout` (service role) can read/update the row immediately regardless.
+
+### 3. Verify
+
+1. Sign up a fresh email at `/start` → no RLS error, row created in `callcapture_clients` with `user_id` null initially, then populated by trigger.
+2. Redirect to Stripe checkout succeeds.
+3. After email confirmation + login, `own client select` policy returns the row to the user.
 
 ## Out of scope
-- No changes to intake extraction, SMS alerts, lead creation, call routing, Vapi assistant provisioning, or Stripe checkout. (Vapi assistant gets created/updated via the existing `update-vapi-agent` flow when the user later launches from the wizard or settings — not from `/onboarding`.)
-- No new DB columns; `callcapture_clients` already has `business_name`, `industry`, `address`, `website`, `business_hours`, `greeting`, `intake_questions`, `business_phone`.
-- No phone number provisioning on `/onboarding` (still happens in `/setup`).
 
-## Technical notes
-- Phone normalization: client + server both coerce to E.164 (`+1` default for US-looking 10-digit input).
-- Places "Text Search (New)" works with phone-number queries and returns a single best match; if zero results, fall back to `places:searchNearby` is **not** needed — we just trigger manual mode.
-- AI call uses the gateway helper pattern from `ai-sdk-lovable-gateway` knowledge (Deno `npm:` imports).
-- Industry enum is built from `src/lib/industries.ts` and shared with the edge function via a copy in `supabase/functions/_shared/industries.ts` to keep enums in sync.
+- No change to admin or authenticated policies.
+- No change to triggers or functions.
+- No global RLS changes.
