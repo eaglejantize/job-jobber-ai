@@ -29,14 +29,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    const accountSid = Deno.env.get("TWILIO_API_KEY")?.split(":")[0]
-      ?? Deno.env.get("TWILIO_ACCOUNT_SID");
-    const authToken = Deno.env.get("TWILIO_API_KEY")?.split(":")[1]
-      ?? Deno.env.get("TWILIO_AUTH_TOKEN");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
     const fromNumber = Deno.env.get("TWILIO_FROM_NUMBER");
-
-    if (!accountSid || !authToken || !fromNumber) {
-      return new Response(JSON.stringify({ error: "Twilio not configured" }), {
+    const missing = [
+      !LOVABLE_API_KEY && "LOVABLE_API_KEY",
+      !TWILIO_API_KEY && "TWILIO_API_KEY",
+      !fromNumber && "TWILIO_FROM_NUMBER",
+    ].filter(Boolean);
+    if (missing.length) {
+      console.log("[send-sms] missing env vars:", missing);
+      return new Response(JSON.stringify({ error: "Twilio not configured", missing }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -53,12 +56,15 @@ Deno.serve(async (req) => {
     const body = lines.join("\n");
     console.log("[send-sms] sending to", client.alert_phone, "body:", body);
 
-    const auth = btoa(`${accountSid}:${authToken}`);
-    const params = new URLSearchParams({ From: fromNumber, To: client.alert_phone, Body: body });
+    const params = new URLSearchParams({ From: fromNumber!, To: client.alert_phone, Body: body });
 
-    const tr = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+    const tr = await fetch(`https://connector-gateway.lovable.dev/twilio/Messages.json`, {
       method: "POST",
-      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": TWILIO_API_KEY!,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
       body: params.toString(),
     });
     const trBody = await tr.text();
