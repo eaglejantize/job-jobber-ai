@@ -112,141 +112,42 @@ export default function Start() {
     try {
       const data = parsed.data;
 
-      // 1. Create auth user (or sign in if it already exists with these creds).
-      let userId: string | null = null;
-      const signUpRes = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
-      });
-
-      if (signUpRes.error) {
-        const raw = signUpRes.error.message ?? "";
-        const lower = raw.toLowerCase();
-        const status = (signUpRes.error as { status?: number }).status;
-        const rateLimited =
-          status === 429 ||
-          lower.includes("for security purposes") ||
-          lower.includes("rate limit") ||
-          /after\s+\d+\s*seconds?/.test(lower);
-        const alreadyExists =
-          lower.includes("registered") || lower.includes("already") || lower.includes("exists");
-
-        if (rateLimited) {
-          const secMatch = lower.match(/after\s+(\d+)\s*seconds?/);
-          const secs = secMatch ? parseInt(secMatch[1], 10) : 60;
-          setCooldownUntil(Date.now() + secs * 1000);
-          setSubmitting(false);
-          toast({
-            title: `Please wait ${secs}s before trying again`,
-            description:
-              "Too many recent attempts for this email. If you already have an account, sign in instead.",
-            variant: "destructive",
-          });
-          return;
-        }
-        if (alreadyExists) {
-          // Each sub-account needs its own email. Do NOT silently sign in or
-          // claim another user's client row — that would break tenant isolation.
-          setSubmitting(false);
-          setEmailTaken(true);
-          setErrors({ email: "This email already has an account. Use a different email for a new sub-account." });
-          toast({
-            title: "Account already exists",
-            description:
-              `An account already exists for ${data.email}. To create a separate sub-account, use a different email (e.g. you+business2@gmail.com). Or sign in to your existing account.`,
-            variant: "destructive",
-          });
-          return;
-        } else {
-          setSubmitting(false);
-          toast({
-            title: "Couldn't create account",
-            description: signUpRes.error.message,
-            variant: "destructive",
-          });
-          return;
-        }
-      } else {
-        userId = signUpRes.data.user?.id ?? null;
-        // Supabase quirk: with email confirmation on, signUp for an
-        // already-registered email returns success with a fake user whose
-        // identities array is empty. Treat that as "already exists".
-        const identities = signUpRes.data.user?.identities ?? [];
-        if (signUpRes.data.user && identities.length === 0) {
-          setSubmitting(false);
-          setEmailTaken(true);
-          setErrors({ email: "This email already has an account. Use a different email for a new sub-account." });
-          toast({
-            title: "Account already exists",
-            description: `An account already exists for ${data.email}. Sign in or use a different email.`,
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-
-      // Detect whether signUp returned an active session. With email
-      // confirmation ON, there is no session yet → inserts must run as anon
-      // with user_id = null (the trg_link_user_to_clients trigger on
-      // auth.users back-fills user_id by email match later).
-      const { data: sess } = await supabase.auth.getSession();
-      const hasSession = !!sess.session?.user?.id;
-      if (hasSession) userId = sess.session!.user.id;
-      if (!userId) throw new Error("Could not create account");
-      const insertUserId: string | null = hasSession ? userId : null;
-
-      // 2. Find existing client row by email (covers prior anon signups).
-      const { data: existing } = await supabase
-        .from("callcapture_clients")
-        .select("id, user_id")
-        .ilike("email", data.email)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      let clientId: string;
-      if (existing) {
-        clientId = existing.id;
-        const { error: updErr } = await supabase
-          .from("callcapture_clients")
-          .update({
-            ...(hasSession ? { user_id: userId } : {}),
-            owner_name: data.owner_name,
-            business_name: data.business_name,
-            alert_phone: data.alert_phone,
-          })
-          .eq("id", existing.id);
-        if (updErr) throw updErr;
-      } else {
-        clientId = crypto.randomUUID();
-        const { error: insErr } = await supabase
-          .from("callcapture_clients")
-          .insert({
-            id: clientId,
-            user_id: insertUserId,
+      // 1. Tenant creation via service-role edge function (handles auth user +
+      //    callcapture_clients insert under one transaction, bypassing RLS safely).
+      const { data: signupRes, error: signupErr } = await supabase.functions.invoke(
+        "signup-tenant",
+        {
+          body: {
             owner_name: data.owner_name,
             business_name: data.business_name,
             email: data.email,
             alert_phone: data.alert_phone,
+            password: data.password,
             industry: data.industry,
-            setup_status: "Payment Pending",
-            payment_status: "pending",
-          });
-        if (insErr) throw insErr;
+          },
+        },
+      );
+      const ctx = (signupRes ?? {}) as { client_id?: string; error?: string; message?: string };
+      if (signupErr || !ctx.client_id) {
+        if (ctx.error === "validation_failed") {
+          setSubmitting(false);
+          toast({ title: "Please check your details", description: "Some fields are missing or invalid.", variant: "destructive" });
+          return;
+        }
+        throw signupErr ?? new Error(ctx.message ?? ctx.error ?? "Could not create account");
       }
+      const clientId = ctx.client_id;
 
-      // Also persist industry on the existing branch
-      if (existing) {
-        await supabase
-          .from("callcapture_clients")
-          .update({ industry: data.industry })
-          .eq("id", existing.id);
-      }
+      // 2. Sign in so the dashboard has a session when Stripe redirects back.
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+      if (signInErr) console.warn("signin_after_signup_failed", signInErr.message);
 
       // 3. Stripe checkout.
       const { data: checkout, error: fnErr } = await supabase.functions.invoke("create-checkout", {
-        body: { clientId, industry: data.industry },
+        body: { client_id: clientId },
       });
       if (fnErr || !checkout?.url) throw fnErr ?? new Error("Could not start checkout");
 
