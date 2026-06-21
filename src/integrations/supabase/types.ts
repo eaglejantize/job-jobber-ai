@@ -138,6 +138,7 @@ export type Database = {
       }
       callcapture_clients: {
         Row: {
+          address: string | null
           alert_phone: string
           answer_after_hours: boolean
           assigned_callcapture_number: string | null
@@ -177,8 +178,10 @@ export type Database = {
           user_id: string | null
           voice_id: string | null
           voice_label: string | null
+          website: string | null
         }
         Insert: {
+          address?: string | null
           alert_phone: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
@@ -218,8 +221,10 @@ export type Database = {
           user_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          website?: string | null
         }
         Update: {
+          address?: string | null
           alert_phone?: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
@@ -259,6 +264,7 @@ export type Database = {
           user_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          website?: string | null
         }
         Relationships: []
       }
