@@ -1,55 +1,76 @@
-## Goal
+# Business Lookup Onboarding
 
-Remove the unfinished TTS preview (returning 400) and replace it with a "Place Test Call" button that triggers a real outbound Vapi call using the currently-saved assistant, greeting, voice, and industry settings — so business owners hear the live production voice experience.
+Cut receptionist setup from 10+ minutes to under 2 by letting the owner type their business phone number, looking up the business automatically, generating a greeting + intake questions with AI, and saving in one screen.
 
-Out of scope: intake extraction, SMS alerts, lead creation, call routing.
+## User flow
 
-## Changes
+```text
+/onboarding
+  ┌──────────────────────────────────────────────┐
+  │ 1. Enter business phone (E.164)              │
+  │    [ Look up my business ]                   │
+  └──────────────────────────────────────────────┘
+                ↓ (≈3–6s spinner)
+  ┌──────────────────────────────────────────────┐
+  │ 2. Pre-filled, editable card:                │
+  │      • Business name                         │
+  │      • Address                               │
+  │      • Website                               │
+  │      • Business hours                        │
+  │      • Industry (dropdown)                   │
+  │      • Suggested greeting (textarea)         │
+  │      • Suggested intake questions (chips)    │
+  │    [ Save & continue ]   [ Use full wizard ] │
+  └──────────────────────────────────────────────┘
+                ↓
+            /dashboard
+```
 
-### 1. New edge function `supabase/functions/place-test-call/index.ts`
+If lookup fails (unlisted number, new business), the same screen reveals empty editable fields plus an "Industry" dropdown. Once the user picks an industry, the AI still generates greeting + intake questions so they get the fast path either way.
 
-- POST `{ client_id, to_number }`, JWT-authenticated (verify owner or super admin, mirroring `update-vapi-agent`).
-- Validate `to_number` is E.164 (Zod).
-- Load `callcapture_clients` row to get `assigned_callcapture_number` / `business_phone`, `business_name`, `greeting`, `voice_id`, `industry`.
-- Look up the matching Vapi `phoneNumberId` and `assistantId` via `GET https://api.vapi.ai/phone-number` (same matching logic as `update-vapi-agent`).
-- Place the call: `POST https://api.vapi.ai/call` with
-  ```json
-  {
-    "phoneNumberId": "<vapi phone id>",
-    "assistantId": "<vapi assistant id>",
-    "customer": { "number": "<to_number>" }
-  }
+A "Use full wizard" link on the same page hands off to `/setup` with whatever has been filled so far (saved into `localStorage` under `callcapture.wizard`, the existing key).
+
+## What gets built
+
+### 1. New edge function `supabase/functions/business-lookup/index.ts`
+- POST `{ phone: string }` (E.164, validated with Zod).
+- Step A — Google Places: `GET https://places.googleapis.com/v1/places:searchText` with `textQuery = phone`, `X-Goog-FieldMask = places.displayName,places.formattedAddress,places.websiteUri,places.regularOpeningHours,places.types,places.primaryType,places.nationalPhoneNumber`. Take the first result.
+- Step B — Industry classification + greeting + intake via Lovable AI (`google/gemini-3-flash-preview`) using AI SDK `generateText` with `Output.object`. Schema:
+  ```ts
+  { industry: enum(INDUSTRIES), greeting: string, intakeQuestions: string[5..7] }
   ```
-- `console.log` (visible in edge logs): `assistantId`, `voice_id`, `greeting`, `to_number`, full Vapi response.
-- Return `{ ok, callId, assistantId, voiceId, greeting, to: to_number, vapi }` or `{ ok: false, error, vapi }` on failure.
-- Deploy via `supabase--deploy_edge_functions`.
+  Prompt includes the business name, address, Google `types`, and our `INDUSTRIES` list so the model picks one of our existing labels.
+- Returns `{ found: boolean, business: {...} | null, suggestion: {...} }`. When Places returns nothing, `found = false`, `business = null`, and `suggestion` is omitted (UI will request industry first, then call a second small endpoint — see #2).
+- `verify_jwt = false`; CORS; uses `GOOGLE_PLACES_API_KEY` + existing `LOVABLE_API_KEY`.
 
-Note: the assistant on Vapi already holds the saved greeting/voice/prompt (kept in sync by `update-vapi-agent` on save), so the test call automatically uses the current business name, greeting, voice, and industry settings.
+### 2. New edge function `supabase/functions/suggest-greeting/index.ts`
+- POST `{ businessName, industry }` → same AI schema minus `industry`. Used for the manual-fallback path and for "regenerate" buttons on the onboarding screen.
+- `verify_jwt = false`; CORS; `LOVABLE_API_KEY` only.
 
-### 2. New component `src/components/TestCallButton.tsx`
+### 3. New page `src/pages/Onboarding.tsx`
+- Route: `/onboarding` (added to `src/App.tsx`, wrapped in `RequireAuth`).
+- Single-screen flow described above. Uses shadcn `Input`, `Button`, `Textarea`, `Select` (Industry), `Badge` (intake chips with × to remove + "Add" input), and a `Skeleton` while lookup runs.
+- On Save:
+  - Upsert `callcapture_clients` row (existing table) with business_name, industry, address, website, business_hours, greeting, intake_questions, business_phone, owner email/name from auth.
+  - Also writes the same payload into `localStorage` `callcapture.wizard` so `/setup` stays in sync if the user opens it later.
+  - Navigates to `/dashboard`.
+- "Use full wizard" button: save partial state to `localStorage` and navigate to `/setup`.
 
-- "Place Test Call" button.
-- On click, opens a small dialog with a phone number input (default to the owner's phone if available) and a Call button.
-- Calls `supabase.functions.invoke("place-test-call", { body: { client_id, to_number } })`.
-- Status display states: `Calling…` → `Connected` → `Completed` / `Failed`.
-  - `Calling…` while the invoke promise is pending.
-  - On success response, switch to `Connected` (Vapi returns immediately once the call is dialing).
-  - Poll `GET https://api.vapi.ai/call/{id}` via a tiny passthrough? Out of scope — instead show `Completed` after a short delay or when user dismisses, and `Failed` if invoke errors. (Live status updates beyond the initial dial would require a Vapi webhook subscription; not in scope.)
-- Show a collapsible "Details" block with: Assistant ID, Voice ID, Greeting used, Destination number, raw Vapi response.
+### 4. Entry-point wiring
+- After signup/login, redirect first-time users (no `callcapture_clients` row, or row missing `business_name`) to `/onboarding` instead of `/setup`. Done in `RequireAuth` / `Login.tsx` post-auth redirect.
+- Existing `/setup` stays untouched as the fallback wizard.
 
-### 3. Wire into Settings + Setup
+### 5. Secrets
+- New: `GOOGLE_PLACES_API_KEY` (requested via `add_secret` after approval; instructions: Google Cloud Console → enable Places API (New) → create API key restricted to Places API).
+- Reuses: `LOVABLE_API_KEY`.
 
-- `src/components/settings/AiSettingsPanel.tsx`: remove `<GreetingPreview>` import/usage, restore a plain `<Textarea>` for the greeting, and render `<TestCallButton clientId={c.id} defaultTo={ownerPhone} />` next to it. Add a small "Live preview coming soon — use Test Call to hear the real voice" hint.
-- `src/pages/Setup.tsx`: same swap — `<Textarea>` for greeting + `<TestCallButton>` (only enabled once the client row is saved and a number is assigned; otherwise show disabled with tooltip "Save and assign a number first").
-
-### 4. Cleanup
-
-- Delete `src/components/GreetingPreview.tsx`.
-- Delete `supabase/functions/preview-greeting/` and remove its `[functions.preview-greeting]` block from `supabase/config.toml`.
+## Out of scope
+- No changes to intake extraction, SMS alerts, lead creation, call routing, Vapi assistant provisioning, or Stripe checkout. (Vapi assistant gets created/updated via the existing `update-vapi-agent` flow when the user later launches from the wizard or settings — not from `/onboarding`.)
+- No new DB columns; `callcapture_clients` already has `business_name`, `industry`, `address`, `website`, `business_hours`, `greeting`, `intake_questions`, `business_phone`.
+- No phone number provisioning on `/onboarding` (still happens in `/setup`).
 
 ## Technical notes
-
-- Authentication: reuse `update-vapi-agent` auth pattern (Bearer JWT, owner-or-super-admin check via `callcapture_clients`).
-- Vapi call API ref: https://docs.vapi.ai/api-reference/calls/create
-- All Vapi response and request metadata is logged server-side; the UI surfaces a summary so the user can verify which assistant/voice/greeting was used.
-- No DB schema changes. No new secrets (uses existing `VAPI_API_KEY`).
+- Phone normalization: client + server both coerce to E.164 (`+1` default for US-looking 10-digit input).
+- Places "Text Search (New)" works with phone-number queries and returns a single best match; if zero results, fall back to `places:searchNearby` is **not** needed — we just trigger manual mode.
+- AI call uses the gateway helper pattern from `ai-sdk-lovable-gateway` knowledge (Deno `npm:` imports).
+- Industry enum is built from `src/lib/industries.ts` and shared with the edge function via a copy in `supabase/functions/_shared/industries.ts` to keep enums in sync.
