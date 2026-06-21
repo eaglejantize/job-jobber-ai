@@ -11,6 +11,3 @@ verify_jwt = false
 
 [functions.provision-twilio-number]
 verify_jwt = false
-
-[functions.preview-greeting]
-verify_jwt = false
