@@ -18,7 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { GreetingPreview } from "@/components/GreetingPreview";
+import { Textarea } from "@/components/ui/textarea";
 import PhoneNumberPicker from "@/components/PhoneNumberPicker";
 
 const STEPS = [
@@ -445,7 +445,15 @@ export default function Setup() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Greeting</label>
-                <GreetingPreview value={state.greeting} onChange={(v) => set("greeting", v)} />
+                <Textarea
+                  value={state.greeting}
+                  onChange={(e) => set("greeting", e.target.value)}
+                  placeholder={`Thanks for calling ${state.businessName || "our business"}, how can I help you today?`}
+                  rows={3}
+                />
+                <p className="text-xs text-muted-foreground">
+                  After launch, use Place Test Call from Settings to hear the real voice on your phone.
+                </p>
               </div>
             </div>
           )}
