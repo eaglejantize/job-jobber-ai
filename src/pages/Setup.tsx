@@ -441,7 +441,10 @@ export default function Setup() {
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <Field label="Receptionist name *" value={state.assistantName} onChange={(v) => set("assistantName", v)} />
-                <Field label="Greeting" value={state.greeting} onChange={(v) => set("greeting", v)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Greeting</label>
+                <GreetingPreview value={state.greeting} onChange={(v) => set("greeting", v)} />
               </div>
             </div>
           )}
