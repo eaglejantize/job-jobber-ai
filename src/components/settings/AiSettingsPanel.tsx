@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { questionsForIndustry, UNIVERSAL_QUESTIONS } from "@/lib/intakeQuestions";
 import { industryLabel } from "@/lib/industries";
 import { VOICES as STATIC_VOICES } from "@/lib/voices";
+import { GreetingPreview } from "@/components/GreetingPreview";
 
 type Voice = { id: string; name: string; provider: string; description: string };
 
@@ -123,7 +124,12 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
             {genLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Help me write this
           </Button>
         </div>
-        <Textarea rows={3} value={c.greeting ?? ""} onChange={(e) => update("greeting", e.target.value)} placeholder={`Thanks for calling ${c.business_name}, how can I help you today?`} />
+        <GreetingPreview
+          value={c.greeting ?? ""}
+          onChange={(v) => update("greeting", v)}
+          voice={c.voice_label ?? undefined}
+          placeholder={`Thanks for calling ${c.business_name}, how can I help you today?`}
+        />
         {options.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Tap to use</p>

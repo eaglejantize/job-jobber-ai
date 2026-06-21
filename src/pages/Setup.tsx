@@ -18,6 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { GreetingPreview } from "@/components/GreetingPreview";
 import PhoneNumberPicker from "@/components/PhoneNumberPicker";
 
 const STEPS = [
@@ -441,7 +442,10 @@ export default function Setup() {
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <Field label="Receptionist name *" value={state.assistantName} onChange={(v) => set("assistantName", v)} />
-                <Field label="Greeting" value={state.greeting} onChange={(v) => set("greeting", v)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Greeting</label>
+                <GreetingPreview value={state.greeting} onChange={(v) => set("greeting", v)} />
               </div>
             </div>
           )}
