@@ -18,6 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { GreetingPreview } from "@/components/GreetingPreview";
 import PhoneNumberPicker from "@/components/PhoneNumberPicker";
 
 const STEPS = [
