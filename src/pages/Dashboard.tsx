@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate, Link, useSearchParams } from "react-router-dom";
+import { Navigate, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight, Bot } from "lucide-react";
@@ -58,6 +58,7 @@ export default function Dashboard() {
   const [polling, setPolling] = useState(false);
   const [syncingAgent, setSyncingAgent] = useState(false);
   const toastedRef = useRef(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (params.get("checkout") === "success" && !toastedRef.current) {
@@ -174,6 +175,11 @@ export default function Dashboard() {
 
       if (cancelled) return;
       setClient(data as Client | null);
+      // First-time users: send to Business Lookup onboarding.
+      if (!data || !data.business_name) {
+        navigate("/onboarding", { replace: true });
+        return;
+      }
       const isActive = (data?.payment_status ?? "").toLowerCase() === "active";
       const justArrived = params.get("checkout") === "success" || Date.now() - startedAt < 1000;
       if (!isActive && (justArrived || attempts > 0) && attempts < maxAttempts) {

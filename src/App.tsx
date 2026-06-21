@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import Demo from "./pages/Demo.tsx";
 import Pricing from "./pages/Pricing.tsx";
 import Setup from "./pages/Setup.tsx";
+import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Support from "./pages/Support.tsx";
@@ -38,6 +39,7 @@ const App = () => (
           <Route path="/signup" element={<RedirectIfAuthed><Signup /></RedirectIfAuthed>} />
           <Route path="/confirm" element={<Confirm />} />
           <Route path="/setup" element={<RequireAuth><Setup /></RequireAuth>} />
+          <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/leads" element={<RequireAuth><LeadInbox /></RequireAuth>} />
