@@ -565,9 +565,94 @@ function CreateTestAccountTab({ onCreated }: { onCreated: () => void }) {
 
 function SettingsTab() {
   return (
-    <div className="max-w-2xl bg-slate-800 border border-slate-700 rounded-xl p-8">
-      <h2 className="text-lg font-semibold text-white">Agent configuration</h2>
-      <p className="mt-2 text-sm text-slate-400">Agent configuration coming soon.</p>
+    <div className="max-w-2xl space-y-6">
+      <BypassBillingCard />
+    </div>
+  );
+}
+
+function BypassBillingCard() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await supabase
+        .from("callcapture_app_settings" as never)
+        .select("bypass_billing, updated_at")
+        .eq("id", true)
+        .maybeSingle();
+      if (error) {
+        toast({ title: "Failed to load settings", description: error.message, variant: "destructive" });
+        setEnabled(false);
+        return;
+      }
+      const row = data as { bypass_billing: boolean; updated_at: string } | null;
+      setEnabled(row?.bypass_billing ?? false);
+      setUpdatedAt(row?.updated_at ?? null);
+    })();
+  }, []);
+
+  async function toggle(next: boolean) {
+    if (enabled === null) return;
+    const prev = enabled;
+    setEnabled(next);
+    setSaving(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from("callcapture_app_settings" as never)
+      .update({
+        bypass_billing: next,
+        updated_at: new Date().toISOString(),
+        updated_by: userData.user?.id ?? null,
+      })
+      .eq("id", true)
+      .select("updated_at")
+      .maybeSingle();
+    setSaving(false);
+    if (error) {
+      setEnabled(prev);
+      toast({ title: "Failed to update setting", description: error.message, variant: "destructive" });
+      return;
+    }
+    const row = data as { updated_at: string } | null;
+    setUpdatedAt(row?.updated_at ?? new Date().toISOString());
+    toast({
+      title: next ? "Billing bypass enabled" : "Billing bypass disabled",
+      description: next
+        ? "New signups will skip Stripe and start a 30-day trial."
+        : "New signups will be routed to Stripe checkout.",
+    });
+  }
+
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-xl p-8">
+      <h2 className="text-lg font-semibold text-white">Billing bypass</h2>
+      <p className="mt-2 text-sm text-slate-400">
+        When enabled, new signups skip Stripe checkout and are activated with a 30-day trial
+        (status shows as <span className="text-blue-400">Active (Trial)</span>).
+      </p>
+
+      <div className="mt-6 flex items-center justify-between gap-4 p-4 rounded-lg bg-slate-900/60 border border-slate-700">
+        <div>
+          <div className="text-sm font-medium text-white">Bypass Stripe checkout</div>
+          <div className="text-xs text-slate-400 mt-1">
+            {updatedAt ? `Last changed ${new Date(updatedAt).toLocaleString()}` : "Not yet configured"}
+          </div>
+        </div>
+        <Switch
+          checked={enabled ?? false}
+          disabled={enabled === null || saving}
+          onCheckedChange={toggle}
+        />
+      </div>
+
+      {enabled && (
+        <div className="mt-4 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-xs text-yellow-300">
+          Bypass is ON. Live signups will skip payment — turn off before production launch.
+        </div>
+      )}
     </div>
   );
 }
