@@ -74,6 +74,15 @@ export default function Navbar() {
                 {l.label}
               </a>
             ))}
+            {!user && (
+              <Link
+                to="/auth"
+                onClick={() => setOpen(false)}
+                className="py-2 text-sm font-medium text-ink hover:text-navy"
+              >
+                Sign in
+              </Link>
+            )}
             <Button
               onClick={() => {
                 setOpen(false);
