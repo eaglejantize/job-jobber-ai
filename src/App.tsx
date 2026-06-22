@@ -10,6 +10,7 @@ import Setup from "./pages/Setup.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
+import Home from "./pages/Home.tsx";
 import Support from "./pages/Support.tsx";
 import Trust from "./pages/Trust.tsx";
 import Start from "./pages/Start.tsx";
@@ -42,6 +43,7 @@ const App = () => (
           <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/home" element={<RequireAuth><Home /></RequireAuth>} />
           <Route path="/leads" element={<RequireAuth><LeadInbox /></RequireAuth>} />
           <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
           <Route path="/support" element={<Support />} />
