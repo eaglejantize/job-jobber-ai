@@ -159,6 +159,10 @@ export default function Start() {
       });
       if (signInErr) console.warn("signin_after_signup_failed", signInErr.message);
 
+      // Wipe any wizard state from a prior account in this browser so the new
+      // subaccount starts onboarding with completely blank fields.
+      resetWizardForNewOwner();
+
       // 2b. Billing bypass — skip Stripe and go straight to the dashboard.
       if (ctx.bypass_billing) {
         toast({
