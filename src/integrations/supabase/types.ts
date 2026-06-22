@@ -160,6 +160,8 @@ export type Database = {
       callcapture_clients: {
         Row: {
           address: string | null
+          after_hours_message: string | null
+          after_hours_mode: string
           alert_phone: string
           answer_after_hours: boolean
           assigned_callcapture_number: string | null
@@ -169,8 +171,12 @@ export type Database = {
           business_phone: string | null
           created_at: string
           email: string
+          faqs: Json
           forward_first: boolean
           forward_phone: string | null
+          google_category: string | null
+          google_place_id: string | null
+          google_rating: number | null
           greeting: string | null
           human_pause: boolean
           id: string
@@ -178,6 +184,8 @@ export type Database = {
           industry: string | null
           intake_questions: Json | null
           is_super_admin: boolean | null
+          launched_at: string | null
+          notification_settings: Json
           number_provisioned_at: string | null
           number_status: string | null
           owner_name: string
@@ -185,7 +193,9 @@ export type Database = {
           phone_mode: string | null
           preferred_area_code: string | null
           rings_before_answer: number
+          services: string[]
           setup_status: string
+          setup_step: number
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -200,10 +210,14 @@ export type Database = {
           user_id: string | null
           voice_id: string | null
           voice_label: string | null
+          voice_speed: string
+          voicemail_fallback: boolean
           website: string | null
         }
         Insert: {
           address?: string | null
+          after_hours_message?: string | null
+          after_hours_mode?: string
           alert_phone: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
@@ -213,8 +227,12 @@ export type Database = {
           business_phone?: string | null
           created_at?: string
           email: string
+          faqs?: Json
           forward_first?: boolean
           forward_phone?: string | null
+          google_category?: string | null
+          google_place_id?: string | null
+          google_rating?: number | null
           greeting?: string | null
           human_pause?: boolean
           id?: string
@@ -222,6 +240,8 @@ export type Database = {
           industry?: string | null
           intake_questions?: Json | null
           is_super_admin?: boolean | null
+          launched_at?: string | null
+          notification_settings?: Json
           number_provisioned_at?: string | null
           number_status?: string | null
           owner_name: string
@@ -229,7 +249,9 @@ export type Database = {
           phone_mode?: string | null
           preferred_area_code?: string | null
           rings_before_answer?: number
+          services?: string[]
           setup_status?: string
+          setup_step?: number
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -244,10 +266,14 @@ export type Database = {
           user_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          voice_speed?: string
+          voicemail_fallback?: boolean
           website?: string | null
         }
         Update: {
           address?: string | null
+          after_hours_message?: string | null
+          after_hours_mode?: string
           alert_phone?: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
@@ -257,8 +283,12 @@ export type Database = {
           business_phone?: string | null
           created_at?: string
           email?: string
+          faqs?: Json
           forward_first?: boolean
           forward_phone?: string | null
+          google_category?: string | null
+          google_place_id?: string | null
+          google_rating?: number | null
           greeting?: string | null
           human_pause?: boolean
           id?: string
@@ -266,6 +296,8 @@ export type Database = {
           industry?: string | null
           intake_questions?: Json | null
           is_super_admin?: boolean | null
+          launched_at?: string | null
+          notification_settings?: Json
           number_provisioned_at?: string | null
           number_status?: string | null
           owner_name?: string
@@ -273,7 +305,9 @@ export type Database = {
           phone_mode?: string | null
           preferred_area_code?: string | null
           rings_before_answer?: number
+          services?: string[]
           setup_status?: string
+          setup_step?: number
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -288,6 +322,8 @@ export type Database = {
           user_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          voice_speed?: string
+          voicemail_fallback?: boolean
           website?: string | null
         }
         Relationships: []
