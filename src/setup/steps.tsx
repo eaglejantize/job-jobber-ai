@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1152,14 +1152,10 @@ export function Step8Review({
           </div>
           <dl className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-x-3 gap-y-1 text-sm">
             {s.rows.map(([k, v]) => (
-              <>
-                <dt key={k + "k"} className="text-muted-foreground">
-                  {k}
-                </dt>
-                <dd key={k + "v"} className="break-words whitespace-pre-wrap">
-                  {v}
-                </dd>
-              </>
+              <Fragment key={k}>
+                <dt className="text-muted-foreground">{k}</dt>
+                <dd className="break-words whitespace-pre-wrap">{v}</dd>
+              </Fragment>
             ))}
           </dl>
         </div>
