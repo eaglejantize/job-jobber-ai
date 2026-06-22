@@ -132,7 +132,7 @@ export default function PhoneNumberPicker({
           <Input
             inputMode="numeric"
             maxLength={3}
-            placeholder="904"
+            placeholder="Preferred area code"
             value={preferredAreaCode}
             onChange={(e) => onAreaCodeChange(e.target.value.replace(/\D/g, "").slice(0, 3))}
           />
