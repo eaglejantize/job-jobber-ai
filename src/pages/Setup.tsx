@@ -4,6 +4,9 @@ import {
   loadWizardState,
   saveWizardState,
   clearWizardState,
+  defaultWizardState,
+  getWizardOwner,
+  setWizardOwner,
   type WizardState,
 } from "@/lib/wizardSchema";
 import { Button } from "@/components/ui/button";
@@ -46,7 +49,6 @@ const STEP_KEY = "callcapture.wizard.step";
 export default function Setup() {
   const navigate = useNavigate();
   const [clientId, setClientId] = useState<string | null>(null);
-
   const [state, setState] = useState<WizardState>(loadWizardState);
   const [step, setStep] = useState<number>(() => {
     try {
@@ -67,28 +69,34 @@ export default function Setup() {
     try { localStorage.setItem(STEP_KEY, String(step)); } catch { /* ignore */ }
   }, [step]);
 
-  // Prefill from the user's most recent client row, if signed in.
+  // Reset wizard state whenever the signed-in user differs from the one whose
+  // data is currently in localStorage. Prevents any previous account (including
+  // the super admin) from leaking into a brand-new subaccount's onboarding.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data: u } = await supabase.auth.getUser();
-      if (!u.user || cancelled) return;
-      const { data } = await supabase
-        .from("callcapture_clients")
-        .select("id, owner_name, business_name, email, alert_phone")
-        .eq("user_id", u.user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (cancelled || !data) return;
-      setClientId(data.id);
-      setState((s) => ({
-        ...s,
-        businessName: s.businessName || data.business_name || "",
-        email: s.email || data.email || "",
-        ownerName: s.ownerName || data.owner_name || "",
-        ownerSms: s.ownerSms || data.alert_phone || "",
-      }));
+      if (cancelled) return;
+      const currentUserId = u.user?.id ?? null;
+      const storedOwner = getWizardOwner();
+      if (storedOwner !== currentUserId) {
+        clearWizardState();
+        try { localStorage.setItem(STEP_KEY, "0"); } catch { /* ignore */ }
+        setState(defaultWizardState);
+        setStep(0);
+        setWizardOwner(currentUserId);
+      }
+      // Look up client_id for downstream updates (do NOT prefill wizard fields).
+      if (currentUserId) {
+        const { data } = await supabase
+          .from("callcapture_clients")
+          .select("id")
+          .eq("user_id", currentUserId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!cancelled && data?.id) setClientId(data.id);
+      }
     })();
     return () => { cancelled = true; };
   }, []);

@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { resetWizardForNewOwner } from "@/lib/wizardSchema";
 import { toast } from "@/hooks/use-toast";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
@@ -157,6 +158,10 @@ export default function Start() {
         password: data.password,
       });
       if (signInErr) console.warn("signin_after_signup_failed", signInErr.message);
+
+      // Wipe any wizard state from a prior account in this browser so the new
+      // subaccount starts onboarding with completely blank fields.
+      resetWizardForNewOwner();
 
       // 2b. Billing bypass — skip Stripe and go straight to the dashboard.
       if (ctx.bypass_billing) {
