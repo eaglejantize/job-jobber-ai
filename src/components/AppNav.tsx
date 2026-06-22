@@ -25,7 +25,7 @@ export default function AppNav() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
         <Link to="/home" className="flex items-center gap-2" aria-label="Vektuor home">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-brand text-white shadow-soft">
@@ -66,7 +66,7 @@ export default function AppNav() {
 
         <div className="hidden md:flex items-center gap-3">
           <ThemeToggle />
-          <Button variant="outline" size="sm" onClick={signOut} className="rounded-xl border-border bg-white text-navy hover:bg-secondary">
+          <Button variant="outline" size="sm" onClick={signOut} className="rounded-xl border-border bg-background text-foreground hover:bg-secondary">
             <LogOut className="h-4 w-4" /> Sign out
           </Button>
         </div>
