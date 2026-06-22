@@ -5,8 +5,10 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const links = [
+  { to: "/home", label: "Home" },
   { to: "/dashboard", label: "Dashboard" },
   { to: "/leads", label: "Inbox" },
   { to: "/settings", label: "Settings" },
@@ -23,9 +25,9 @@ export default function AppNav() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
-        <Link to="/dashboard" className="flex items-center gap-2" aria-label="Vektuor home">
+        <Link to="/home" className="flex items-center gap-2" aria-label="Vektuor home">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-brand text-white shadow-soft">
             <PhoneCall className="h-4 w-4" />
           </span>
@@ -63,18 +65,22 @@ export default function AppNav() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={signOut} className="rounded-xl border-border bg-white text-navy hover:bg-secondary">
+          <ThemeToggle />
+          <Button variant="outline" size="sm" onClick={signOut} className="rounded-xl border-border bg-background text-foreground hover:bg-secondary">
             <LogOut className="h-4 w-4" /> Sign out
           </Button>
         </div>
 
-        <button
-          aria-label="Open menu"
-          className="md:hidden p-2 rounded-md border border-border"
-          onClick={() => setOpen((o) => !o)}
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        <div className="md:hidden flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            aria-label="Open menu"
+            className="p-2 rounded-md border border-border"
+            onClick={() => setOpen((o) => !o)}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
       </div>
       {open && (
         <div className="md:hidden border-t border-border bg-background">

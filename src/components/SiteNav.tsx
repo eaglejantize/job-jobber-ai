@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const links = [
   { to: "/", label: "Home" },
@@ -17,7 +18,7 @@ export default function SiteNav() {
   const navigate = useNavigate();
   const { user } = useAuth();
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md text-foreground">
       <div className="container flex h-16 items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-2" aria-label="Vektuor home">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-brand text-white shadow-soft">
@@ -45,6 +46,7 @@ export default function SiteNav() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
+          <ThemeToggle />
           {user ? (
             <Button onClick={() => navigate("/dashboard")} className="bg-navy hover:bg-navy-deep text-white rounded-xl">
               Dashboard
@@ -64,13 +66,16 @@ export default function SiteNav() {
           )}
         </div>
 
-        <button
-          aria-label="Open menu"
-          className="md:hidden p-2 rounded-md border border-border"
-          onClick={() => setOpen((o) => !o)}
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        <div className="md:hidden flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            aria-label="Open menu"
+            className="p-2 rounded-md border border-border"
+            onClick={() => setOpen((o) => !o)}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
       </div>
       {open && (
         <div className="md:hidden border-t border-border bg-background">
