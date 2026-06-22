@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      callcapture_app_settings: {
+        Row: {
+          bypass_billing: boolean
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          bypass_billing?: boolean
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          bypass_billing?: boolean
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       callcapture_assistant_configs: {
         Row: {
           after_hours_enabled: boolean | null
