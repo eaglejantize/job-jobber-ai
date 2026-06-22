@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const links = [
   { to: "/", label: "Home" },
@@ -45,6 +46,7 @@ export default function SiteNav() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
+          <ThemeToggle />
           {user ? (
             <Button onClick={() => navigate("/dashboard")} className="bg-navy hover:bg-navy-deep text-white rounded-xl">
               Dashboard
