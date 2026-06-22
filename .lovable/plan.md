@@ -1,44 +1,107 @@
-## Problem
-Onboarding's phone provisioning currently runs through Twilio (`search-twilio-numbers` + `provision-twilio-number`), even though the product uses Vapi-managed numbers (existing example: +1 904 893-3328). When a subaccount enters an area code, the Twilio path either returns no inventory or fails silently, so no number lands on the subaccount record.
+## Goal
 
-We'll route provisioning through Vapi's number-buy endpoint instead, save the returned number to the subaccount, and surface clear success/empty-state messaging.
+One canonical 8-step Setup flow, rendered two ways:
+- **Onboarding** (`/setup`): full-page guided walkthrough, one step per screen, with explanations and a progress bar.
+- **In-app Settings** (`/settings`): same steps shown as compact accordion cards, each independently editable and saved on its own.
 
-## Vapi flow
-Vapi exposes `POST https://api.vapi.ai/phone-number` with:
+Both read/write the exact same row in `callcapture_clients` (+ `callcapture_assistant_configs` for prompt/script). All fields start blank — no super-admin leakage.
 
-```json
-{ "provider": "vapi", "numberDesiredAreaCode": "904", "name": "<business name>" }
-```
+## Shared architecture
 
-Auth: `Authorization: Bearer $VAPI_API_KEY` (already in project secrets). Response includes `id`, `number` (E.164), and `status`. If no inventory exists in that area code Vapi returns a 400 with a message we can map to the friendly copy.
+New files:
+- `src/lib/setupSchema.ts` — single Zod schema covering all 8 steps (replaces `wizardSchema.ts`).
+- `src/lib/setupDefaults.ts` — returns an empty defaults object (no env/admin reads).
+- `src/setup/` — one component per step, each accepting `{ value, onChange, onSaveStep }`:
+  - `Step1FindBusiness.tsx`
+  - `Step2BusinessDetails.tsx`
+  - `Step3PhoneNumber.tsx` (wraps existing `PhoneNumberPicker` flow)
+  - `Step4Voice.tsx`
+  - `Step5Script.tsx`
+  - `Step6CallHandling.tsx`
+  - `Step7Notifications.tsx`
+  - `Step8Review.tsx`
+- `src/setup/SetupContainer.tsx` — wizard chrome (stepper, Back/Next) used by `/setup`.
+- `src/setup/SetupAccordion.tsx` — accordion chrome used by `/settings`.
+- `src/setup/useSetupData.ts` — load/save hook against `callcapture_clients` (+ assistant config).
 
-## Changes
+Rewrite:
+- `src/pages/Setup.tsx` → renders `SetupContainer`.
+- `src/pages/Settings.tsx` → renders `SetupAccordion`.
 
-### 1. New edge function `supabase/functions/provision-vapi-number/index.ts`
-- Auth: require `Authorization` bearer, validate via `getClaims`.
-- Input: `{ area_code: "###", client_id: "<uuid>" }` (Zod-validated; area code must be 3 digits).
-- Verify caller owns `callcapture_clients.id = client_id` (`user_id = sub`).
-- Call Vapi `POST /phone-number` with `provider: "vapi"`, `numberDesiredAreaCode`, and `name` from the client's `business_name`.
-- On Vapi 400 / "no numbers" style response → return `{ error: "No numbers available in that area code. Please try a different one." }` with HTTP 409.
-- On success: update `callcapture_clients` with `assigned_callcapture_number = number`, `twilio_phone_number_sid = vapi id` (existing column, reused as provider id), `number_status = "active"`, `number_provisioned_at = now()`, `phone_mode = "new"`.
-- Return `{ phone_number, id, status: "active", message }`.
-- Standard CORS headers + JSON helper. Logs Vapi error bodies for debugging.
+Removed/legacy: `src/components/settings/PhoneSetupWizard.tsx`, `AiSettingsPanel.tsx`, `src/lib/wizardSchema.ts`, `src/pages/Onboarding.tsx`, `src/pages/Start.tsx` (consolidated into `/setup`).
 
-### 2. `src/components/PhoneNumberPicker.tsx`
-- Replace the two-step Twilio search/reserve UI with a single "Get my Vektuor number" action that calls `provision-vapi-number` with `{ area_code, client_id }`.
-- Remove `search-twilio-numbers` invocation and the results grid (Vapi assigns directly from area code).
-- Map the 409 / "No numbers available" response to the exact friendly message requested and show it inline + via toast; keep the form so users can try another area code.
-- On success, call `onProvisioned(phone, id, "active")` and render the existing "Your Vektuor number" card; the Active badge will show because status is `active`.
-- Keep area code placeholder "Preferred area code" (already in place).
+## Step-by-step behavior
 
-### 3. Leave Twilio functions and DB columns in place
-- `search-twilio-numbers` / `provision-twilio-number` stay on disk but are no longer invoked from onboarding (admin/settings paths untouched). No DB migration required — we reuse `assigned_callcapture_number`, `twilio_phone_number_sid`, `number_status`, `number_provisioned_at`, `phone_mode`.
+### Step 1 — Find your business
+- Single phone input → calls existing `business-lookup` edge function (Google Places). Extend it to return name, address, formatted phone, hours, category, website, rating.
+- Result card with "Yes, that's my business" / "Edit details" / "Search again".
+- On confirm: map Google fields into Step 2; call new edge function `ai-prefill-setup` (Lovable AI Gateway, Gemini 3 Flash) to generate `greeting`, `after_hours_message`, `services[]`, `transfer_triggers[]`, `call_rules` based on name + category + hours.
+- Show banner: "We found your business! We've pre-configured your AI receptionist…".
+- "Skip / enter manually" link continues with empty form.
+
+### Step 2 — Business details
+Fields (all empty unless populated by Step 1): business_name, owner_name, business_phone, address, industry (6-option dropdown: Appliance Repair, HVAC, Plumbing, Electrical, General Home Services, Other), website, business_hours_schedule (Mon-Sun open/close + Closed toggle), timezone.
+
+### Step 3 — Your Vektuor number
+Reuses `PhoneNumberPicker` → `provision-vapi-number`. Placeholder: "Enter preferred area code e.g. 305". Shows provisioned number on success, friendly message on empty inventory. Saves `assigned_callcapture_number`, `number_status='active'`.
+
+### Step 4 — Voice
+- Lists voices from existing `list-vapi-voices` edge function as selectable cards (name, gender, description).
+- Controls: tone toggle (Professional/Friendly/Energetic), speed slider (Slow/Normal/Fast), `rings_before_answer` selector (1-4).
+- "Play Sample" button per card: calls new edge function `vapi-voice-sample` which requests a TTS preview from Vapi with the current tone/speed and returns an audio URL; plays inline.
+
+### Step 5 — Script
+- Greeting textarea pre-filled from Step 1 AI generation (or empty).
+- "AI Rewrite" — prompt input → calls `ai-rewrite-greeting` edge function with current greeting + instruction.
+- "Preview" — calls `vapi-voice-sample` with current voice + script.
+- "Reset to Default" — regenerates from business data.
+- Separate fields: `after_hours_message`, services list (add/remove chips), FAQs list (question/answer pairs).
+
+### Step 6 — Call handling & forwarding
+- `forward_phone` input.
+- `voicemail_fallback` toggle.
+- After-hours behavior radio: voicemail / forward / ai_handles → mapped to existing `answer_after_hours` + new `after_hours_mode` column.
+
+### Step 7 — SMS & notifications
+- SMS toggle + notification phone (defaults blank).
+- Email toggle.
+- Multi-select: New call / New booking / Missed call / All activity.
+Stored in `notification_settings` jsonb.
+
+### Step 8 — Review & launch
+- Sections for each prior step with Edit button (jumps to that step in wizard, expands that accordion in settings).
+- Onboarding: "Launch My AI Receptionist" → persists, calls `update-vapi-agent` with full config (incl. `rings_before_answer`), shows success screen with provisioned number.
+- Settings: no launch button; each section saves on its own.
+
+## Data model (one migration)
+
+Additions to `callcapture_clients`:
+- `owner_name text`, `services text[]`, `faqs jsonb`, `voice_speed text`, `after_hours_mode text` (voicemail|forward|ai), `after_hours_message text`, `notification_settings jsonb`, `google_place_id text`, `google_rating numeric`.
+
+Additions to `callcapture_assistant_configs`: none — reuse `greeting`, `tone`, `intake_questions`, `call_rules`, `notification_settings`, `generated_prompt`. Insert one row per client on launch.
+
+GRANTs preserved (existing table). RLS policies already scope by `user_id = auth.uid()` — no super-admin readback. The new `ai-prefill-setup`, `ai-rewrite-greeting`, `vapi-voice-sample` edge functions validate caller via JWT before doing anything.
+
+## Edge functions
+
+- New: `ai-prefill-setup`, `ai-rewrite-greeting`, `vapi-voice-sample`.
+- Extend: `business-lookup` to return the full set of fields above.
+- Reuse as-is: `provision-vapi-number`, `list-vapi-voices`, `update-vapi-agent`.
+
+## Anti-leak guardrails
+
+- `setupDefaults.ts` returns all empty strings — no reading from `auth.user().email`, no super-admin queries.
+- `useSetupData` only `SELECT … WHERE user_id = auth.uid()` (relies on RLS).
+- Wizard never falls back to "current session email" for `email`/`alert_phone`/etc.
 
 ## Out of scope
-- Wiring the new Vapi number to an assistant / inbound webhook (separate concern; status is already set to `active` as requested).
-- Settings page phone management (`PhoneSetupWizard`) — only the onboarding picker is in scope.
-- Any change to `callcapture_clients` schema or RLS.
 
-## Files
-- add `supabase/functions/provision-vapi-number/index.ts`
-- edit `src/components/PhoneNumberPicker.tsx`
+- Stripe checkout changes (kept as-is at end of onboarding).
+- Vapi assistant assignment logic beyond `update-vapi-agent` (already exists).
+- Lead inbox, dashboard, admin pages.
+
+## Technical notes
+
+- `rings_before_answer` is already a column; ensure it's included in the `update-vapi-agent` payload as `numberE164Settings.fallbackDestination`? — actually applied as Vapi assistant `endCallFunctionEnabled`/`silenceTimeoutSeconds` mapping; we'll pass it through unchanged on the assistant `server` config (current function already supports a `rings` field — will verify when implementing and add the field if missing).
+- Voice preview uses Vapi `/tts` if available; otherwise the function returns a pre-recorded sample URL from `list-vapi-voices` with a note that tone/speed only applies on live calls.
+- Mobile-first: each step renders in a single column with `max-w-xl`; review accordion uses `Accordion` from shadcn.
