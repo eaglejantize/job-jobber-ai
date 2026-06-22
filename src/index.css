@@ -104,3 +104,46 @@
   .bg-cta { background: var(--gradient-brand); }
   .shadow-card-soft { box-shadow: var(--shadow-soft); }
 }
+
+/* ============ Vektuor Live Ops Dashboard (dark) ============ */
+.vektuor-ops {
+  --v-bg: 222 47% 4%;
+  --v-surface: 222 35% 8%;
+  --v-surface-2: 222 30% 11%;
+  --v-border: 222 25% 16%;
+  --v-fg: 210 20% 96%;
+  --v-muted: 215 16% 62%;
+  --v-primary: 152 84% 52%;
+  --v-primary-fg: 222 47% 6%;
+  --v-accent: 270 92% 68%;
+  --v-live: 0 84% 60%;
+
+  background:
+    radial-gradient(900px 500px at 12% -10%, hsl(152 84% 52% / 0.10), transparent 60%),
+    radial-gradient(900px 500px at 88% -10%, hsl(270 92% 68% / 0.08), transparent 60%),
+    hsl(var(--v-bg));
+  color: hsl(var(--v-fg));
+  min-height: 100vh;
+}
+.vektuor-ops .v-card {
+  background: linear-gradient(180deg, hsl(var(--v-surface)) 0%, hsl(var(--v-surface-2)) 100%);
+  border: 1px solid hsl(var(--v-border));
+  border-radius: 1rem;
+}
+.vektuor-ops .v-muted { color: hsl(var(--v-muted)); }
+.vektuor-ops .v-border { border-color: hsl(var(--v-border)); }
+
+@keyframes v-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--v-live) / 0.55); }
+  50% { box-shadow: 0 0 0 8px hsl(var(--v-live) / 0); }
+}
+.v-live-dot {
+  background: hsl(var(--v-live));
+  border-radius: 9999px;
+  animation: v-live-pulse 1.6s ease-out infinite;
+}
+@keyframes v-bar {
+  0%, 100% { transform: scaleY(0.2); }
+  50% { transform: scaleY(1); }
+}
+.v-bar { animation: v-bar 1s ease-in-out infinite; transform-origin: center; }
