@@ -48,6 +48,7 @@ const STEP_KEY = "callcapture.wizard.step";
 
 export default function Setup() {
   const navigate = useNavigate();
+  const [clientId, setClientId] = useState<string | null>(null);
   const [state, setState] = useState<WizardState>(loadWizardState);
   const [step, setStep] = useState<number>(() => {
     try {
@@ -84,6 +85,17 @@ export default function Setup() {
         setState(defaultWizardState);
         setStep(0);
         setWizardOwner(currentUserId);
+      }
+      // Look up client_id for downstream updates (do NOT prefill wizard fields).
+      if (currentUserId) {
+        const { data } = await supabase
+          .from("callcapture_clients")
+          .select("id")
+          .eq("user_id", currentUserId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!cancelled && data?.id) setClientId(data.id);
       }
     })();
     return () => { cancelled = true; };
