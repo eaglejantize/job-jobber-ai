@@ -9,6 +9,7 @@ import {
   Search,
   MoreHorizontal,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -113,6 +114,12 @@ export default function Admin() {
           })}
         </nav>
         <div className="p-4 border-t border-slate-700">
+          <Link
+            to="/dashboard"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 mb-2 text-sm rounded-md bg-slate-900 hover:bg-slate-700 text-slate-300"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          </Link>
           <button
             onClick={signOut}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-md bg-slate-900 hover:bg-slate-700 text-slate-300"
