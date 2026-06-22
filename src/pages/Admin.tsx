@@ -153,6 +153,7 @@ function StatusBadge({ status }: { status: string }) {
   const s = (status || "").toLowerCase();
   const styles: Record<string, string> = {
     active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    trial: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     pending: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
     manual: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     suspended: "bg-red-500/15 text-red-400 border-red-500/30",
@@ -180,7 +181,7 @@ function OverviewTab({ clients }: { clients: Client[] }) {
   const total = clients.length;
   const active = clients.filter((c) => c.payment_status === "active").length;
   const pending = clients.filter((c) => c.payment_status === "pending").length;
-  const manual = clients.filter((c) => c.payment_status === "manual").length;
+  const trial = clients.filter((c) => c.payment_status === "trial").length;
   const recent = clients.slice(0, 10);
 
   return (
@@ -189,7 +190,7 @@ function OverviewTab({ clients }: { clients: Client[] }) {
         <StatCard label="Total Accounts" value={total} />
         <StatCard label="Active" value={active} />
         <StatCard label="Pending" value={pending} />
-        <StatCard label="Manual / Trial" value={manual} />
+        <StatCard label="Trial" value={trial} />
       </div>
 
       <section>
@@ -268,6 +269,7 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
   const filters: { id: typeof filter; label: string }[] = [
     { id: "all", label: "All" },
     { id: "active", label: "Active" },
+    { id: "trial", label: "Trial" },
     { id: "pending", label: "Pending" },
     { id: "manual", label: "Manual" },
     { id: "suspended", label: "Suspended" },
