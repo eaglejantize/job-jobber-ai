@@ -115,7 +115,20 @@ Deno.serve(async (req) => {
   const allowDevHeader = ["true", "1"].includes(
     (Deno.env.get("ALLOW_DEV_BYPASS_HEADER") ?? "").toLowerCase(),
   );
-  const bypassBilling = serverFlag || (allowDevHeader && data.dev_bypass === true);
+  // Admin toggle (database-backed) — read singleton settings row.
+  let adminToggle = false;
+  try {
+    const { data: settings } = await admin
+      .from("callcapture_app_settings")
+      .select("bypass_billing")
+      .eq("id", true)
+      .maybeSingle();
+    adminToggle = settings?.bypass_billing === true;
+  } catch (err) {
+    console.error("settings_read_failed", { error: (err as Error).message });
+  }
+  const bypassBilling =
+    serverFlag || adminToggle || (allowDevHeader && data.dev_bypass === true);
   if (bypassBilling) {
     payload.setup_status = "Active (Trial)";
     payload.payment_status = "trial";
@@ -153,7 +166,11 @@ Deno.serve(async (req) => {
   if (bypassBilling) {
     console.log("billing_bypassed", {
       client_id: clientId,
-      reason: serverFlag ? "server_flag" : "dev_header",
+      reason: serverFlag
+        ? "server_flag"
+        : adminToggle
+          ? "admin_toggle"
+          : "dev_header",
     });
   }
 
