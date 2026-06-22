@@ -53,7 +53,8 @@ function rowToData(row: ClientRow | null): SetupData {
     if (!hours[d]) hours[d] = { open: "09:00", close: "17:00", closed: d === "Sun" };
   }
   merged.business_hours_schedule = hours;
-  return SetupDataSchema.parse(merged);
+  const parsed = SetupDataSchema.safeParse(merged);
+  return parsed.success ? parsed.data : merged;
 }
 
 export type UseSetupData = ReturnType<typeof useSetupData>;
