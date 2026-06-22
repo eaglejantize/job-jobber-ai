@@ -251,13 +251,16 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
 
   async function hardDelete(id: string) {
     setBusyId(id);
-    const { error } = await supabase.from("callcapture_clients").delete().eq("id", id);
+    const { data, error } = await supabase.functions.invoke("delete-subaccount", {
+      body: { client_id: id },
+    });
     setBusyId(null);
     setPendingDelete(null);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    const errMsg = error?.message || (data as { error?: string })?.error;
+    if (errMsg) {
+      toast({ title: "Delete failed", description: errMsg, variant: "destructive" });
     } else {
-      toast({ title: "Account deleted" });
+      toast({ title: "Subaccount permanently deleted" });
       onChange();
     }
   }
