@@ -1,70 +1,55 @@
-# Fix tenant account creation end-to-end
+## Goal
+Make the existing "Delete" action on each subaccount in the super admin panel perform a true hard delete — removing the auth user, the tenant/client record, and every linked row across all tables — instead of just deleting the `callcapture_clients` row.
 
-## Root causes found
+## What's wrong today
+In `src/pages/Admin.tsx`, the `hardDelete` handler runs:
+```ts
+supabase.from("callcapture_clients").delete().eq("id", id)
+```
+That's a client-side call running as the admin's JWT. It:
+- Leaves the `auth.users` row in place (cannot be deleted from the client at all — requires service role).
+- Relies on cascade for related rows, which is inconsistent (some tables reference `user_id`, not `client_id`).
+- Has no super‑admin authorization check on the server.
 
-1. **`supabase/functions/create-checkout/index.ts` is corrupted.** It currently contains a copy of the React `Start` page (346 lines of JSX/TSX) instead of a Deno edge function. Any invocation either runs a stale deployed version or fails outright, breaking the entire signup-to-checkout chain.
-2. **RLS + email confirmation mismatch.** Auth logs confirm email confirmation is ON (`user_confirmation_requested`). `supabase.auth.signUp()` therefore returns no session. The current `Start.tsx` either:
-   - Aborts at "Check your email" without ever creating a `callcapture_clients` row, or
-   - (Older variant) attempts an anon insert that must satisfy `user_id IS NULL` plus non-empty trimmed fields — fragile and easy to violate.
-3. **Existing-row update path runs as anon** — there is no anon UPDATE policy on `callcapture_clients`, so any retry hits RLS.
-4. **No owner/membership link** exists today beyond the `user_id` column and the `link_user_to_clients` trigger that back-fills it by email after confirmation. This is implicit and easy to miss.
+Related tables that must also be cleaned:
+- `callcapture_leads` (FK `client_id`)
+- `callcapture_assistant_configs` (FK `user_id`)
+- `callcapture_businesses` (FK `user_id`, also has `email`)
+- `callcapture_support_requests` (FK `user_id`, also has `email`)
 
-## Fix strategy (minimum-permission)
+## Plan
 
-Per the user's explicit instruction, move tenant creation into an edge function that uses the service role. RLS stays fully enabled; no policy changes required.
+### 1. New edge function: `supabase/functions/delete-subaccount/index.ts`
+- Public CORS + OPTIONS preflight.
+- Reads the caller's JWT from the `Authorization` header, uses an anon client with that token to call `auth.getUser()`.
+- Authorizes only if `user.email === "eaglejantize@gmail.com"` (super admin). Returns 403 otherwise.
+- Accepts `{ client_id: string }` (validated with Zod).
+- Uses a `SUPABASE_SERVICE_ROLE_KEY` admin client to:
+  1. Load the target client row (`id, user_id, email`). 404 if not found.
+  2. Delete `callcapture_leads` where `client_id = :id`.
+  3. Delete `callcapture_assistant_configs` where `user_id = :user_id` (if user_id present).
+  4. Delete `callcapture_businesses` where `user_id = :user_id` OR `lower(email) = lower(:email)`.
+  5. Delete `callcapture_support_requests` where `user_id = :user_id` OR `lower(email) = lower(:email)`.
+  6. Delete the `callcapture_clients` row.
+  7. If `user_id` is set, call `supabase.auth.admin.deleteUser(user_id)`. If null, look up the auth user by email via `auth.admin.listUsers` (paginated) and delete it if found.
+- `console.log` each step with the row counts so failures are diagnosable from edge logs.
+- Returns `{ ok: true, deleted: { leads, configs, businesses, support, client, auth_user } }`.
 
-### 1. New edge function: `supabase/functions/signup-tenant/index.ts`
+### 2. Wire up the admin UI (`src/pages/Admin.tsx`)
+- Change `hardDelete(id)` to call `supabase.functions.invoke("delete-subaccount", { body: { client_id: id } })` instead of the direct table delete.
+- Keep the existing `AlertDialog` confirmation flow and the existing red "Delete" dropdown item — no UI restructuring required, it already exists per row.
+- On success: toast "Subaccount permanently deleted" and call `onChange()` to refresh the list.
+- On error: toast the server-returned `error` message.
 
-- Public (no JWT required), CORS enabled, Zod-validated body: `owner_name`, `business_name`, `email`, `alert_phone`, `password`, optional `industry`.
-- Uses `SUPABASE_SERVICE_ROLE_KEY` admin client.
-- Steps with structured `console.log` at each:
-  1. `signup_started` — log email (no password).
-  2. Look up existing auth user by email via `admin.listUsers` (paginated search by email). If found and no password supplied → treat as conflict; if found with password → continue and reuse `user.id`.
-  3. If not found → `admin.createUser({ email, password, email_confirm: false })` so the user can sign in immediately after Stripe. Log `auth_user_created` / `auth_user_found`.
-  4. `client_insert_attempted` — `upsert` into `callcapture_clients` keyed by email: set `user_id`, `owner_name`, `business_name`, `email`, `alert_phone`, `industry`, `setup_status='Payment Pending'`, `payment_status='pending'`. Log `client_insert_success` with `client_id` or `client_insert_failed` with full error.
-  5. `owner_link_created` — `user_id` on the row IS the owner link (single-tenant model today); also stamp `is_super_admin=false` explicitly. Log.
-  6. Return `{ client_id, user_id }`.
-- Errors return 4xx with `{ error, step }` so the client can show a precise message.
+### 3. No DB migration
+RLS, triggers, and table definitions are untouched. All destructive work runs with the service role inside the new edge function, gated by the super-admin email check.
 
-### 2. Rebuild `supabase/functions/create-checkout/index.ts`
-
-Restore it as a real Deno edge function:
-- Accept `{ client_id }` in body, validate.
-- Use service role to load the client row, build the Stripe Checkout Session ($99/mo subscription, success_url=`/start?session_id={CHECKOUT_SESSION_ID}`, cancel_url=`/start?canceled=1`).
-- Log `checkout_started`, `checkout_success` (with session id) / `checkout_failed`.
-- Return `{ url }`.
-
-### 3. Rewrite `src/pages/Start.tsx` submit handler
-
-Replace the existing `supabase.auth.signUp` + direct insert flow with:
-1. POST form to `signup-tenant` (anon key only — no session required).
-2. On success, call `supabase.auth.signInWithPassword` so the browser has a session for the dashboard after returning from Stripe.
-3. Invoke `create-checkout` with `{ client_id }` from step 1.
-4. `window.location.href = checkout.url`.
-5. Handle these error shapes from `signup-tenant`: `email_taken_no_password`, `validation_failed`, `auth_create_failed`, `client_insert_failed`. Surface "Sign in instead" link for the email-conflict case.
-
-Remove the "Check your email" dead-end branch — email confirmation is bypassed for signup-via-tenant since we own the auth user creation server-side. (No global setting change.)
-
-### 4. Deployment + verification
-
-- Deploy `signup-tenant` and `create-checkout`.
-- Acceptance test (Playwright, headless) on the live preview:
-  1. Generate random new email.
-  2. Fill /start form, submit.
-  3. Assert redirect to `checkout.stripe.com`.
-  4. Query `callcapture_clients` via psql for the email → row exists, `user_id` is set, `setup_status='Payment Pending'`.
-  5. Query `auth.users` (via admin select isn't available — use `signInWithPassword` from a second Playwright session) to confirm sign-in succeeds.
-- Capture and report every `console.log` step from the function logs to prove the trace.
-
-## What this does NOT touch
-
-- No changes to RLS policies on `callcapture_clients` (they are already correct for the authenticated dashboard read/write path).
-- No changes to `link_user_to_clients` / `link_client_to_user` triggers — they remain as a safety net.
-- No changes to Google Places, voice preview, onboarding, scheduling.
-- No global auth setting changes.
+### 4. Verification
+After deploy, from the admin panel as `eaglejantize@gmail.com`:
+1. Delete a test subaccount.
+2. Confirm the row disappears from the Subscribers list (auto‑refresh).
+3. Spot‑check via SQL that no rows remain in `callcapture_clients`, `callcapture_leads`, `callcapture_assistant_configs`, `callcapture_businesses`, `callcapture_support_requests` for that id/user/email, and that the `auth.users` row is gone.
 
 ## Files
-
-- **Create**: `supabase/functions/signup-tenant/index.ts`
-- **Rewrite (currently corrupted)**: `supabase/functions/create-checkout/index.ts`
-- **Edit**: `src/pages/Start.tsx`
+- Create: `supabase/functions/delete-subaccount/index.ts`
+- Edit: `src/pages/Admin.tsx` (replace body of `hardDelete`)
