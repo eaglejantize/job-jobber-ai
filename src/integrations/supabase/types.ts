@@ -157,6 +157,82 @@ export type Database = {
         }
         Relationships: []
       }
+      callcapture_calls: {
+        Row: {
+          business_id: string | null
+          caller_name: string | null
+          caller_phone: string | null
+          client_id: string | null
+          created_at: string
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          issue_summary: string | null
+          lead_id: string | null
+          recording_url: string | null
+          started_at: string
+          status: Database["public"]["Enums"]["call_status"]
+          updated_at: string
+          vapi_call_id: string | null
+        }
+        Insert: {
+          business_id?: string | null
+          caller_name?: string | null
+          caller_phone?: string | null
+          client_id?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          issue_summary?: string | null
+          lead_id?: string | null
+          recording_url?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["call_status"]
+          updated_at?: string
+          vapi_call_id?: string | null
+        }
+        Update: {
+          business_id?: string | null
+          caller_name?: string | null
+          caller_phone?: string | null
+          client_id?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          issue_summary?: string | null
+          lead_id?: string | null
+          recording_url?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["call_status"]
+          updated_at?: string
+          vapi_call_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_calls_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "callcapture_calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "callcapture_calls_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       callcapture_clients: {
         Row: {
           address: string | null
@@ -328,6 +404,51 @@ export type Database = {
         }
         Relationships: []
       }
+      callcapture_dispatch: {
+        Row: {
+          call_id: string
+          created_at: string
+          eta_minutes: number | null
+          id: string
+          status: Database["public"]["Enums"]["dispatch_status"]
+          technician_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          call_id: string
+          created_at?: string
+          eta_minutes?: number | null
+          id?: string
+          status?: Database["public"]["Enums"]["dispatch_status"]
+          technician_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          call_id?: string
+          created_at?: string
+          eta_minutes?: number | null
+          id?: string
+          status?: Database["public"]["Enums"]["dispatch_status"]
+          technician_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_dispatch_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: true
+            referencedRelation: "callcapture_calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "callcapture_dispatch_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_technicians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       callcapture_leads: {
         Row: {
           address: string | null
@@ -409,6 +530,64 @@ export type Database = {
           },
         ]
       }
+      callcapture_sms_messages: {
+        Row: {
+          body: string
+          call_id: string | null
+          client_id: string | null
+          direction: Database["public"]["Enums"]["sms_direction"]
+          id: string
+          lead_id: string | null
+          sent_at: string
+          status: string | null
+          to_phone: string | null
+        }
+        Insert: {
+          body: string
+          call_id?: string | null
+          client_id?: string | null
+          direction?: Database["public"]["Enums"]["sms_direction"]
+          id?: string
+          lead_id?: string | null
+          sent_at?: string
+          status?: string | null
+          to_phone?: string | null
+        }
+        Update: {
+          body?: string
+          call_id?: string | null
+          client_id?: string | null
+          direction?: Database["public"]["Enums"]["sms_direction"]
+          id?: string
+          lead_id?: string | null
+          sent_at?: string
+          status?: string | null
+          to_phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_sms_messages_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "callcapture_sms_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "callcapture_sms_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       callcapture_support_requests: {
         Row: {
           business_name: string | null
@@ -445,15 +624,99 @@ export type Database = {
         }
         Relationships: []
       }
+      callcapture_technicians: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          status: Database["public"]["Enums"]["technician_status"]
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          status?: Database["public"]["Enums"]["technician_status"]
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          status?: Database["public"]["Enums"]["technician_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_technicians_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      callcapture_transcript_turns: {
+        Row: {
+          at: string
+          call_id: string
+          id: string
+          role: Database["public"]["Enums"]["transcript_role"]
+          seq: number
+          text: string
+        }
+        Insert: {
+          at?: string
+          call_id: string
+          id?: string
+          role: Database["public"]["Enums"]["transcript_role"]
+          seq?: number
+          text: string
+        }
+        Update: {
+          at?: string
+          call_id?: string
+          id?: string
+          role?: Database["public"]["Enums"]["transcript_role"]
+          seq?: number
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_transcript_turns_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       is_current_user_super_admin: { Args: never; Returns: boolean }
+      owns_client: { Args: { _client_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      call_status:
+        | "live"
+        | "new"
+        | "booked"
+        | "transferred"
+        | "completed"
+        | "missed"
+      dispatch_status: "assigned" | "en_route" | "arrived" | "cancelled"
+      sms_direction: "outbound" | "inbound"
+      technician_status: "available" | "assigned" | "en_route" | "off"
+      transcript_role: "ai" | "caller"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -580,6 +843,19 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      call_status: [
+        "live",
+        "new",
+        "booked",
+        "transferred",
+        "completed",
+        "missed",
+      ],
+      dispatch_status: ["assigned", "en_route", "arrived", "cancelled"],
+      sms_direction: ["outbound", "inbound"],
+      technician_status: ["available", "assigned", "en_route", "off"],
+      transcript_role: ["ai", "caller"],
+    },
   },
 } as const
