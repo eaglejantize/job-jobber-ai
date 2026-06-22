@@ -93,3 +93,25 @@ export function saveWizardState(state: WizardState) {
 export function clearWizardState() {
   try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
 }
+
+const OWNER_KEY = "callcapture.wizard.owner";
+const STEP_KEY = "callcapture.wizard.step";
+
+export function getWizardOwner(): string | null {
+  try { return localStorage.getItem(OWNER_KEY); } catch { return null; }
+}
+
+export function setWizardOwner(userId: string | null) {
+  try {
+    if (userId) localStorage.setItem(OWNER_KEY, userId);
+    else localStorage.removeItem(OWNER_KEY);
+  } catch { /* ignore */ }
+}
+
+export function resetWizardForNewOwner() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STEP_KEY);
+    localStorage.removeItem(OWNER_KEY);
+  } catch { /* ignore */ }
+}
