@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import LeadCard, { type Lead } from "@/components/LeadCard";
+import { Switch } from "@/components/ui/switch";
 
 type Client = {
   id: string;
