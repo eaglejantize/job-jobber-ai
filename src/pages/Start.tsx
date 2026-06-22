@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { resetWizardForNewOwner } from "@/lib/wizardSchema";
 import { toast } from "@/hooks/use-toast";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
