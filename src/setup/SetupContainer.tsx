@@ -123,7 +123,6 @@ export default function SetupContainer() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-5 md:p-6 shadow-card-soft">
-        {/* @ts-expect-error onEdit is only consumed by Step8Review */}
         <StepComp
           data={data}
           update={update}
