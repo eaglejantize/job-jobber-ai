@@ -89,9 +89,7 @@ ${opts.industry ? `Known industry: ${opts.industry}` : ""}`;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const placesKey =
-      Deno.env.get("GOOGLE_PLACES_API_KEY") ??
-      Deno.env.get("VITE_GOOGLE_PLACES_API_KEY");
+    const placesKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
     if (!placesKey) {
       return new Response(JSON.stringify({ error: "Missing GOOGLE_PLACES_API_KEY" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
