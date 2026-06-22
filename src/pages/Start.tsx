@@ -112,6 +112,13 @@ export default function Start() {
     try {
       const data = parsed.data;
 
+      const host = typeof window !== "undefined" ? window.location.hostname : "";
+      const isDevHost =
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host.endsWith(".lovable.app") ||
+        host.endsWith(".lovable.dev");
+
       // 1. Tenant creation via service-role edge function (handles auth user +
       //    callcapture_clients insert under one transaction, bypassing RLS safely).
       const { data: signupRes, error: signupErr } = await supabase.functions.invoke(
@@ -124,10 +131,16 @@ export default function Start() {
             alert_phone: data.alert_phone,
             password: data.password,
             industry: data.industry,
+            dev_bypass: isDevHost,
           },
         },
       );
-      const ctx = (signupRes ?? {}) as { client_id?: string; error?: string; message?: string };
+      const ctx = (signupRes ?? {}) as {
+        client_id?: string;
+        error?: string;
+        message?: string;
+        bypass_billing?: boolean;
+      };
       if (signupErr || !ctx.client_id) {
         if (ctx.error === "validation_failed") {
           setSubmitting(false);
@@ -144,6 +157,16 @@ export default function Start() {
         password: data.password,
       });
       if (signInErr) console.warn("signin_after_signup_failed", signInErr.message);
+
+      // 2b. Billing bypass — skip Stripe and go straight to the dashboard.
+      if (ctx.bypass_billing) {
+        toast({
+          title: "Trial activated",
+          description: "30 days free — no payment required.",
+        });
+        navigate("/dashboard", { replace: true });
+        return;
+      }
 
       // 3. Stripe checkout.
       const { data: checkout, error: fnErr } = await supabase.functions.invoke("create-checkout", {

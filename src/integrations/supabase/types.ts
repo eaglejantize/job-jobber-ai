@@ -173,6 +173,7 @@ export type Database = {
           tone: string
           transfer_fallback: string
           transfer_triggers: string[]
+          trial_ends_at: string | null
           twilio_phone_number_sid: string | null
           updated_at: string
           user_id: string | null
@@ -216,6 +217,7 @@ export type Database = {
           tone?: string
           transfer_fallback?: string
           transfer_triggers?: string[]
+          trial_ends_at?: string | null
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
@@ -259,6 +261,7 @@ export type Database = {
           tone?: string
           transfer_fallback?: string
           transfer_triggers?: string[]
+          trial_ends_at?: string | null
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null

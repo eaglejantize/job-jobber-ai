@@ -9,6 +9,7 @@ const BodySchema = z.object({
   alert_phone: z.string().trim().min(7).max(30),
   password: z.string().min(8).max(72),
   industry: z.string().trim().max(80).optional(),
+  dev_bypass: z.boolean().optional(),
 });
 
 function json(body: unknown, status = 200) {
@@ -106,6 +107,23 @@ Deno.serve(async (req) => {
     payment_status: "pending",
   };
 
+  // Billing bypass: either the server flag is on, or the dev header is allowed
+  // AND the client signaled it (so prod can never be tricked from the browser).
+  const serverFlag = ["true", "1"].includes(
+    (Deno.env.get("BYPASS_BILLING") ?? "").toLowerCase(),
+  );
+  const allowDevHeader = ["true", "1"].includes(
+    (Deno.env.get("ALLOW_DEV_BYPASS_HEADER") ?? "").toLowerCase(),
+  );
+  const bypassBilling = serverFlag || (allowDevHeader && data.dev_bypass === true);
+  if (bypassBilling) {
+    payload.setup_status = "Active (Trial)";
+    payload.payment_status = "trial";
+    (payload as Record<string, unknown>).trial_ends_at = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+  }
+
   let clientId: string;
   if (existingId) {
     const { error: updErr } = await admin
@@ -132,5 +150,12 @@ Deno.serve(async (req) => {
   console.log("client_insert_success", { client_id: clientId, user_id: userId });
   console.log("owner_link_created", { client_id: clientId, user_id: userId });
 
-  return json({ client_id: clientId, user_id: userId });
+  if (bypassBilling) {
+    console.log("billing_bypassed", {
+      client_id: clientId,
+      reason: serverFlag ? "server_flag" : "dev_header",
+    });
+  }
+
+  return json({ client_id: clientId, user_id: userId, bypass_billing: bypassBilling });
 });
