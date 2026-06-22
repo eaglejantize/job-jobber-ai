@@ -601,8 +601,7 @@ function BypassBillingCard() {
     setEnabled(next);
     setSaving(true);
     const { data: userData } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from("callcapture_app_settings" as never)
+    const { data, error } = await (supabase.from("callcapture_app_settings" as never) as any)
       .update({
         bypass_billing: next,
         updated_at: new Date().toISOString(),
