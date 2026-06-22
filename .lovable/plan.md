@@ -1,71 +1,72 @@
-# Dev Bypass for Stripe Checkout (30-Day Trial)
+# Billing Bypass Toggle in Admin Settings
 
-Goal: when a new subaccount signs up and a bypass flag is on, skip Stripe and mark the account Active (Trial) for 30 days. Stripe flow stays intact for production.
-
-## How the bypass turns on
-
-Two independent triggers — either one bypasses Stripe:
-
-1. **Server flag (authoritative):** `BYPASS_BILLING` secret on the edge function. Values `true` / `1` enable it. Default off (production).
-2. **Client/dev hint:** the signup form sends `dev_bypass: true` when running on `localhost`, `*.lovable.app`, or `*.lovable.dev`. The edge function honors it only when `ALLOW_DEV_BYPASS_HEADER=true` is also set, so production can never be tricked from the browser.
-
-If neither trigger fires, behavior is unchanged: redirect to Stripe Checkout.
+Replace the env-var-only switch with a database-backed toggle that the super admin can flip live from `Admin → Settings`.
 
 ## Database
 
-Add one nullable column so we can show/expire trials later:
+New singleton settings table:
 
 ```sql
-ALTER TABLE public.callcapture_clients
-  ADD COLUMN IF NOT EXISTS trial_ends_at timestamptz;
+CREATE TABLE public.callcapture_app_settings (
+  id boolean PRIMARY KEY DEFAULT true CHECK (id = true),
+  bypass_billing boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+GRANT SELECT ON public.callcapture_app_settings TO authenticated;
+GRANT ALL ON public.callcapture_app_settings TO service_role;
+ALTER TABLE public.callcapture_app_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "super admin reads settings"
+  ON public.callcapture_app_settings FOR SELECT TO authenticated
+  USING (public.is_current_user_super_admin());
+
+CREATE POLICY "super admin writes settings"
+  ON public.callcapture_app_settings FOR UPDATE TO authenticated
+  USING (public.is_current_user_super_admin())
+  WITH CHECK (public.is_current_user_super_admin());
+
+INSERT INTO public.callcapture_app_settings (id) VALUES (true)
+  ON CONFLICT DO NOTHING;
 ```
 
-No RLS changes (existing policies already cover the column for super admin / owner).
+The `CHECK (id = true)` plus boolean PK guarantees a single row.
 
-## Edge function: `supabase/functions/signup-tenant/index.ts`
+## Edge function: `signup-tenant`
 
-After the auth user + client row are created/updated:
+Update the bypass resolution order (first match wins):
 
-- Read `BYPASS_BILLING` and `ALLOW_DEV_BYPASS_HEADER` from env. Compute `bypass = serverFlag || (allowDevHeader && body.dev_bypass === true)`.
-- If `bypass`:
-  - Update the client row with:
-    - `payment_status: "trial"`
-    - `setup_status: "Active (Trial)"`
-    - `trial_ends_at: now + 30 days`
-  - Log `billing_bypassed { client_id, reason: "server_flag" | "dev_header" }`.
-- Return `{ client_id, user_id, bypass_billing: <bool> }`.
+1. `BYPASS_BILLING` env secret = `true`/`1` → bypass (server override).
+2. `callcapture_app_settings.bypass_billing = true` → bypass (admin toggle).
+3. `ALLOW_DEV_BYPASS_HEADER=true` AND request body `dev_bypass=true` → bypass.
+4. Otherwise → Stripe checkout.
 
-## Frontend: `src/pages/Start.tsx`
+Read the settings row with the service-role client. Log `billing_bypassed { reason: "server_flag" | "admin_toggle" | "dev_header" }`.
 
-In `onSubmit`, after `signup-tenant` succeeds:
+## Admin UI: `SettingsTab` in `src/pages/Admin.tsx`
 
-- Send `dev_bypass: isDevHost()` in the request body, where `isDevHost()` checks `location.hostname` for `localhost`, `127.0.0.1`, `.lovable.app`, `.lovable.dev`.
-- After sign-in:
-  - If `signupRes.bypass_billing === true` → toast "Trial activated — 30 days free" and `navigate("/dashboard")`. Do not call `create-checkout`.
-  - Otherwise → existing `create-checkout` + redirect to `checkout.url` (unchanged).
+Replace the "coming soon" placeholder with a real settings panel.
 
-## Admin panel: `src/pages/Admin.tsx`
+- On mount: `select bypass_billing, updated_at from callcapture_app_settings limit 1`.
+- Render a labeled switch ("Bypass Stripe checkout — new signups get a 30-day trial instead of paying") plus the last-updated timestamp.
+- On toggle: optimistic update, then `update callcapture_app_settings set bypass_billing = ?, updated_at = now(), updated_by = auth.uid() where id = true`. Show success / error toast. Revert on failure.
+- Show a warning callout when the toggle is ON: "Live signups will skip payment. Turn off for production launch."
 
-Small display tweaks only — no logic change to existing buttons.
+Uses the existing `@/components/ui/switch` shadcn component.
 
-- `StatusBadge` styles: add `trial: "bg-blue-500/15 text-blue-400 border-blue-500/30"` so `payment_status="trial"` renders cleanly. The `setup_status` column already shows the raw string, so "Active (Trial)" appears as-is.
-- Filter chips: add `{ id: "trial", label: "Trial" }`.
-- Overview stat card: rename "Manual / Trial" → "Trial" counted by `payment_status === "trial"`; add a separate "Manual" card for `manual`. (Keeps the 4-card grid.)
+## Frontend signup flow
 
-## Enabling the flag
-
-`BYPASS_BILLING` and `ALLOW_DEV_BYPASS_HEADER` are not added automatically — after this lands I'll prompt you to add them via the secret tool when you want to turn the bypass on. Leaving them unset = production behavior (Stripe).
+No change to `src/pages/Start.tsx`. The dev-host hint stays in place; the new admin toggle is purely server-resolved.
 
 ## Verification
 
-1. With both secrets unset → sign up redirects to Stripe (current behavior).
-2. With `BYPASS_BILLING=true` → sign up lands on `/dashboard`; row shows `payment_status=trial`, `setup_status=Active (Trial)`, `trial_ends_at ≈ now+30d`.
-3. Admin panel shows the new badge + Trial filter + stat count.
+1. Settings tab loads with toggle reflecting current DB value.
+2. Toggle ON → new signup lands on `/dashboard` with `payment_status=trial`, `setup_status=Active (Trial)`, `trial_ends_at ≈ now+30d`. No Stripe redirect.
+3. Toggle OFF → new signup redirects to Stripe Checkout.
+4. Non-super-admin user gets RLS denial when trying to read/update settings (verified by visiting `/admin` as a regular user — guard already blocks the route, but RLS is the backstop).
 
-## Files touched
+## Files
 
-- `supabase/migrations/<timestamp>_add_trial_ends_at.sql` (new)
-- `supabase/functions/signup-tenant/index.ts` (bypass branch + response field)
-- `src/pages/Start.tsx` (send dev_bypass, branch on response)
-- `src/pages/Admin.tsx` (badge color, filter chip, stat card)
-- `supabase/functions/create-checkout/index.ts` — **unchanged**
+- new migration creating `callcapture_app_settings`
+- `supabase/functions/signup-tenant/index.ts` — read settings row, add `admin_toggle` reason
+- `src/pages/Admin.tsx` — replace `SettingsTab` with toggle
