@@ -207,7 +207,7 @@ function OverviewTab({ clients }: { clients: Client[] }) {
 
 function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: () => void }) {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "pending" | "manual" | "suspended">("all");
+  const [filter, setFilter] = useState<"all" | "active" | "trial" | "pending" | "manual" | "suspended">("all");
   const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<Client | null>(null);
