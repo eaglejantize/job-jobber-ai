@@ -66,13 +66,16 @@ export default function SiteNav() {
           )}
         </div>
 
-        <button
-          aria-label="Open menu"
-          className="md:hidden p-2 rounded-md border border-border"
-          onClick={() => setOpen((o) => !o)}
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        <div className="md:hidden flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            aria-label="Open menu"
+            className="p-2 rounded-md border border-border"
+            onClick={() => setOpen((o) => !o)}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
       </div>
       {open && (
         <div className="md:hidden border-t border-border bg-background">
