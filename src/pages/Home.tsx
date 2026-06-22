@@ -42,7 +42,7 @@ function timeAgo(iso: string): string {
   return `${d}d ago`;
 }
 
-export default function Dashboard() {
+export default function Home() {
   const { user, loading } = useAuth();
   const [params, setParams] = useSearchParams();
   const [client, setClient] = useState<Client | null>(null);
@@ -271,7 +271,7 @@ export default function Dashboard() {
     <Layout>
       <section className="container py-10 md:py-14">
         <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Your dashboard</h1>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Home</h1>
           <p className="text-muted-foreground mt-1">Signed in as {user.email}</p>
         </div>
 
