@@ -3,6 +3,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import Layout from "@/components/Layout";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import CallInbox from "@/components/dashboard/CallInbox";
 import ActiveCallPanel from "@/components/dashboard/ActiveCallPanel";
@@ -82,12 +83,13 @@ export default function Dashboard() {
     }
   }, [calls]);
 
-  if (loading) return <div className="vektuor-ops grid place-items-center"><p className="v-muted">Loading…</p></div>;
+  if (loading) return <Layout><div className="vektuor-ops grid place-items-center min-h-[60vh]"><p className="v-muted">Loading…</p></div></Layout>;
   if (!user) return <Navigate to="/auth" replace />;
 
   const systemLive = clientFetched && clientId !== null;
 
   return (
+    <Layout>
     <div className="vektuor-ops">
       <DashboardHeader today={stats.today} leads={stats.leads} active={stats.active} systemLive={systemLive} />
 
@@ -97,8 +99,16 @@ export default function Dashboard() {
             <h2 className="text-lg font-semibold mb-2">Set up your business</h2>
             <p className="v-muted text-sm">Complete onboarding to start receiving live calls in your inbox.</p>
           </div>
+        ) : calls && calls.length === 0 ? (
+          <div className="v-card p-10 text-center max-w-xl mx-auto mt-12">
+            <div className="h-12 w-12 mx-auto rounded-2xl grid place-items-center mb-4" style={{ background: "linear-gradient(135deg, hsl(152 84% 52% / 0.15), hsl(270 92% 68% / 0.15))" }}>
+              <span className="v-live-dot h-2.5 w-2.5" />
+            </div>
+            <h2 className="text-lg font-semibold mb-1">No active calls.</h2>
+            <p className="v-muted text-sm">Your AI receptionist is standing by.</p>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_360px] gap-4 h-[calc(100vh-7rem)]">
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_360px] gap-4 h-[calc(100vh-11rem)]">
             <CallInbox
               calls={calls}
               selectedId={selectedId}
@@ -117,5 +127,6 @@ export default function Dashboard() {
         )}
       </div>
     </div>
+    </Layout>
   );
 }
