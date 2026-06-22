@@ -18,7 +18,7 @@ export default function SiteNav() {
   const navigate = useNavigate();
   const { user } = useAuth();
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md text-foreground">
       <div className="container flex h-16 items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-2" aria-label="Vektuor home">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-brand text-white shadow-soft">
