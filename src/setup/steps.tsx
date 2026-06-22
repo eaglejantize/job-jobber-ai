@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { INDUSTRY_OPTIONS, DAYS, type SetupData, type Faq } from "./schema";
 
-type StepProps = {
+export type StepProps = {
   data: SetupData;
   update: (patch: Partial<SetupData>) => void;
   save: (
@@ -38,6 +38,7 @@ type StepProps = {
   ) => Promise<{ error: unknown }>;
   clientId: string | null;
   mode: "wizard" | "settings";
+  onEdit?: (step: number) => void;
 };
 
 function StepHelp({ children }: { children: React.ReactNode }) {
