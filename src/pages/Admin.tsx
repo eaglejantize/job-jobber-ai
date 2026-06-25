@@ -231,7 +231,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function OverviewTab({ clients }: { clients: Client[] }) {
+function OverviewTab({ clients, onDelete }: { clients: Client[]; onDelete: (c: Client) => void }) {
   const total = clients.length;
   const active = clients.filter((c) => c.payment_status === "active").length;
   const pending = clients.filter((c) => c.payment_status === "pending").length;
@@ -251,7 +251,17 @@ function OverviewTab({ clients }: { clients: Client[] }) {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
           Recent signups
         </h2>
-        <ClientsTable rows={recent} />
+        <ClientsTable
+          rows={recent}
+          actions={(c) => (
+            <button
+              onClick={() => onDelete(c)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </button>
+          )}
+        />
       </section>
     </div>
   );
@@ -259,10 +269,17 @@ function OverviewTab({ clients }: { clients: Client[] }) {
 
 /* ---------------- Subscribers ---------------- */
 
-function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: () => void }) {
+function SubscribersTab({
+  clients,
+  onChange,
+  onDelete,
+}: {
+  clients: Client[];
+  onChange: () => void;
+  onDelete: (c: Client) => void;
+}) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "trial" | "pending" | "manual" | "suspended">("all");
-  const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<Client | null>(null);
   const [leads, setLeads] = useState<Lead[] | null>(null);
@@ -304,22 +321,6 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
     }
   }
 
-  async function hardDelete(id: string) {
-    setBusyId(id);
-    const { data, error } = await supabase.functions.invoke("delete-subaccount", {
-      body: { client_id: id },
-    });
-    setBusyId(null);
-    setPendingDelete(null);
-    const errMsg = error?.message || (data as { error?: string })?.error;
-    if (errMsg) {
-      toast({ title: "Delete failed", description: errMsg, variant: "destructive" });
-    } else {
-      toast({ title: "Subaccount permanently deleted" });
-      onChange();
-    }
-  }
-
   const filters: { id: typeof filter; label: string }[] = [
     { id: "all", label: "All" },
     { id: "active", label: "Active" },
@@ -331,6 +332,9 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
 
   return (
     <div className="space-y-4">
+      <div className="text-xs text-slate-400 bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2">
+        Deleting permanently removes the account, related data, and the login so the email can sign up again.
+      </div>
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
@@ -361,7 +365,15 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
       <ClientsTable
         rows={rows}
         actions={(c) => (
-          <DropdownMenu>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => onDelete(c)}
+              disabled={busyId === c.id}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </button>
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 disabled={busyId === c.id}
@@ -403,36 +415,15 @@ function SubscribersTab({ clients, onChange }: { clients: Client[]; onChange: ()
               <DropdownMenuSeparator className="bg-slate-700" />
               <DropdownMenuItem
                 className="text-red-400 focus:text-red-400"
-                onClick={() => setPendingDelete(c)}
+                onClick={() => onDelete(c)}
               >
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         )}
       />
-
-      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
-        <AlertDialogContent className="bg-slate-800 border-slate-700 text-slate-100">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete account?</AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400">
-              This permanently removes <span className="text-white">{pendingDelete?.business_name}</span> ({pendingDelete?.email}) from the database. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-500 text-white"
-              onClick={() => pendingDelete && hardDelete(pendingDelete.id)}
-            >
-              Delete permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <Sheet open={!!viewing} onOpenChange={(o) => { if (!o) { setViewing(null); setLeads(null); } }}>
         <SheetContent className="w-full sm:max-w-xl overflow-y-auto bg-slate-900 text-slate-100 border-slate-700">
