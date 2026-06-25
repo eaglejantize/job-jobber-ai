@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Loader2,
   ArrowLeft,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -60,6 +61,8 @@ export default function Admin() {
   const [tab, setTab] = useState<Tab>("overview");
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
 
   async function refresh() {
@@ -83,6 +86,25 @@ export default function Admin() {
   async function signOut() {
     await supabase.auth.signOut();
     navigate("/", { replace: true });
+  }
+
+  async function hardDelete(c: Client) {
+    setDeleting(true);
+    const { data, error } = await supabase.functions.invoke("delete-subaccount", {
+      body: { client_id: c.id },
+    });
+    setDeleting(false);
+    setPendingDelete(null);
+    const errMsg = error?.message || (data as { error?: string })?.error;
+    if (errMsg) {
+      toast({ title: "Delete failed", description: errMsg, variant: "destructive" });
+    } else {
+      toast({
+        title: "Subaccount permanently deleted",
+        description: `${c.email} can now sign up again.`,
+      });
+      void refresh();
+    }
   }
 
   return (
@@ -141,9 +163,9 @@ export default function Admin() {
               <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
             </div>
           ) : tab === "overview" ? (
-            <OverviewTab clients={clients} />
+            <OverviewTab clients={clients} onDelete={setPendingDelete} />
           ) : tab === "subscribers" ? (
-            <SubscribersTab clients={clients} onChange={refresh} />
+            <SubscribersTab clients={clients} onChange={refresh} onDelete={setPendingDelete} />
           ) : tab === "create" ? (
             <CreateTestAccountTab onCreated={refresh} />
           ) : (
@@ -151,6 +173,30 @@ export default function Admin() {
           )}
         </div>
       </main>
+
+      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && !deleting && setPendingDelete(null)}>
+        <AlertDialogContent className="bg-slate-800 border-slate-700 text-slate-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account permanently?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              This removes <span className="text-white">{pendingDelete?.business_name}</span> ({pendingDelete?.email}),
+              all related leads/configs, and the login. The email will be free to sign up again. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-500 text-white"
+              onClick={(e) => { e.preventDefault(); if (pendingDelete) void hardDelete(pendingDelete); }}
+            >
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
