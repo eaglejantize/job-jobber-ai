@@ -5,6 +5,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SERVANAHQ_BASE_URL = (Deno.env.get("SERVANAHQ_BASE_URL") ?? "").replace(/\/+$/, "");
 const SERVANAHQ_API_KEY = Deno.env.get("SERVANAHQ_API_KEY") ?? "";
+const SERVANAHQ_ANON_KEY = Deno.env.get("SERVANAHQ_ANON_KEY") ?? "";
 
 type Json = Record<string, unknown>;
 
@@ -106,34 +107,50 @@ Deno.serve(async (req) => {
 
   const { day, time } = parseTiming(lead.timing as string | null);
 
+  // Map Vektuor fields -> ServanaHQ intake-vapi canonical field names (Path C: top-level fields).
+  // intake-vapi requires: customer_name, phone, address, appliance_type, issue_description.
+  const serviceLabel =
+    (lead as any).treatment ??
+    (intake.service_requested as string | undefined) ??
+    (intake.appliance_type as string | undefined) ??
+    (client as any).industry ??
+    "service request";
+  const issueText =
+    (lead as any).summary ??
+    (intake.issue_description as string | undefined) ??
+    callSummary ??
+    serviceLabel;
+  const summaryParts = [
+    callSummary,
+    day ? `preferred_day=${day}` : null,
+    time ? `preferred_time=${time}` : null,
+    (lead as any).timing ? `timing=${(lead as any).timing}` : null,
+  ].filter(Boolean);
+
   const body = {
-    servanahq_tenant_id: client.servanahq_tenant_id,
-    source: "Vektuor",
-    lead_source: "AI Answering Service",
+    // tenant routing (ignored by current intake-vapi, honoured once ServanaHQ adds tenant override)
+    tenant_id: client.servanahq_tenant_id,
+    // canonical intake-vapi fields
     customer_name: (lead as any).name ?? null,
     phone: (lead as any).phone ?? null,
     email: (lead as any).email ?? null,
-    service_address: (lead as any).address ?? null,
-    business_category: (client as any).industry ?? null,
-    service_requested: (lead as any).treatment ?? (intake.service_requested as string | undefined) ?? null,
-    appliance_type: (intake.appliance_type as string | undefined) ?? null,
+    address: (lead as any).address ?? null,
+    appliance_type: serviceLabel,
     brand: (intake.brand as string | undefined) ?? null,
     model_number: (intake.model_number as string | undefined) ?? null,
-    issue_description: (lead as any).summary ?? (intake.issue_description as string | undefined) ?? null,
-    preferred_day: day,
-    preferred_time: time,
-    call_summary: callSummary,
+    issue_description: issueText,
+    ai_summary: summaryParts.join(" | ") || callSummary || null,
     transcript: (raw.transcript as string | undefined) ?? null,
-    vektuor_call_id: callVapiId,
+    call_id: callVapiId,
+    // extras for downstream reviewers / future use
+    source_app: "vektuor",
     recording_url: recordingUrl,
-    metadata: {
-      vektuor_lead_id: lead_id,
-      vektuor_client_id: client_id,
-      raw_intake: intake,
-    },
+    vektuor_lead_id: lead_id,
+    vektuor_client_id: client_id,
+    raw_intake: intake,
   };
 
-  const endpoint = `${SERVANAHQ_BASE_URL}/functions/v1/ingest-vektuor-lead`;
+  const endpoint = `${SERVANAHQ_BASE_URL}/intake-vapi`;
   await log("servanahq_payload", "ok", { fields: Object.keys(body) });
   await log("servanahq_request", "ok", { endpoint, tenant_id: client.servanahq_tenant_id });
 
@@ -142,7 +159,12 @@ Deno.serve(async (req) => {
     res = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${SERVANAHQ_API_KEY}`,
+        // Supabase functions edge router requires an apikey/Authorization. Anon key is public-safe.
+        apikey: SERVANAHQ_ANON_KEY,
+        Authorization: `Bearer ${SERVANAHQ_ANON_KEY}`,
+        // Server-to-server shared secret used by ServanaHQ to authenticate Vektuor traffic
+        // (intake-vapi will start validating this when the ServanaHQ-side patch is applied).
+        "x-vektuor-key": SERVANAHQ_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
