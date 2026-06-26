@@ -254,6 +254,7 @@ export type Database = {
           first_test_call_id: string | null
           forward_first: boolean
           forward_phone: string | null
+          forwarding_from_number: string | null
           google_category: string | null
           google_place_id: string | null
           google_rating: number | null
@@ -268,6 +269,7 @@ export type Database = {
           notification_settings: Json
           number_provisioned_at: string | null
           number_status: string | null
+          number_test_expires_at: string | null
           onboarding_completed_at: string | null
           owner_name: string
           payment_status: string
@@ -289,6 +291,7 @@ export type Database = {
           twilio_phone_number_sid: string | null
           updated_at: string
           user_id: string | null
+          vapi_phone_number_id: string | null
           voice_id: string | null
           voice_label: string | null
           voice_speed: string
@@ -315,6 +318,7 @@ export type Database = {
           first_test_call_id?: string | null
           forward_first?: boolean
           forward_phone?: string | null
+          forwarding_from_number?: string | null
           google_category?: string | null
           google_place_id?: string | null
           google_rating?: number | null
@@ -329,6 +333,7 @@ export type Database = {
           notification_settings?: Json
           number_provisioned_at?: string | null
           number_status?: string | null
+          number_test_expires_at?: string | null
           onboarding_completed_at?: string | null
           owner_name: string
           payment_status?: string
@@ -350,6 +355,7 @@ export type Database = {
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
+          vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
@@ -376,6 +382,7 @@ export type Database = {
           first_test_call_id?: string | null
           forward_first?: boolean
           forward_phone?: string | null
+          forwarding_from_number?: string | null
           google_category?: string | null
           google_place_id?: string | null
           google_rating?: number | null
@@ -390,6 +397,7 @@ export type Database = {
           notification_settings?: Json
           number_provisioned_at?: string | null
           number_status?: string | null
+          number_test_expires_at?: string | null
           onboarding_completed_at?: string | null
           owner_name?: string
           payment_status?: string
@@ -411,6 +419,7 @@ export type Database = {
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
+          vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
