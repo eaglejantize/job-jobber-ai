@@ -11,6 +11,8 @@ import {
   Loader2,
   ArrowLeft,
   Trash2,
+  Activity,
+  Wrench,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -48,11 +50,12 @@ type Client = {
   created_at: string;
 };
 
-type Tab = "overview" | "subscribers" | "create" | "settings";
+type Tab = "overview" | "subscribers" | "diagnostics" | "create" | "settings";
 
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "subscribers", label: "Subscribers", icon: Users },
+  { id: "diagnostics", label: "Diagnostics", icon: Activity },
   { id: "create", label: "Create Test Account", icon: UserPlus },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -166,6 +169,8 @@ export default function Admin() {
             <OverviewTab clients={clients} onDelete={setPendingDelete} />
           ) : tab === "subscribers" ? (
             <SubscribersTab clients={clients} onChange={refresh} onDelete={setPendingDelete} />
+          ) : tab === "diagnostics" ? (
+            <DiagnosticsTab />
           ) : tab === "create" ? (
             <CreateTestAccountTab onCreated={refresh} />
           ) : (
