@@ -126,10 +126,13 @@ export function Step1FindBusiness({ data, update, save, mode }: StepProps) {
         });
       }
     } catch (e) {
+      // Non-blocking — surface inline and let the user continue manually.
+      setCandidates([]);
+      setSearched(true);
       toast({
-        title: "Lookup failed",
-        description: (e as Error).message,
-        variant: "destructive",
+        title: "Lookup unavailable",
+        description:
+          "We couldn't reach Google right now. Skip and enter your details manually below.",
       });
     } finally {
       setSearching(false);
