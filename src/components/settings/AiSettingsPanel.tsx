@@ -11,6 +11,7 @@ import { questionsForIndustry, UNIVERSAL_QUESTIONS } from "@/lib/intakeQuestions
 import { industryLabel } from "@/lib/industries";
 import { VOICES as STATIC_VOICES } from "@/lib/voices";
 import { TestCallButton } from "@/components/TestCallButton";
+import ServanaHqSettings from "@/components/settings/ServanaHqSettings";
 
 type Voice = { id: string; name: string; provider: string; description: string };
 
@@ -240,6 +241,8 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
           {saving && <Loader2 className="h-4 w-4 animate-spin" />} Save AI Settings
         </Button>
       </div>
+
+      <ServanaHqSettings clientId={c.id} />
     </div>
   );
 }

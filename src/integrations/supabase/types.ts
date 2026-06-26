@@ -282,9 +282,8 @@ export type Database = {
           phone_mode: string | null
           preferred_area_code: string | null
           rings_before_answer: number
-          servanahq_account_id: string | null
           servanahq_enabled: boolean
-          servanahq_endpoint_url: string | null
+          servanahq_tenant_id: string | null
           services: string[]
           setup_status: string
           setup_step: number
@@ -351,9 +350,8 @@ export type Database = {
           phone_mode?: string | null
           preferred_area_code?: string | null
           rings_before_answer?: number
-          servanahq_account_id?: string | null
           servanahq_enabled?: boolean
-          servanahq_endpoint_url?: string | null
+          servanahq_tenant_id?: string | null
           services?: string[]
           setup_status?: string
           setup_step?: number
@@ -420,9 +418,8 @@ export type Database = {
           phone_mode?: string | null
           preferred_area_code?: string | null
           rings_before_answer?: number
-          servanahq_account_id?: string | null
           servanahq_enabled?: boolean
-          servanahq_endpoint_url?: string | null
+          servanahq_tenant_id?: string | null
           services?: string[]
           setup_status?: string
           setup_step?: number
@@ -509,6 +506,8 @@ export type Database = {
           raw_payload: Json | null
           referral: string | null
           servanahq_lead_id: string | null
+          servanahq_sync_error: string | null
+          servanahq_sync_status: string | null
           servanahq_synced_at: string | null
           status: string
           summary: string | null
@@ -532,6 +531,8 @@ export type Database = {
           raw_payload?: Json | null
           referral?: string | null
           servanahq_lead_id?: string | null
+          servanahq_sync_error?: string | null
+          servanahq_sync_status?: string | null
           servanahq_synced_at?: string | null
           status?: string
           summary?: string | null
@@ -555,6 +556,8 @@ export type Database = {
           raw_payload?: Json | null
           referral?: string | null
           servanahq_lead_id?: string | null
+          servanahq_sync_error?: string | null
+          servanahq_sync_status?: string | null
           servanahq_synced_at?: string | null
           status?: string
           summary?: string | null

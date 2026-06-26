@@ -266,6 +266,21 @@ Deno.serve(async (req) => {
     } else {
       await logEvent(clientId, vapiCallId, "sms_sent", "skipped", { reason: !clientId ? "no_tenant" : "no_lead" });
     }
+
+    // ServanaHQ sync — fire-and-forget, never blocks lead capture.
+    if (clientId && leadId) {
+      try {
+        const syncRes = await fetch(`${SUPABASE_URL}/functions/v1/sync-servanahq`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ client_id: clientId, lead_id: leadId, vapi_call_id: vapiCallId }),
+        });
+        const txt = await syncRes.text();
+        console.log("[vapi-webhook] servanahq sync", syncRes.status, txt.slice(0, 300));
+      } catch (e) {
+        console.error("[vapi-webhook] servanahq sync invoke failed", e);
+      }
+    }
   }
 
   return new Response(JSON.stringify({ ok: true, call_id: callId }), {

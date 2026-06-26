@@ -32,6 +32,8 @@ const STEP_LABELS: { step: string; label: string }[] = [
   { step: "lead_extracted", label: "Lead extracted" },
   { step: "lead_created", label: "Lead saved to inbox" },
   { step: "sms_sent", label: "SMS sent" },
+  { step: "servanahq_check", label: "ServanaHQ integration check" },
+  { step: "servanahq_synced", label: "ServanaHQ lead synced" },
 ];
 
 export function TestCallButton({
