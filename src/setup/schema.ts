@@ -88,6 +88,13 @@ export const SetupDataSchema = z.object({
       email: "",
       notify_on: ["new_call"],
     }),
+
+  // Step 8 — CRM
+  crm_provider: z.string().nullable().default(null),
+  crm_interest: z.array(z.string()).default([]),
+
+  // Step 9 — Test call
+  first_test_call_id: z.string().nullable().default(null),
 });
 
 export type SetupData = z.infer<typeof SetupDataSchema>;
@@ -131,16 +138,22 @@ export function emptySetupData(): SetupData {
       email: "",
       notify_on: ["new_call"],
     },
+    crm_provider: null,
+    crm_interest: [],
+    first_test_call_id: null,
   };
 }
 
 export const STEPS = [
-  { id: 1, title: "Find your business", short: "Business lookup" },
-  { id: 2, title: "Business details", short: "Business details" },
-  { id: 3, title: "Your Vektuor number", short: "Phone number" },
-  { id: 4, title: "Choose your AI voice", short: "Voice" },
-  { id: 5, title: "Your AI receptionist script", short: "Script" },
-  { id: 6, title: "Call handling & forwarding", short: "Call handling" },
-  { id: 7, title: "SMS & notifications", short: "Notifications" },
-  { id: 8, title: "Review & launch", short: "Review" },
+  { id: 1, title: "Welcome to Vektuor", short: "Welcome" },
+  { id: 2, title: "Find your business", short: "Business lookup" },
+  { id: 3, title: "Business details", short: "Business details" },
+  { id: 4, title: "Your Vektuor number", short: "Phone number" },
+  { id: 5, title: "Choose your AI voice", short: "Voice" },
+  { id: 6, title: "Your AI receptionist script", short: "Script" },
+  { id: 7, title: "Call handling & forwarding", short: "Call handling" },
+  { id: 8, title: "SMS & notifications", short: "Notifications" },
+  { id: 9, title: "Connect your CRM", short: "CRM" },
+  { id: 10, title: "Test your AI receptionist", short: "Test call" },
+  { id: 11, title: "Go live", short: "Go live" },
 ] as const;
