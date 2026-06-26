@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Rocket } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { STEPS } from "./schema";
@@ -17,8 +17,10 @@ import {
   Step7Notifications,
   Step8Review,
 } from "./steps";
+import { StepWelcome, StepCrm, StepTestCall, StepGoLive } from "./extraSteps";
 
 const STEP_COMPONENTS = [
+  StepWelcome,
   Step1FindBusiness,
   Step2BusinessDetails,
   Step3PhoneNumber,
@@ -26,15 +28,29 @@ const STEP_COMPONENTS = [
   Step5Script,
   Step6CallHandling,
   Step7Notifications,
-  Step8Review,
+  StepCrm,
+  StepTestCall,
+  StepGoLive,
 ];
 
 export default function SetupContainer() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { loading, data, update, save, clientId, setupStep } = useSetupData();
-  const [step, setStep] = useState<number>(setupStep || 0);
+  const [step, setStep] = useState<number>(0);
   const [launched, setLaunched] = useState(false);
   const [launching, setLaunching] = useState(false);
+
+  useEffect(() => {
+    if (loading) return;
+    const fromUrl = parseInt(params.get("step") || "", 10);
+    if (!Number.isNaN(fromUrl) && fromUrl >= 0 && fromUrl < STEPS.length) {
+      setStep(fromUrl);
+    } else {
+      setStep(Math.min(STEPS.length - 1, setupStep || 0));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   if (loading) {
     return (
@@ -61,9 +77,10 @@ export default function SetupContainer() {
     try {
       await save({ ...data, setup_step: STEPS.length - 1 });
       if (clientId) {
+        const nowIso = new Date().toISOString();
         await supabase
           .from("callcapture_clients")
-          .update({ launched_at: new Date().toISOString() } as never)
+          .update({ launched_at: nowIso, onboarding_completed_at: nowIso } as never)
           .eq("id", clientId);
         try {
           await supabase.functions.invoke("update-vapi-agent", {
