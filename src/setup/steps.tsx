@@ -49,47 +49,80 @@ function StepHelp({ children }: { children: React.ReactNode }) {
 
 // -------------------- Step 1: Find business --------------------
 
+type Candidate = {
+  place_id: string;
+  name: string;
+  address: string;
+  category: string;
+  types: string[];
+  rating: number | null;
+  business_status?: string;
+};
+
+type DetailsResult = {
+  found: boolean;
+  business?: {
+    business_name: string;
+    address: string;
+    website: string;
+    business_hours: string;
+    types: string[];
+    phone: string;
+    place_id: string;
+  };
+  suggestion?: {
+    industry_label: string;
+    industry_value: string;
+    greeting: string;
+    intakeQuestions: string[];
+  } | null;
+};
+
 export function Step1FindBusiness({ data, update, save, mode }: StepProps) {
+  const [name, setName] = useState(data.business_name || "");
   const [phone, setPhone] = useState(data.business_phone || "");
+  const [city, setCity] = useState("");
+  const [stateCode, setStateCode] = useState("");
   const [searching, setSearching] = useState(false);
-  const [prefilling, setPrefilling] = useState(false);
-  const [result, setResult] = useState<null | {
-    found: boolean;
-    business?: {
-      business_name: string;
-      address: string;
-      website: string;
-      business_hours: string;
-      types: string[];
-      phone: string;
-    };
-    suggestion?: {
-      industry_label: string;
-      industry_value: string;
-      greeting: string;
-      intakeQuestions: string[];
-    } | null;
-  }>(null);
-  const [editMode, setEditMode] = useState(false);
+  const [prefillingId, setPrefillingId] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  const [searched, setSearched] = useState(false);
+
+  const canSearch =
+    name.trim().length >= 2 || phone.replace(/\D/g, "").length >= 7;
 
   async function searchBusiness() {
-    if (!phone.trim()) {
-      toast({ title: "Enter your business phone", variant: "destructive" });
+    if (!canSearch) {
+      toast({
+        title: "Enter a business name or phone",
+        variant: "destructive",
+      });
       return;
     }
     setSearching(true);
-    setResult(null);
+    setCandidates(null);
+    setSearched(false);
     try {
       const { data: resp, error } = await supabase.functions.invoke(
         "business-lookup",
-        { body: { phone } },
+        {
+          body: {
+            mode: "search",
+            name: name.trim() || undefined,
+            phone: phone.trim() || undefined,
+            city: city.trim() || undefined,
+            state: stateCode.trim() || undefined,
+          },
+        },
       );
       if (error) throw error;
-      setResult(resp as never);
-      if (!(resp as { found?: boolean })?.found) {
+      const list = (resp as { candidates?: Candidate[] })?.candidates ?? [];
+      setCandidates(list);
+      setSearched(true);
+      if (list.length === 0) {
         toast({
-          title: "No match found",
-          description: "Enter your details manually in the next step.",
+          title: "No matches found",
+          description: "Try a different name, add city/state, or enter details manually.",
         });
       }
     } catch (e) {
@@ -103,9 +136,33 @@ export function Step1FindBusiness({ data, update, save, mode }: StepProps) {
     }
   }
 
-  async function confirmBusiness() {
+  async function chooseCandidate(c: Candidate) {
+    setPrefillingId(c.place_id);
+    try {
+      const { data: resp, error } = await supabase.functions.invoke(
+        "business-lookup",
+        { body: { mode: "details", place_id: c.place_id } },
+      );
+      if (error) throw error;
+      const det = resp as DetailsResult;
+      if (!det?.found || !det.business) {
+        toast({ title: "Could not load details", variant: "destructive" });
+        return;
+      }
+      await applyBusiness(det);
+    } catch (e) {
+      toast({
+        title: "Could not load details",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setPrefillingId(null);
+    }
+  }
+
+  async function applyBusiness(result: DetailsResult) {
     if (!result?.business) return;
-    setPrefilling(true);
     const b = result.business;
     const s = result.suggestion;
     const matchedIndustry =
@@ -150,7 +207,6 @@ export function Step1FindBusiness({ data, update, save, mode }: StepProps) {
     };
     update(patch);
     await save({ ...patch, setup_step: 1 });
-    setPrefilling(false);
     toast({
       title: "We found your business!",
       description:
@@ -158,18 +214,40 @@ export function Step1FindBusiness({ data, update, save, mode }: StepProps) {
     });
   }
 
+  async function skipManual() {
+    const patch: Partial<SetupData> = {};
+    if (name.trim()) patch.business_name = name.trim();
+    if (phone.trim()) patch.business_phone = phone.trim();
+    if (Object.keys(patch).length) {
+      update(patch);
+      await save({ ...patch, setup_step: 1 });
+    }
+    toast({
+      title: "Skipping lookup",
+      description: "Click Next to enter your details manually.",
+    });
+  }
+
   return (
     <div className="space-y-4">
       {mode === "wizard" && (
         <StepHelp>
-          Let's find your business on Google so we can set everything up for you
-          automatically.
+          Find your business on Google so we can pre-fill your setup. Search by
+          name, phone, or both — add city/state to narrow it down.
         </StepHelp>
       )}
 
-      <div className="space-y-2">
-        <Label>Enter your business phone number</Label>
-        <div className="flex gap-2">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2 sm:col-span-2">
+          <Label>Business name</Label>
+          <Input
+            placeholder="Acme Plumbing"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Phone (optional)</Label>
           <Input
             type="tel"
             inputMode="tel"
@@ -177,105 +255,119 @@ export function Step1FindBusiness({ data, update, save, mode }: StepProps) {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />
-          <Button
-            type="button"
-            onClick={searchBusiness}
-            disabled={searching}
-            className="bg-cta hover:opacity-90"
-          >
-            {searching ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            Search
-          </Button>
+        </div>
+        <div className="space-y-2">
+          <Label>City (optional)</Label>
+          <Input
+            placeholder="Miami"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>State (optional)</Label>
+          <Input
+            placeholder="FL"
+            maxLength={20}
+            value={stateCode}
+            onChange={(e) => setStateCode(e.target.value)}
+          />
         </div>
       </div>
 
-      {result?.found && result.business && (
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="font-semibold">{result.business.business_name}</p>
-              <p className="text-sm text-muted-foreground">
-                {result.business.address}
-              </p>
-            </div>
-            <CheckCircle2 className="h-5 w-5 text-primary" />
-          </div>
-          <div className="text-sm space-y-1">
-            <p>
-              <span className="text-muted-foreground">Phone:</span>{" "}
-              {result.business.phone}
-            </p>
-            {result.suggestion?.industry_label && (
-              <p>
-                <span className="text-muted-foreground">Category:</span>{" "}
-                {result.suggestion.industry_label}
-              </p>
-            )}
-            {result.business.website && (
-              <p className="truncate">
-                <span className="text-muted-foreground">Website:</span>{" "}
-                {result.business.website}
-              </p>
-            )}
-            {result.business.business_hours && (
-              <details className="text-muted-foreground">
-                <summary className="cursor-pointer text-foreground">
-                  Hours
-                </summary>
-                <pre className="whitespace-pre-wrap text-xs mt-1">
-                  {result.business.business_hours}
-                </pre>
-              </details>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button
-              size="sm"
-              onClick={confirmBusiness}
-              disabled={prefilling}
-              className="bg-cta hover:opacity-90"
-            >
-              {prefilling && <Loader2 className="h-4 w-4 animate-spin" />}
-              Yes, that's my business
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEditMode(true)}
-            >
-              Edit details
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setResult(null);
-                setPhone("");
-              }}
-            >
-              Search again
-            </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          onClick={searchBusiness}
+          disabled={searching || !canSearch}
+          className="bg-cta hover:opacity-90"
+        >
+          {searching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Search className="h-4 w-4" />
+          )}
+          Search Google
+        </Button>
+        <Button type="button" variant="outline" onClick={skipManual}>
+          Skip and enter manually
+        </Button>
+      </div>
+
+      {candidates && candidates.length > 0 && (
+        <div className="space-y-2 pt-2">
+          <p className="text-sm text-muted-foreground">
+            {candidates.length === 1
+              ? "1 match found. Confirm it's yours:"
+              : `${candidates.length} matches found. Pick yours:`}
+          </p>
+          <div className="space-y-2">
+            {candidates.map((c) => (
+              <div
+                key={c.place_id}
+                className="rounded-xl border border-border bg-card p-4 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{c.name}</p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {c.address}
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground pt-1">
+                      {c.category && (
+                        <span className="capitalize">
+                          {c.category.replace(/_/g, " ")}
+                        </span>
+                      )}
+                      {c.rating != null && <span>★ {c.rating.toFixed(1)}</span>}
+                      {c.business_status &&
+                        c.business_status !== "OPERATIONAL" && (
+                          <span className="text-amber-600">
+                            {c.business_status.replace(/_/g, " ").toLowerCase()}
+                          </span>
+                        )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => chooseCandidate(c)}
+                    disabled={prefillingId !== null}
+                    className="bg-cta hover:opacity-90 shrink-0"
+                  >
+                    {prefillingId === c.place_id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    Use this
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {result && !result.found && (
+      {searched && candidates && candidates.length === 0 && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
           <span>
-            No business found for that number. You can enter your details
-            manually in the next step.
+            No business found. Try a different name, add city/state, or click
+            <strong> Skip and enter manually</strong>.
           </span>
         </div>
       )}
 
-      {(editMode || data.business_name) && (
-        <p className="text-xs text-muted-foreground pt-2">
-          You can change anything in the next steps.
+      <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">Coming soon:</span>{" "}
+        Connect your Google Business Profile to import verified details
+        automatically.
+      </div>
+
+      {data.business_name && (
+        <p className="text-xs text-muted-foreground pt-1">
+          Selected: <strong>{data.business_name}</strong>. You can change
+          anything in the next steps.
         </p>
       )}
     </div>
