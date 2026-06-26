@@ -1,83 +1,85 @@
-## Why test calls produce no data
+# ServanaHQ Integration + Test Call Tenant Routing
 
-I traced the pipeline. Four root causes:
+## 1. Database
 
-1. **No per-tenant Vapi assistant exists.** `provision-twilio-number` registers the Twilio number to "the first Vapi assistant whose name loosely matches the business" (or just `list[0]`). Sub-accounts end up sharing one assistant, or pointing at an unrelated one.
-2. **Vapi was never told where to send webhooks.** The phone-number registration omits `serverUrl` and `assistantOverrides`, and we never `PATCH` the assistant with a `server.url`. So end-of-call reports, transcripts, and status updates never reach `vapi-webhook` → no rows are written anywhere.
-3. **No tenant metadata travels with the call.** `place-test-call` sends only `phoneNumberId` + `assistantId` + `customer.number`. Even if a webhook fired, the tenant link would be guesswork.
-4. **`vapi-webhook` never creates a lead or fires an SMS.** It writes a call row + transcript turns on `end-of-call-report`, but never inserts into `callcapture_leads` and never calls `send-sms`, so the inbox and alerts stay empty even when call data lands.
+Migration on `callcapture_clients`:
+- `servanahq_enabled boolean default false`
+- `servanahq_account_id text`
+- `servanahq_endpoint_url text` (optional override; defaults to global base URL)
 
-## What I'll change
+Add new step type to `callcapture_webhook_events.step` (text column — no enum change needed). New step names:
+- `servanahq_check`, `servanahq_mapping`, `servanahq_payload`, `servanahq_request`, `servanahq_response`, `servanahq_synced`, `servanahq_failed`
 
-### A. Provisioning writes a tenant-bound assistant + webhook (`provision-twilio-number`)
-- Create/upsert a dedicated Vapi assistant for the client (`POST /assistant`) using the client's greeting, voice, industry, intake questions. Persist its id on `callcapture_clients.vapi_assistant_id` (new column).
-- Register the Twilio number with that assistant *and* set:
-  - `server.url = <SUPABASE_URL>/functions/v1/vapi-webhook`
-  - `server.secret = VAPI_WEBHOOK_SECRET`
-  - `assistantOverrides.metadata = { client_id, user_id }`
-  - `serverMessages = ["status-update","transcript","end-of-call-report","conversation-update"]`
-- Persist on `callcapture_clients`: `tenant_id` (= user_id), `twilio_phone_number_sid`, `vapi_phone_number_id`, `vapi_assistant_id`, `assigned_callcapture_number`, `webhook_status`.
+Add `servanahq_lead_id text` and `servanahq_synced_at timestamptz` to `callcapture_leads` for traceability.
 
-### B. Test call carries tenant context (`place-test-call`)
-- Resolve the client's own `vapi_phone_number_id` + `vapi_assistant_id` from the DB instead of scanning all Vapi numbers.
-- Pass `metadata: { client_id, user_id, test_call: true }` and `assistantOverrides.serverMessages` on the outbound call.
-- Insert a `callcapture_calls` row immediately with `status='queued'`, `client_id=<tenant>`, `vapi_call_id=<returned>`, `is_test=true`.
+## 2. Secret
 
-### C. Webhook routes everything to the right tenant (`vapi-webhook`)
-Tenant resolution order (first hit wins, all logged):
-1. `call.metadata.client_id`
-2. `phoneNumberId` → `callcapture_clients.vapi_phone_number_id`
-3. Called number → `callcapture_clients.assigned_callcapture_number`
-4. `assistantId` → `callcapture_clients.vapi_assistant_id`
+Add global `SERVANAHQ_API_KEY` via `add_secret` (also optional `SERVANAHQ_BASE_URL`, defaulting to `https://api.servanahq.com/v1` until user confirms real endpoint).
 
-On `end-of-call-report`:
-- Update the call row.
-- Run the existing transcript-LLM extraction.
-- **Insert `callcapture_leads`** scoped to `client_id` with name/phone/service/intake.
-- Pull `callcapture_clients.alert_phone` + `notification_settings`, then invoke `send-sms` with the lead summary. Never fall back to the super-admin number.
-- Write a `callcapture_webhook_events` row for every step (new table).
+## 3. Edge Functions
 
-### D. New diagnostics table + super-admin panel
-- Migration: `callcapture_webhook_events(id, client_id, vapi_call_id, step, status, detail jsonb, created_at)`. Steps: `received`, `tenant_matched`, `call_started`, `transcript_received`, `call_ended`, `lead_extracted`, `lead_created`, `sms_sent`, `sms_failed`.
-- `vapi-webhook` writes one row per step with the resolved `client_id` (or null + reason).
-- New super-admin page section "Webhook diagnostics" listing the latest 100 events with tenant + step + status.
+**New: `supabase/functions/sync-servanahq/index.ts`**
+- Input: `{ client_id, lead_id }`
+- Loads client + lead with service role
+- Logs `servanahq_check` (enabled? account_id present?)
+- If disabled → log + exit (not a failure)
+- Logs `servanahq_mapping` with account_id
+- Builds payload: `{ account_id, source:'vektuor', name, phone, email, address, service, timing, notes, transcript_url }`
+- Logs `servanahq_payload`
+- POSTs to `${SERVANAHQ_BASE_URL}/leads` with `Authorization: Bearer SERVANAHQ_API_KEY`
+- Logs `servanahq_request` then `servanahq_response` with status + body
+- On 2xx: updates lead with `servanahq_lead_id`, logs `servanahq_synced`
+- On non-2xx: logs `servanahq_failed` with reason; returns error but does not throw
 
-### E. "Test Call Result" panel
-- After `place-test-call` returns, poll `callcapture_webhook_events` for the new `vapi_call_id` (or subscribe via realtime) and render a checklist:
-  - Call received • Tenant matched • Transcript saved • Lead created • SMS sent
-- Each failed step shows the captured error from the diagnostics row.
+**Modify: `supabase/functions/vapi-webhook/index.ts`**
+- After successful lead insert + SMS send, invoke `sync-servanahq` (fire-and-forget via `supabase.functions.invoke`) passing `client_id` + `lead_id`. Wrap in try/catch so it never blocks core pipeline.
 
-### F. Hard guardrails
-- Webhook refuses to write to `client_id = super admin` for calls flagged `is_test` or originating from a tenant's `vapi_phone_number_id` — if resolution lands on the super-admin row, log `tenant_mismatch` and bail.
-- `send-sms` invocation always uses the resolved tenant's `alert_phone`; super-admin `DEMO_OWNER_PHONE` is no longer a fallback inside this flow.
+**Modify: `supabase/functions/place-test-call/index.ts`**
+- Require explicit `client_id`, `user_id`, `vapi_assistant_id`, `vapi_phone_number_id` in the body (from caller)
+- Reject if `client_id` is missing OR client is super_admin tenant (return 400 `"Select a tenant"`)
+- Pass `metadata: { client_id, user_id, is_test: true }` to Vapi
+- Pre-insert `callcapture_calls` row scoped to that tenant with `is_test=true`
+- Remove any default/fallback that resolves to the super admin or first client
 
-### Migration (single file)
-```sql
-ALTER TABLE callcapture_clients
-  ADD COLUMN IF NOT EXISTS vapi_assistant_id text,
-  ADD COLUMN IF NOT EXISTS webhook_status text;
+## 4. Frontend
 
-CREATE TABLE public.callcapture_webhook_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id uuid REFERENCES public.callcapture_clients(id) ON DELETE SET NULL,
-  vapi_call_id text,
-  step text NOT NULL,
-  status text NOT NULL,           -- ok | error | skipped
-  detail jsonb,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-GRANT SELECT ON public.callcapture_webhook_events TO authenticated;
-GRANT ALL ON public.callcapture_webhook_events TO service_role;
-ALTER TABLE public.callcapture_webhook_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "tenant reads own webhook events"
-  ON public.callcapture_webhook_events FOR SELECT TO authenticated
-  USING (public.owns_client(client_id) OR public.is_current_user_super_admin());
-```
+**`src/components/TestCallButton.tsx`** — major refactor:
+- Two new selects above the phone input:
+  - Tenant select (queries `callcapture_clients where is_super_admin = false` ordered by name)
+  - Vektuor number select (queries `vapi_phone_number_id` + `twilio_number` for chosen tenant; disabled until tenant chosen)
+- Disable "Place Test Call" until tenant + number + destination phone are valid
+- Pass `client_id, user_id, vapi_assistant_id, vapi_phone_number_id` into `place-test-call`
+- Extend the **Test Call Result checklist** (polls `callcapture_webhook_events` filtered by `client_id` + recent timeframe):
+  1. Call received
+  2. Tenant resolved
+  3. Transcript captured
+  4. **Vektuor lead created** (`lead_created`)
+  5. **SMS alert sent** (`sms_sent`)
+  6. **ServanaHQ lead synced** (`servanahq_synced`, `servanahq_failed`, or `servanahq_check` disabled → shows "Not connected")
+- Each row shows status icon + last log message; failures expand to show the logged `reason`.
 
-## Out of scope / unchanged
-- Twilio search/purchase flow, SMS flow itself, signup, billing bypass.
-- Existing leads written by `submit-intake` continue to work; the new lead write in `vapi-webhook` is additive and de-duped by `vapi_call_id`.
+**`src/pages/Admin.tsx`**:
+- TestCallButton is rendered only in admin context with the tenant picker (remove any prior placements that defaulted to current user)
+- Add **"Impersonate Tenant"** action per row: opens a new tab to `/dashboard?impersonate=<client_id>` with a signed JWT-style param handled by a small `useImpersonation` hook that overrides the `client_id` used by Dashboard / LeadInbox queries (super-admin gated). Persist in sessionStorage and add a banner "Viewing as <tenant>" with "Exit Impersonation".
 
-## Open question before I build
+**ServanaHQ settings panel** (new `src/components/ServanaHqSettings.tsx`):
+- Toggle "Connect ServanaHQ"
+- Input "ServanaHQ Account ID"
+- Optional "Custom endpoint URL"
+- Saves to `callcapture_clients`
+- Mounted in `Setup.tsx` (CRM step) and in `Settings`/AI Settings tab
 
-Some existing tenants already have a Twilio number provisioned but no per-tenant Vapi assistant or webhook configured. Want me to add a one-click **"Repair routing"** button on the admin row that re-runs assistant creation + Vapi registration + webhook wiring for that tenant? (Otherwise existing tenants will need to re-provision.)
+## 5. Removing super-admin leakage
+
+Audit and remove any fallback that routes calls/leads to super admin:
+- `vapi-webhook`: keep the 4-tier resolver (metadata → number id → called number → assistant id) but **delete** the "fallback to single client / super_admin" branch. If unresolved, log `tenant_unresolved` and stop — do not insert a row.
+- `place-test-call`: described above.
+- `TestCallButton`: never falls back to current user when on Admin page.
+
+## 6. Diagnostics surfacing
+
+`Admin.tsx` Diagnostics tab already streams `callcapture_webhook_events`. Add filter chips for the new ServanaHQ step types and color rows red on `servanahq_failed` / `tenant_unresolved`.
+
+## Open items to confirm during build
+- Real ServanaHQ base URL + request shape (currently stubbed to `/v1/leads`); will request from user before flipping `servanahq_enabled` on for production tenants.
+- Whether "Impersonate Tenant" should mint a real auth session (requires service-role `admin.generateLink`) or just a read-only client-side override. Plan defaults to read-only override; can upgrade later.
