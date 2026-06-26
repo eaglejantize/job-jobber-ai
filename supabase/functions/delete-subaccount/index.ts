@@ -27,10 +27,13 @@ Deno.serve(async (req) => {
     const userClient = createClient(url, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-
-    const callerEmail = (userData.user.email || "").toLowerCase();
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(token);
+    if (claimsErr || !claimsData?.claims) {
+      console.error("delete-subaccount: getClaims failed", claimsErr);
+      return json({ error: "Unauthorized", details: claimsErr?.message }, 401);
+    }
+    const callerEmail = String(claimsData.claims.email || "").toLowerCase();
     if (callerEmail !== SUPER_ADMIN_EMAIL) {
       console.log("delete-subaccount: forbidden caller", callerEmail);
       return json({ error: "Forbidden: super admin only" }, 403);
