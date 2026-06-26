@@ -395,6 +395,22 @@ function SubscribersTab({
               <DropdownMenuItem
                 onClick={async () => {
                   setBusyId(c.id);
+                  const { data, error } = await supabase.functions.invoke("repair-routing", { body: { client_id: c.id } });
+                  setBusyId(null);
+                  const ok = !error && (data as any)?.ok;
+                  if (!ok) {
+                    const msg = error?.message || (data as any)?.error || (data as any)?.routing_error || "Unknown error";
+                    toast({ title: "Repair failed", description: msg, variant: "destructive" });
+                  } else {
+                    toast({ title: "Routing repaired", description: `Assistant ${(data as any).assistant_id?.slice(0, 8)}…` });
+                  }
+                }}
+              >
+                Repair Routing
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  setBusyId(c.id);
                   const { data, error } = await supabase.functions.invoke("update-vapi-agent", { body: { client_id: c.id } });
                   setBusyId(null);
                   if (error || !(data as { ok?: boolean })?.ok) {
