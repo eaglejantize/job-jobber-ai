@@ -16,6 +16,10 @@ function getStr(o: Json | undefined, ...keys: string[]): string | null {
   return null;
 }
 
+function normalize(p: string | null | undefined): string {
+  return (p ?? "").replace(/\D/g, "");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -31,6 +35,26 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
+  const logEvent = async (
+    clientId: string | null,
+    vapiCallId: string | null,
+    step: string,
+    status: "ok" | "error" | "skipped",
+    detail?: unknown,
+  ) => {
+    try {
+      await supabase.from("callcapture_webhook_events").insert({
+        client_id: clientId,
+        vapi_call_id: vapiCallId,
+        step,
+        status,
+        detail: detail ? (detail as any) : null,
+      });
+    } catch (e) {
+      console.error("diag insert failed", e);
+    }
+  };
+
   let body: Json = {};
   try { body = await req.json(); } catch { /* ignore */ }
   const msg = (body.message ?? body) as Json;
@@ -40,29 +64,58 @@ Deno.serve(async (req) => {
   const customer = (callObj.customer as Json | undefined) ?? (msg.customer as Json | undefined) ?? {};
   const callerPhone = getStr(customer, "number", "phoneNumber") ?? null;
   const callerName = getStr(customer, "name") ?? null;
+  const phoneNumberId = getStr(callObj, "phoneNumberId") ?? getStr(msg, "phoneNumberId");
+  const phoneObj = (callObj.phoneNumber as Json | undefined) ?? {};
+  const calledNumber = getStr(phoneObj, "number") ?? getStr(callObj, "to", "calledNumber");
+  const metaObj = ((callObj.metadata as Json | undefined) ?? (msg.metadata as Json | undefined) ?? {}) as Json;
+  const metaClientId = getStr(metaObj, "client_id", "clientId");
+
+  await logEvent(metaClientId ?? null, vapiCallId || null, "received", "ok", { type, phoneNumberId, calledNumber });
 
   if (!vapiCallId) {
+    await logEvent(null, null, "received", "skipped", { reason: "no_call_id" });
     return new Response(JSON.stringify({ ok: true, ignored: "no call id" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  // Resolve client_id from assistantId → assistant_configs → user_id → client
+  // Tenant resolution: metadata → vapi_phone_number_id → assigned_callcapture_number → vapi_assistant_id
   const assistantId = getStr(callObj, "assistantId") ?? getStr(msg, "assistantId");
   let clientId: string | null = null;
   let businessId: string | null = null;
-  if (assistantId) {
-    const { data: cfg } = await supabase
-      .from("callcapture_assistant_configs")
-      .select("user_id, business_id")
-      .eq("id", assistantId).maybeSingle();
-    businessId = cfg?.business_id ?? null;
-    if (cfg?.user_id) {
-      const { data: cli } = await supabase.from("callcapture_clients")
-        .select("id").eq("user_id", cfg.user_id).maybeSingle();
-      clientId = cli?.id ?? null;
+  let matchedBy = "none";
+
+  if (metaClientId) {
+    const { data } = await supabase.from("callcapture_clients").select("id").eq("id", metaClientId).maybeSingle();
+    if (data?.id) { clientId = data.id; matchedBy = "metadata"; }
+  }
+  if (!clientId && phoneNumberId) {
+    const { data } = await supabase.from("callcapture_clients").select("id").eq("vapi_phone_number_id", phoneNumberId).maybeSingle();
+    if (data?.id) { clientId = data.id; matchedBy = "vapi_phone_number_id"; }
+  }
+  if (!clientId && calledNumber) {
+    const digits = normalize(calledNumber);
+    const { data: all } = await supabase.from("callcapture_clients").select("id, assigned_callcapture_number, is_super_admin");
+    const hit = (all ?? []).find((c: any) => normalize(c.assigned_callcapture_number) === digits && !c.is_super_admin);
+    if (hit?.id) { clientId = hit.id; matchedBy = "assigned_callcapture_number"; }
+  }
+  if (!clientId && assistantId) {
+    const { data } = await supabase.from("callcapture_clients").select("id").eq("vapi_assistant_id", assistantId).maybeSingle();
+    if (data?.id) { clientId = data.id; matchedBy = "vapi_assistant_id"; }
+  }
+
+  // Safety: never write to super admin row for tenant calls
+  if (clientId) {
+    const { data: c } = await supabase.from("callcapture_clients").select("is_super_admin, business_id").eq("id", clientId).maybeSingle();
+    if (c?.is_super_admin) {
+      await logEvent(clientId, vapiCallId, "tenant_matched", "error", { reason: "resolved_to_super_admin", matchedBy });
+      clientId = null;
+    } else {
+      businessId = (c as any)?.business_id ?? null;
     }
   }
+
+  await logEvent(clientId, vapiCallId, "tenant_matched", clientId ? "ok" : "error", { matchedBy, assistantId, phoneNumberId, calledNumber });
 
   // Find or create the call row
   const { data: existing } = await supabase
@@ -72,15 +125,19 @@ Deno.serve(async (req) => {
 
   let callId = existing?.id ?? null;
   if (!callId) {
-    const { data: ins } = await supabase.from("callcapture_calls").insert({
+    const { data: ins, error: insErr } = await supabase.from("callcapture_calls").insert({
       vapi_call_id: vapiCallId,
       client_id: clientId,
       business_id: businessId,
       caller_name: callerName,
       caller_phone: callerPhone,
       status: "live",
+      metadata: metaObj as any,
     }).select("id").single();
     callId = ins?.id ?? null;
+    await logEvent(clientId, vapiCallId, "call_started", callId ? "ok" : "error", { error: insErr?.message });
+  } else if (existing && !existing.client_id && clientId) {
+    await supabase.from("callcapture_calls").update({ client_id: clientId }).eq("id", existing.id);
   }
   if (!callId) {
     return new Response(JSON.stringify({ error: "could not create call" }), {
@@ -104,12 +161,14 @@ Deno.serve(async (req) => {
         text,
         seq: (count ?? 0) + 1,
       });
+      await logEvent(clientId, vapiCallId, "transcript_received", "ok", { role, len: text.length });
     }
   } else if (type === "transfer-destination-request") {
     await supabase.from("callcapture_calls").update({ status: "transferred" }).eq("id", callId);
   } else if (type === "end-of-call-report") {
     const summary = getStr(msg, "summary") ?? getStr(callObj, "summary");
     const recording = getStr(msg, "recordingUrl") ?? getStr(callObj, "recordingUrl");
+    const transcriptText = getStr(msg, "transcript") ?? getStr(callObj, "transcript");
     const startedAt = getStr(callObj, "startedAt", "createdAt");
     const endedAt = getStr(callObj, "endedAt") ?? new Date().toISOString();
     const duration = startedAt
@@ -122,6 +181,91 @@ Deno.serve(async (req) => {
       recording_url: recording,
       issue_summary: summary,
     }).eq("id", callId);
+    await logEvent(clientId, vapiCallId, "call_ended", "ok", { duration });
+
+    // Extract lead fields from transcript via Lovable AI Gateway
+    let extracted: any = {};
+    if (transcriptText) {
+      try {
+        const aiKey = Deno.env.get("LOVABLE_API_KEY");
+        if (aiKey) {
+          const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${aiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [
+                { role: "system", content: "Extract lead fields from a phone-call transcript. Respond ONLY with compact JSON containing: name, phone, address, service, timing, new_or_returning, referral, notes. Use null when unknown." },
+                { role: "user", content: transcriptText },
+              ],
+            }),
+          });
+          if (r.ok) {
+            const j = await r.json();
+            const content: string = j?.choices?.[0]?.message?.content ?? "{}";
+            const cleaned = content.replace(/^```json\s*|```$/g, "").trim();
+            extracted = JSON.parse(cleaned);
+            await logEvent(clientId, vapiCallId, "lead_extracted", "ok", extracted);
+          } else {
+            await logEvent(clientId, vapiCallId, "lead_extracted", "error", { status: r.status });
+          }
+        }
+      } catch (e) {
+        await logEvent(clientId, vapiCallId, "lead_extracted", "error", { error: String(e) });
+      }
+    } else {
+      await logEvent(clientId, vapiCallId, "lead_extracted", "skipped", { reason: "no_transcript" });
+    }
+
+    // Create lead (tenant-scoped, dedupe by vapi_call_id in raw_payload)
+    let leadId: string | null = null;
+    if (clientId) {
+      const { data: dup } = await supabase
+        .from("callcapture_leads")
+        .select("id")
+        .eq("client_id", clientId)
+        .filter("raw_payload->>vapi_call_id", "eq", vapiCallId)
+        .maybeSingle();
+      if (dup?.id) {
+        leadId = dup.id;
+        await logEvent(clientId, vapiCallId, "lead_created", "skipped", { reason: "duplicate", lead_id: leadId });
+      } else {
+        const { data: lead, error: leadErr } = await supabase.from("callcapture_leads").insert({
+          client_id: clientId,
+          name: extracted.name ?? callerName,
+          phone: extracted.phone ?? callerPhone,
+          treatment: extracted.service ?? null,
+          timing: extracted.timing ?? null,
+          new_or_returning: extracted.new_or_returning ?? null,
+          referral: extracted.referral ?? null,
+          summary: summary ?? extracted.notes ?? null,
+          status: "New",
+          raw_payload: { vapi_call_id: vapiCallId, source: "vapi-webhook", extracted, transcript: transcriptText },
+        }).select("id").single();
+        leadId = lead?.id ?? null;
+        await logEvent(clientId, vapiCallId, "lead_created", leadId ? "ok" : "error", { lead_id: leadId, error: leadErr?.message });
+        if (callId && leadId) await supabase.from("callcapture_calls").update({ lead_id: leadId }).eq("id", callId);
+      }
+    } else {
+      await logEvent(null, vapiCallId, "lead_created", "skipped", { reason: "no_tenant" });
+    }
+
+    // Tenant-scoped SMS notification
+    if (clientId && leadId) {
+      try {
+        const smsRes = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ client_id: clientId, lead_id: leadId }),
+        });
+        const txt = await smsRes.text();
+        await logEvent(clientId, vapiCallId, smsRes.ok ? "sms_sent" : "sms_failed", smsRes.ok ? "ok" : "error", { status: smsRes.status, body: txt });
+      } catch (e) {
+        await logEvent(clientId, vapiCallId, "sms_failed", "error", { error: String(e) });
+      }
+    } else {
+      await logEvent(clientId, vapiCallId, "sms_sent", "skipped", { reason: !clientId ? "no_tenant" : "no_lead" });
+    }
   }
 
   return new Response(JSON.stringify({ ok: true, call_id: callId }), {

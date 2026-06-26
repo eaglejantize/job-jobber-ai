@@ -9,6 +9,61 @@ const corsHeaders = {
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/twilio";
 const VAPI_URL = "https://api.vapi.ai";
 
+function buildSystemPrompt(c: Record<string, any>): string {
+  const businessName = c.business_name ?? "the business";
+  const industry = c.industry ?? "service business";
+  const tone = c.tone ?? "Friendly";
+  const questions = (c.intake_questions ?? []) as string[];
+  const services = (c.services ?? []) as string[];
+  const lines: string[] = [];
+  lines.push(`You are a professional AI receptionist for ${c.include_business_name === false ? "a " + industry + " business" : businessName}.`);
+  lines.push(`Industry: ${industry}. Tone: ${tone}. Speak naturally, warmly, and concisely.`);
+  lines.push("");
+  lines.push("Answer the call, capture lead information, and let the caller know someone will follow up shortly.");
+  if (services.length) lines.push(`Services offered: ${services.join(", ")}.`);
+  if (questions.length) {
+    lines.push("");
+    lines.push("Ask the caller these questions, one at a time, in a natural conversational way:");
+    questions.forEach((q: string, i: number) => lines.push(`${i + 1}. ${q}`));
+  }
+  lines.push("");
+  lines.push("Never invent pricing, availability, or promises. If unsure, say the team will follow up.");
+  return lines.join("\n");
+}
+function buildGreeting(c: Record<string, any>): string {
+  if (c.greeting) return c.greeting;
+  const name = c.business_name ?? "our office";
+  if (c.industry === "med_spa") return `Thank you for calling ${name}, your personal concierge is here. How may I assist you today?`;
+  return `Thanks for calling ${name}. How can I help you today?`;
+}
+async function vapiFetch(apiKey: string, path: string, init: RequestInit = {}) {
+  const r = await fetch(`${VAPI_URL}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
+  });
+  const text = await r.text();
+  let body: any = null; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  return { ok: r.ok, status: r.status, body };
+}
+async function upsertAssistant(client: Record<string, any>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
+  const payload = {
+    name: `Vektuor — ${client.business_name ?? "Tenant"}`.slice(0, 40),
+    firstMessage: buildGreeting(client),
+    model: { provider: "openai", model: "gpt-4o-mini", messages: [{ role: "system", content: buildSystemPrompt(client) }] },
+    voice: client.voice_id ? { provider: "11labs", voiceId: client.voice_id } : { provider: "vapi", voiceId: "Elliot" },
+    server: { url: webhookUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
+    serverMessages: ["status-update", "transcript", "end-of-call-report", "conversation-update", "tool-calls"],
+    metadata: { client_id: client.id, user_id: client.user_id },
+  };
+  if (client.vapi_assistant_id) {
+    const upd = await vapiFetch(apiKey, `/assistant/${client.vapi_assistant_id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    if (upd.ok && upd.body?.id) return { id: upd.body.id as string, error: null as string | null };
+  }
+  const created = await vapiFetch(apiKey, `/assistant`, { method: "POST", body: JSON.stringify(payload) });
+  if (!created.ok || !created.body?.id) return { id: "", error: `assistant create failed (${created.status}): ${JSON.stringify(created.body)}` };
+  return { id: created.body.id as string, error: null };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -36,21 +91,26 @@ Deno.serve(async (req) => {
     }
     if (!clientId) return json({ error_code: "bad_request", error: "client_id required" }, 400);
 
-    // Verify caller owns the client
+    // Verify caller owns the client (use service role to bypass RLS for full row)
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: clientRow, error: clientErr } = await userClient
       .from("callcapture_clients")
-      .select("id, user_id, business_name")
+      .select("id, user_id")
       .eq("id", clientId)
       .maybeSingle();
     if (clientErr || !clientRow || clientRow.user_id !== userId) {
       return json({ error_code: "not_found", error: "Client not found" }, 404);
     }
+    const { data: fullClient } = await admin.from("callcapture_clients").select("*").eq("id", clientId).maybeSingle();
+    if (!fullClient) return json({ error_code: "not_found", error: "Client not found" }, 404);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
     const VAPI_API_KEY = Deno.env.get("VAPI_API_KEY");
     const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID");
     const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
+    const WEBHOOK_SECRET = Deno.env.get("VAPI_WEBHOOK_SECRET") ?? "";
+    const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/vapi-webhook`;
     if (!LOVABLE_API_KEY || !TWILIO_API_KEY) {
       return json({ error_code: "missing_secret", error: "Twilio not configured" }, 500);
     }
@@ -64,7 +124,7 @@ Deno.serve(async (req) => {
     // 1) Purchase number via Twilio connector gateway
     const purchaseBody = new URLSearchParams({
       PhoneNumber: phoneNumber,
-      FriendlyName: (clientRow.business_name ?? "Vektuor").slice(0, 64),
+      FriendlyName: ((fullClient as any).business_name ?? "Vektuor").slice(0, 64),
     });
     const r = await fetch(`${GATEWAY_URL}/IncomingPhoneNumbers.json`, {
       method: "POST",
@@ -81,31 +141,21 @@ Deno.serve(async (req) => {
 
     const sid: string = data.sid;
 
-    // 2) Look up an existing Vapi assistant for this client (by previous Vapi number) so we can route to it.
+    // 2) Create/update a PER-TENANT Vapi assistant with webhook configured.
     let assistantId: string | null = null;
+    let assistantError: string | null = null;
     if (VAPI_API_KEY) {
-      try {
-        const aRes = await fetch(`${VAPI_URL}/assistant?limit=100`, {
-          headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-        });
-        if (aRes.ok) {
-          const list = (await aRes.json()) as Array<{ id: string; name?: string }>;
-          // Best-effort: match by business name
-          const match = list.find((x) =>
-            (x.name ?? "").toLowerCase().includes((clientRow.business_name ?? "").toLowerCase()),
-          );
-          assistantId = match?.id ?? list[0]?.id ?? null;
-        }
-      } catch (e) {
-        console.warn("Vapi assistant lookup failed", e);
-      }
+      const a = await upsertAssistant(fullClient as any, VAPI_API_KEY, webhookUrl, WEBHOOK_SECRET || undefined);
+      assistantId = a.id || null;
+      assistantError = a.error;
+      if (assistantError) console.error("assistant upsert error", assistantError);
     }
 
     // 3) Register the Twilio number with Vapi (BYO Twilio) so Vapi answers inbound calls.
     let vapiPhoneNumberId: string | null = null;
     let routing_status: "active" | "needs_configuration" = "needs_configuration";
     let routing_error: string | null = null;
-    if (VAPI_API_KEY && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+    if (VAPI_API_KEY && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && assistantId) {
       try {
         const reg = await fetch(`${VAPI_URL}/phone-number`, {
           method: "POST",
@@ -118,8 +168,8 @@ Deno.serve(async (req) => {
             number: phoneNumber,
             twilioAccountSid: TWILIO_ACCOUNT_SID,
             twilioAuthToken: TWILIO_AUTH_TOKEN,
-            name: (clientRow.business_name ?? "Vektuor").slice(0, 40),
-            assistantId: assistantId ?? undefined,
+            name: ((fullClient as any).business_name ?? "Vektuor").slice(0, 40),
+            assistantId,
           }),
         });
         const regData = await reg.json().catch(() => ({} as any));
@@ -134,7 +184,7 @@ Deno.serve(async (req) => {
         routing_error = (e as Error).message;
       }
     } else {
-      routing_error = "Missing TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN or VAPI_API_KEY — call routing not connected.";
+      routing_error = assistantError ?? "Missing VAPI/TWILIO secrets or assistant creation failed — call routing not connected.";
     }
 
     // 4) If Vapi didn't register, set Twilio Voice URL to Vapi's TwiML inbound endpoint as a fallback so calls don't dead-air.
@@ -163,13 +213,15 @@ Deno.serve(async (req) => {
     }
 
     // 5) Persist
-    const { error: updErr } = await userClient
+    const { error: updErr } = await admin
       .from("callcapture_clients")
       .update({
         assigned_callcapture_number: phoneNumber,
         twilio_phone_number_sid: sid,
         vapi_phone_number_id: vapiPhoneNumberId,
+        vapi_assistant_id: assistantId,
         number_status: routing_status,
+        webhook_status: routing_status === "active" ? "configured" : "pending",
         number_provisioned_at: new Date().toISOString(),
         phone_mode: "new",
       })
@@ -186,6 +238,7 @@ Deno.serve(async (req) => {
       phone_number: phoneNumber,
       sid,
       id: vapiPhoneNumberId,
+      assistant_id: assistantId,
       status: routing_status,
       routing_error,
       message:

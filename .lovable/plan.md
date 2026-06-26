@@ -1,73 +1,83 @@
-## Diagnosis
+## Why test calls produce no data
 
-- Step 4 button calls `provision-vapi-number`, which buys numbers through Vapi. Recent edge logs show Vapi rejecting requested area codes ("This area code is currently not available. Hint: Try 385, 405, 573."), which surfaces as the generic non-2xx error.
-- A Twilio-based flow already exists (`search-twilio-numbers`, `provision-twilio-number`) but is not wired into the wizard. It uses the Lovable Twilio **connector gateway** (`LOVABLE_API_KEY` + `TWILIO_API_KEY`), so we do not need `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` secrets — those are managed by the connector.
-- After purchase, no Voice/SMS webhooks are set on the Twilio number, and the number is never registered with Vapi as the AI agent's inbound number.
-- Step 1 (Google Business Lookup) can hard-fail and block setup.
+I traced the pipeline. Four root causes:
 
-## Goal
+1. **No per-tenant Vapi assistant exists.** `provision-twilio-number` registers the Twilio number to "the first Vapi assistant whose name loosely matches the business" (or just `list[0]`). Sub-accounts end up sharing one assistant, or pointing at an unrelated one.
+2. **Vapi was never told where to send webhooks.** The phone-number registration omits `serverUrl` and `assistantOverrides`, and we never `PATCH` the assistant with a `server.url`. So end-of-call reports, transcripts, and status updates never reach `vapi-webhook` → no rows are written anywhere.
+3. **No tenant metadata travels with the call.** `place-test-call` sends only `phoneNumberId` + `assistantId` + `customer.number`. Even if a webhook fired, the tenant link would be guesswork.
+4. **`vapi-webhook` never creates a lead or fires an SMS.** It writes a call row + transcript turns on `end-of-call-report`, but never inserts into `callcapture_leads` and never calls `send-sms`, so the inbox and alerts stay empty even when call data lands.
 
-Switch number provisioning to Twilio (with proper fallbacks and webhook wiring), keep Vapi only as the AI voice brain, and make the Google lookup non-blocking.
+## What I'll change
 
-## Backend changes
+### A. Provisioning writes a tenant-bound assistant + webhook (`provision-twilio-number`)
+- Create/upsert a dedicated Vapi assistant for the client (`POST /assistant`) using the client's greeting, voice, industry, intake questions. Persist its id on `callcapture_clients.vapi_assistant_id` (new column).
+- Register the Twilio number with that assistant *and* set:
+  - `server.url = <SUPABASE_URL>/functions/v1/vapi-webhook`
+  - `server.secret = VAPI_WEBHOOK_SECRET`
+  - `assistantOverrides.metadata = { client_id, user_id }`
+  - `serverMessages = ["status-update","transcript","end-of-call-report","conversation-update"]`
+- Persist on `callcapture_clients`: `tenant_id` (= user_id), `twilio_phone_number_sid`, `vapi_phone_number_id`, `vapi_assistant_id`, `assigned_callcapture_number`, `webhook_status`.
 
-1. **`search-twilio-numbers`**
-   - Return `numbers` for the requested area code.
-   - If empty, retry with `InRegion=<state>` (derived from client address) or no area filter and return `nearby: [...]` plus `fallback_reason`.
-   - Map Twilio errors to specific codes: `missing_secret`, `twilio_auth_failed` (401/403), `no_numbers`, `twilio_error`.
+### B. Test call carries tenant context (`place-test-call`)
+- Resolve the client's own `vapi_phone_number_id` + `vapi_assistant_id` from the DB instead of scanning all Vapi numbers.
+- Pass `metadata: { client_id, user_id, test_call: true }` and `assistantOverrides.serverMessages` on the outbound call.
+- Insert a `callcapture_calls` row immediately with `status='queued'`, `client_id=<tenant>`, `vapi_call_id=<returned>`, `is_test=true`.
 
-2. **`provision-twilio-number`** (replaces the Vapi path used by the button)
-   - Purchase from Twilio (existing logic).
-   - Immediately PATCH the number with:
-     - `VoiceUrl` → Vapi inbound TwiML endpoint for this client's assistant
-     - `SmsUrl` → `${SUPABASE_URL}/functions/v1/vapi-webhook?kind=sms` (or a new `twilio-sms-webhook` if needed)
-   - Register the purchased number with Vapi (`POST /phone-number` with `provider: "twilio"`, `twilioAccountSid`, `twilioAuthToken` from the connector gateway equivalent, `assistantId`) so the AI flow answers it. If Vapi rejects, mark `number_status='needs_configuration'` and return a clear error — do NOT silently succeed.
-   - Save `assigned_callcapture_number`, `twilio_phone_number_sid`, `vapi_phone_number_id`, `number_status='active'`.
-   - Granular error envelope: `{ error_code, message, details? }`.
+### C. Webhook routes everything to the right tenant (`vapi-webhook`)
+Tenant resolution order (first hit wins, all logged):
+1. `call.metadata.client_id`
+2. `phoneNumberId` → `callcapture_clients.vapi_phone_number_id`
+3. Called number → `callcapture_clients.assigned_callcapture_number`
+4. `assistantId` → `callcapture_clients.vapi_assistant_id`
 
-3. **New `link-existing-number`** edge function for the fallbacks:
-   - `mode: "byo"` — store user-supplied number, mark `phone_mode='byo'`, `number_status='pending_forwarding'`, return forwarding instructions.
-   - `mode: "forward"` — same as byo but flag `forwarding_configured=false` until verified.
-   - `mode: "test"` — assign a shared demo Twilio number from `DEMO_FORWARD_NUMBER` secret with `number_status='test'` and a 7-day expiry.
+On `end-of-call-report`:
+- Update the call row.
+- Run the existing transcript-LLM extraction.
+- **Insert `callcapture_leads`** scoped to `client_id` with name/phone/service/intake.
+- Pull `callcapture_clients.alert_phone` + `notification_settings`, then invoke `send-sms` with the lead summary. Never fall back to the super-admin number.
+- Write a `callcapture_webhook_events` row for every step (new table).
 
-4. **Delete** `provision-vapi-number` (or keep but no longer called).
+### D. New diagnostics table + super-admin panel
+- Migration: `callcapture_webhook_events(id, client_id, vapi_call_id, step, status, detail jsonb, created_at)`. Steps: `received`, `tenant_matched`, `call_started`, `transcript_received`, `call_ended`, `lead_extracted`, `lead_created`, `sms_sent`, `sms_failed`.
+- `vapi-webhook` writes one row per step with the resolved `client_id` (or null + reason).
+- New super-admin page section "Webhook diagnostics" listing the latest 100 events with tenant + step + status.
 
-5. **Secrets audit**: confirm `TWILIO_API_KEY` (connector), `LOVABLE_API_KEY`, `VAPI_API_KEY`. If the Vapi Twilio import requires raw Account SID/Auth Token, request them via `add_secret` only after confirming the connector gateway cannot proxy that import.
+### E. "Test Call Result" panel
+- After `place-test-call` returns, poll `callcapture_webhook_events` for the new `vapi_call_id` (or subscribe via realtime) and render a checklist:
+  - Call received • Tenant matched • Transcript saved • Lead created • SMS sent
+- Each failed step shows the captured error from the diagnostics row.
 
-## Frontend changes
+### F. Hard guardrails
+- Webhook refuses to write to `client_id = super admin` for calls flagged `is_test` or originating from a tenant's `vapi_phone_number_id` — if resolution lands on the super-admin row, log `tenant_mismatch` and bail.
+- `send-sms` invocation always uses the resolved tenant's `alert_phone`; super-admin `DEMO_OWNER_PHONE` is no longer a fallback inside this flow.
 
-1. **`PhoneNumberPicker.tsx`** rebuilt as a 3-tab flow:
-   - **Tab A — Get a new Vektuor number (Twilio)**
-     1. Enter area code → call `search-twilio-numbers`.
-     2. Render up to 5 candidates; if none, render `nearby` list with a banner "No numbers in {areaCode}, here are nearby options".
-     3. User picks one → call `provision-twilio-number` with `phone_number` + `client_id`.
-     4. Inline error toasts mapped from `error_code`.
-   - **Tab B — I already have a number** → form, calls `link-existing-number` `mode=byo`.
-   - **Tab C — Forward my current number** → form + step-by-step carrier forwarding instructions, calls `mode=forward`.
-   - **Tab D — Use a temporary test number** → one-click, calls `mode=test`.
+### Migration (single file)
+```sql
+ALTER TABLE callcapture_clients
+  ADD COLUMN IF NOT EXISTS vapi_assistant_id text,
+  ADD COLUMN IF NOT EXISTS webhook_status text;
 
-2. **`Step3PhoneNumber`** in `src/setup/steps.tsx`
-   - Gate "Next" on `data.assigned_callcapture_number && data.number_status in ('active','pending_forwarding','test')`.
-   - Show current status badge.
+CREATE TABLE public.callcapture_webhook_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id uuid REFERENCES public.callcapture_clients(id) ON DELETE SET NULL,
+  vapi_call_id text,
+  step text NOT NULL,
+  status text NOT NULL,           -- ok | error | skipped
+  detail jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+GRANT SELECT ON public.callcapture_webhook_events TO authenticated;
+GRANT ALL ON public.callcapture_webhook_events TO service_role;
+ALTER TABLE public.callcapture_webhook_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "tenant reads own webhook events"
+  ON public.callcapture_webhook_events FOR SELECT TO authenticated
+  USING (public.owns_client(client_id) OR public.is_current_user_super_admin());
+```
 
-3. **`Step1FindBusiness`** in `src/setup/steps.tsx`
-   - Catch all errors from `business-lookup`; never block. Always show "Skip and enter manually" as a primary action when lookup fails or returns 0 results.
-   - Errors render as a dismissible inline note, not a toast that traps the user.
+## Out of scope / unchanged
+- Twilio search/purchase flow, SMS flow itself, signup, billing bypass.
+- Existing leads written by `submit-intake` continue to work; the new lead write in `vapi-webhook` is additive and de-duped by `vapi_call_id`.
 
-## Data model
+## Open question before I build
 
-`callcapture_clients` already has `assigned_callcapture_number`, `twilio_phone_number_sid`, `number_status`, `phone_mode`, `number_provisioned_at`. Add (migration):
-- `vapi_phone_number_id text`
-- `forwarding_from_number text`
-- `number_test_expires_at timestamptz`
-
-## Out of scope
-
-- Background queue worker. Twilio purchase + webhook config completes well within the 60s edge-function budget; we'll keep it synchronous and revisit only if we hit timeouts.
-- SMS Pumping Protection / Geo Permissions configuration (recommend to user, not auto-enabled).
-
-## Validation
-
-- `curl_edge_functions` test each function with valid/invalid input.
-- Manually run Step 4 in preview with a real area code, a known-empty area code (to exercise nearby fallback), and each fallback tab.
-- Verify the purchased number has `VoiceUrl` set in Twilio and shows up in Vapi's phone numbers list.
+Some existing tenants already have a Twilio number provisioned but no per-tenant Vapi assistant or webhook configured. Want me to add a one-click **"Repair routing"** button on the admin row that re-runs assistant creation + Vapi registration + webhook wiring for that tenant? (Otherwise existing tenants will need to re-provision.)

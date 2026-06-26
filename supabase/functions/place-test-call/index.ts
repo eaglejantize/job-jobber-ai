@@ -71,30 +71,34 @@ Deno.serve(async (req) => {
     }
     if (!allowed) return json(403, { ok: false, error: "Forbidden" });
 
-    const targetNumber = normalize(client.assigned_callcapture_number) || normalize(client.business_phone);
-    if (!targetNumber) return json(400, { ok: false, error: "No phone number assigned to this client" });
+    // Prefer ids stored on the tenant row.
+    let phoneNumberId = (client.vapi_phone_number_id as string | null) ?? null;
+    let assistantId = (client.vapi_assistant_id as string | null) ?? null;
 
-    // Look up Vapi phone number → phoneNumberId + assistantId
-    const phoneRes = await fetch("https://api.vapi.ai/phone-number", {
-      headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-    });
-    if (!phoneRes.ok) {
-      const text = await phoneRes.text();
-      return json(502, { ok: false, error: `Vapi phone-number lookup failed: ${phoneRes.status} ${text}` });
+    // Fallback: look up by number on Vapi (legacy tenants without stored ids).
+    if (!phoneNumberId || !assistantId) {
+      const targetNumber = normalize(client.assigned_callcapture_number) || normalize(client.business_phone);
+      if (!targetNumber) return json(400, { ok: false, error: "No phone number assigned to this client" });
+      const phoneRes = await fetch("https://api.vapi.ai/phone-number", { headers: { Authorization: `Bearer ${VAPI_API_KEY}` } });
+      if (!phoneRes.ok) {
+        const text = await phoneRes.text();
+        return json(502, { ok: false, error: `Vapi phone-number lookup failed: ${phoneRes.status} ${text}` });
+      }
+      const phones = (await phoneRes.json()) as Array<{ id?: string; number?: string; assistantId?: string }>;
+      const match = phones.find(
+        (p) =>
+          normalize(p.number) === targetNumber ||
+          normalize(p.number).endsWith(targetNumber) ||
+          targetNumber.endsWith(normalize(p.number)),
+      );
+      phoneNumberId = phoneNumberId ?? match?.id ?? null;
+      assistantId = assistantId ?? match?.assistantId ?? null;
     }
-    const phones = (await phoneRes.json()) as Array<{ id?: string; number?: string; assistantId?: string }>;
-    const match = phones.find(
-      (p) =>
-        normalize(p.number) === targetNumber ||
-        normalize(p.number).endsWith(targetNumber) ||
-        targetNumber.endsWith(normalize(p.number)),
-    );
-    const phoneNumberId = match?.id;
-    const assistantId = match?.assistantId;
+
     if (!phoneNumberId || !assistantId) {
       return json(404, {
         ok: false,
-        error: `No Vapi assistant attached to ${client.assigned_callcapture_number || client.business_phone}`,
+        error: `No Vapi assistant linked to this tenant. Run "Repair routing" from the admin panel.`,
       });
     }
 
@@ -121,6 +125,7 @@ Deno.serve(async (req) => {
         phoneNumberId,
         assistantId,
         customer: { number: to_number },
+        metadata: { client_id, user_id: userId, test_call: true },
       }),
     });
     const vapi = await callRes.json().catch(() => ({}));
@@ -138,9 +143,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    const vapiCallId = (vapi as { id?: string })?.id ?? null;
+
+    // Pre-create call row so the inbox/dashboard shows it instantly.
+    if (vapiCallId) {
+      await admin.from("callcapture_calls").insert({
+        vapi_call_id: vapiCallId,
+        client_id,
+        caller_phone: to_number,
+        status: "queued",
+        is_test: true,
+        metadata: { test_call: true, initiated_by: userId },
+      });
+      await admin.from("callcapture_webhook_events").insert({
+        client_id, vapi_call_id: vapiCallId, step: "test_call_placed", status: "ok",
+        detail: { to: to_number, assistantId, phoneNumberId },
+      });
+    }
+
     return json(200, {
       ok: true,
-      callId: (vapi as { id?: string })?.id,
+      callId: vapiCallId,
       assistantId,
       voiceId,
       greeting,
