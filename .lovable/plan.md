@@ -1,86 +1,88 @@
-# Deploying `ingest-vektuor-lead` into the real ServanaHQ project
 
-No code changes in Vektuor on this turn. This is a deployment + secret-wiring plan only.
+## Findings — ServanaHQ's actual lead pipeline
 
-## 1. Where to copy the file (inside the ServanaHQ Lovable/Supabase project)
+The ServanaHQ project (Lovable workspace name "Git To Love", Supabase ref `vwnqekfnluvqwnlauxxh`) has **two existing intake entry points**, not one:
 
-Copy the reference file from this Vektuor repo:
+### 1. `public-external-booking` (website form submissions)
+Writes synchronously into 3 tables, then notifies via SendGrid + Twilio.
 
-```
-servanahq/functions/ingest-vektuor-lead/index.ts   (here, in Vektuor)
-```
+| Table | Required / notable columns | Notes |
+|---|---|---|
+| `customers` | `user_id` (tenant), `name`, `phone` (E.164), `email`, `status='lead'`, `addresses` (jsonb array of `{line}`), `appliances` (jsonb array of `{type,brand,model}`), `last_contacted_at` | Upsert keyed by `(user_id, phone)`. If found, merges new address + appliance into existing arrays. |
+| `jobs` | `job_number='pending'`, `user_id`, `customer_id`, `appliance_type`, `brand`, `model_number`, `issue_description`, `status='new'`, `address` | Always inserted. |
+| `leads` | `tenant_id`, `customer_id`, `job_id`, `status='new'`, `customer_name`, `phone`, `email`, `address`, `appliance_type`, `brand`, `model_number`, `issue_description`, `source`, `ai_summary` | Insert only. `source` defaults to "External Website". |
 
-into the ServanaHQ project at exactly:
+Tenant resolution: looks up the single `profiles` row where `is_super_admin=true` (oldest) and uses that `user_id` as `tenant_id` / `user_id` on all rows. No RPCs.
 
-```
-supabase/functions/ingest-vektuor-lead/index.ts
-```
+### 2. `intake-vapi` (Vapi voice intake — already exists and is the right reuse target)
+This is ServanaHQ's existing AI-call intake. It writes to a **moderation queue**, not directly to `leads`/`jobs`.
 
-Do not put it in a subfolder. No `deno.json` or `import_map` needed — the file uses an `esm.sh` import and `Deno.serve`. Default `verify_jwt = false` is fine (we authenticate via shared bearer token in the function body).
+| Table | Notable columns | Notes |
+|---|---|---|
+| `intake_reviews` | `tenant_id`, `source='vapi_voice'`, `status='pending'`, `customer_name`, `phone`, `email`, `address`, `appliance_type`, `brand`, `model_number`, `issue_description`, `ai_summary`, `transcript`, `raw_payload`, `confidence_score`, `customer_id` (nullable, matched by phone last-10) | Required: `customer_name`, `phone`, `address`, `appliance_type`, `issue_description`. |
+| `communications_log` | `user_id`, `customer_id`, `channel='sms'`, `direction='outbound'`, `recipient`, `body_summary`, `status`, `payload` | Owner SMS notification (Twilio direct, not connector). |
 
-## 2. How to deploy it
+Tenant resolution: hard-coded `DEFAULT_TENANT_ID = '428e8ad3-75b8-4ba6-83ff-a8f81edf051c'`. It also accepts **top-level field payloads** (Path C) so a clean JSON POST with the canonical field names is sufficient — no Vapi-shaped wrapper required.
 
-Two options, pick one:
+### Conclusion
+`intake-vapi` already does exactly what `ingest-vektuor-lead` was about to duplicate: validates fields, normalises phone, matches existing customer by last-10 digits, inserts into the review queue, and fires the owner SMS. Vektuor calls are conceptually identical to ServanaHQ's own Vapi calls — they should land in the same `intake_reviews` queue so the operator workflow is unified.
 
-- **Lovable (recommended).** Open the ServanaHQ project in Lovable and ask it to "deploy the edge function `ingest-vektuor-lead`". Lovable-managed edge functions deploy automatically once the file is committed; no CLI step.
-- **Supabase CLI** (if you prefer manual):
-  ```
-  supabase functions deploy ingest-vektuor-lead --project-ref <SERVANAHQ_PROJECT_REF>
-  ```
+The only gap is **multi-tenant routing**: `intake-vapi` currently ignores the caller and writes everything to one super-admin tenant.
 
-## 3. Secret the ServanaHQ function expects
+---
 
-Only one custom secret in the ServanaHQ project:
+## Plan — reuse, don't duplicate
 
-- `SERVANAHQ_API_KEY` — shared bearer token. The function rejects any request whose `Authorization` header is not exactly `Bearer ${SERVANAHQ_API_KEY}`.
+### A. Changes in ServanaHQ (`Git To Love` project)
+Two small edits to `supabase/functions/intake-vapi/index.ts`:
 
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are auto-injected by Supabase — do not set those manually.
+1. **Accept an explicit tenant override.** Read `body.tenant_id` (or header `x-vektuor-tenant-id`) and, if present and a valid uuid that exists in `profiles.user_id`, use it as `tenant_id` instead of `DEFAULT_TENANT_ID`. Fall back to the current behaviour when absent.
+2. **Authenticate cross-project callers.** Accept header `x-vektuor-key` and compare against new secret `VEKTUOR_INGEST_KEY`. Required only when `tenant_id` is provided (so existing Vapi traffic is unaffected). Reject mismatch with 401.
+3. Add `source='vektuor_voice'` when the request carries the Vektuor key, so reviewers can tell the two voice surfaces apart.
 
-## 4. Table — migration required
+No schema migration is needed — `intake_reviews`, `customers`, and `communications_log` are reused as-is.
 
-The reference function writes to `public.lead_inbox` with these columns:
+### B. Changes in Vektuor (this project)
+1. **Delete the unused stub** `servanahq/functions/ingest-vektuor-lead/index.ts` — we are not deploying a new ServanaHQ function.
+2. **Rewrite `supabase/functions/sync-servanahq/index.ts`** to POST to ServanaHQ's existing endpoint:
+   - URL: `${SERVANAHQ_BASE_URL}/intake-vapi` (where `SERVANAHQ_BASE_URL = https://vwnqekfnluvqwnlauxxh.supabase.co/functions/v1`).
+   - Headers: `x-vektuor-key: ${SERVANAHQ_INGEST_KEY}`, `Authorization: Bearer ${SERVANAHQ_ANON_KEY}` (Supabase functions require an apikey or auth header for routing).
+   - Body (top-level fields, hits intake-vapi's Path C):
+     ```json
+     {
+       "tenant_id": "<callcapture_clients.servanahq_tenant_id>",
+       "customer_name": "...",
+       "phone": "...",
+       "email": "...",
+       "address": "...",
+       "appliance_type": "<service / category>",
+       "brand": "...",
+       "model_number": "...",
+       "issue_description": "...",
+       "ai_summary": "...",
+       "transcript": "...",
+       "call_id": "<vapi call id>"
+     }
+     ```
+   - Map Vektuor fields → ServanaHQ canonical names: `service` → `appliance_type`, `summary` → `ai_summary`, `customer_name`/`phone`/`address`/`email`/`brand`/`model_number`/`issue_description`/`transcript` pass through unchanged.
+3. Update `callcapture_leads.servanahq_sync_status` / `_error` based on the HTTP response from `intake-vapi`.
+4. `servanahq-status` edge function: keep, but the "pending endpoint" warning now flips to green as soon as `SERVANAHQ_BASE_URL` + `SERVANAHQ_INGEST_KEY` are both set in Vektuor.
 
-```
-id, tenant_id, source, lead_source,
-customer_name, phone, email, service_address,
-business_category, service_requested,
-appliance_type, brand, model_number, issue_description,
-preferred_day, preferred_time,
-call_summary, transcript,
-vektuor_call_id (unique), recording_url,
-metadata jsonb, created_at
-```
+### C. Secrets
+- Vektuor (this project, via add_secret after plan approval): `SERVANAHQ_BASE_URL = https://vwnqekfnluvqwnlauxxh.supabase.co/functions/v1`, `SERVANAHQ_INGEST_KEY = <generated>`.
+- ServanaHQ (set in that project by the user): `VEKTUOR_INGEST_KEY = <same value>`.
 
-Two cases:
+### D. Verification
+1. Place one Vektuor test call against the active mock tenant.
+2. Expect: row in Vektuor `callcapture_leads` with `servanahq_sync_status='ok'`, row in ServanaHQ `intake_reviews` (`source='vektuor_voice'`, `tenant_id` = the mock tenant's mapped `servanahq_tenant_id`), and one Twilio SMS via `communications_log`.
 
-- **If ServanaHQ already has a Lead Inbox table with a different name/columns**, do *not* run a new migration — instead edit the ServanaHQ function to `.from("<existing_table>")` and remap field names before upsert. Keep `vektuor_call_id` (add it as a nullable unique column) so re-syncs stay idempotent.
-- **If ServanaHQ has no Lead Inbox table yet**, run a migration in the ServanaHQ project that creates `public.lead_inbox` exactly as listed above, with `GRANT ALL ... TO service_role`, RLS enabled, and (optionally) a tenant-scoped read policy. The service-role function bypasses RLS for writes.
+---
 
-I'll know which case applies as soon as you confirm whether ServanaHQ already has a lead inbox table.
+## Question for you before I switch to build
 
-## 5. `SERVANAHQ_BASE_URL` value Vektuor should use
+The `intake-vapi` edits live in the **ServanaHQ** project (`Git To Love`), and cross-project tools are read-only — I can't push the edit there from here. Two ways to handle that:
 
-After deployment, the URL is deterministic:
+1. **You paste the change.** I'll write the full new `index.ts` for `intake-vapi` in this plan's follow-up so you can copy it into `Git To Love` yourself, then I do the Vektuor side here.
+2. **Skip the ServanaHQ edit for now** and have Vektuor POST with no `tenant_id`, accepting that every Vektuor call lands under the ServanaHQ super-admin tenant (same as today's ServanaHQ voice calls). Multi-tenant routing comes later.
 
-```
-SERVANAHQ_BASE_URL = https://<SERVANAHQ_PROJECT_REF>.functions.supabase.co
-```
-
-Vektuor's `sync-servanahq` already appends `/ingest-vektuor-lead`, so set the base URL to the `.functions.supabase.co` root — no trailing slash, no path.
-
-(If the ServanaHQ project uses a custom Functions domain, substitute that origin instead.)
-
-## End-to-end cutover (after you confirm the above)
-
-1. You give me the ServanaHQ project ref (or the full functions origin).
-2. In **ServanaHQ**: deploy `ingest-vektuor-lead`, set `SERVANAHQ_API_KEY` (generate a strong random value once), run the `lead_inbox` migration if needed.
-3. In **Vektuor**: I'll call `set_secret` for `SERVANAHQ_BASE_URL` and `add_secret` for `SERVANAHQ_API_KEY` (same value you set in ServanaHQ).
-4. Pick one non-super-admin tenant, toggle `servanahq_enabled` on, set its `servanahq_tenant_id`.
-5. Run one test call via the Vektuor Test Call panel.
-6. Verify:
-   - 1 row in Vektuor `callcapture_leads` scoped to that tenant, `servanahq_sync_status = 'success'`.
-   - 1 row in ServanaHQ `lead_inbox` with matching `vektuor_call_id` and `tenant_id`.
-
-## Question I need answered before step 4 of the plan
-
-Does the ServanaHQ project already have a Lead Inbox table? If yes, what's its table name and the column names for customer name, phone, address, summary, and transcript? That decides whether we ship a migration or just remap fields inside the function.
+Which do you want — option 1 (proper multi-tenant, requires you to apply one file in ServanaHQ) or option 2 (single-tenant for now, no ServanaHQ change)?
