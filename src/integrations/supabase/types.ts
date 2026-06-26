@@ -246,8 +246,12 @@ export type Database = {
           business_name: string
           business_phone: string | null
           created_at: string
+          crm_connected_at: string | null
+          crm_interest: string[] | null
+          crm_provider: string | null
           email: string
           faqs: Json
+          first_test_call_id: string | null
           forward_first: boolean
           forward_phone: string | null
           google_category: string | null
@@ -264,6 +268,7 @@ export type Database = {
           notification_settings: Json
           number_provisioned_at: string | null
           number_status: string | null
+          onboarding_completed_at: string | null
           owner_name: string
           payment_status: string
           phone_mode: string | null
@@ -302,8 +307,12 @@ export type Database = {
           business_name: string
           business_phone?: string | null
           created_at?: string
+          crm_connected_at?: string | null
+          crm_interest?: string[] | null
+          crm_provider?: string | null
           email: string
           faqs?: Json
+          first_test_call_id?: string | null
           forward_first?: boolean
           forward_phone?: string | null
           google_category?: string | null
@@ -320,6 +329,7 @@ export type Database = {
           notification_settings?: Json
           number_provisioned_at?: string | null
           number_status?: string | null
+          onboarding_completed_at?: string | null
           owner_name: string
           payment_status?: string
           phone_mode?: string | null
@@ -358,8 +368,12 @@ export type Database = {
           business_name?: string
           business_phone?: string | null
           created_at?: string
+          crm_connected_at?: string | null
+          crm_interest?: string[] | null
+          crm_provider?: string | null
           email?: string
           faqs?: Json
+          first_test_call_id?: string | null
           forward_first?: boolean
           forward_phone?: string | null
           google_category?: string | null
@@ -376,6 +390,7 @@ export type Database = {
           notification_settings?: Json
           number_provisioned_at?: string | null
           number_status?: string | null
+          onboarding_completed_at?: string | null
           owner_name?: string
           payment_status?: string
           phone_mode?: string | null
