@@ -79,8 +79,13 @@ Deno.serve(async (req) => {
     await updateLead({ servanahq_sync_status: "not_configured", servanahq_sync_error: "Missing servanahq_tenant_id" });
     return respond({ ok: false, reason: "no_tenant_id" });
   }
-  if (!SERVANAHQ_BASE_URL || !SERVANAHQ_API_KEY) {
-    await log("servanahq_check", "skipped", { reason: "global_secrets_missing", base_url: !!SERVANAHQ_BASE_URL, api_key: !!SERVANAHQ_API_KEY });
+  if (!SERVANAHQ_BASE_URL || !SERVANAHQ_API_KEY || !SERVANAHQ_ANON_KEY) {
+    await log("servanahq_check", "skipped", {
+      reason: "global_secrets_missing",
+      base_url: !!SERVANAHQ_BASE_URL,
+      api_key: !!SERVANAHQ_API_KEY,
+      anon_key: !!SERVANAHQ_ANON_KEY,
+    });
     await updateLead({ servanahq_sync_status: "not_configured", servanahq_sync_error: "ServanaHQ global secrets not configured" });
     return respond({ ok: false, reason: "not_configured" });
   }
