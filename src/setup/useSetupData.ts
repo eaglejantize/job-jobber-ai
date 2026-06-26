@@ -46,6 +46,9 @@ function rowToData(row: ClientRow | null): SetupData {
     notification_settings:
       (row.notification_settings as SetupData["notification_settings"]) ??
       base.notification_settings,
+    crm_provider: (row.crm_provider as string | null) ?? null,
+    crm_interest: (row.crm_interest as string[]) ?? [],
+    first_test_call_id: (row.first_test_call_id as string | null) ?? null,
   };
   // ensure days exist
   const hours = { ...merged.business_hours_schedule };
