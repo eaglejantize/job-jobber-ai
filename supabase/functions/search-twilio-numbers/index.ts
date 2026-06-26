@@ -30,49 +30,84 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const areaCode = String(body.area_code ?? "").trim();
-    if (!/^\d{3}$/.test(areaCode)) {
-      return json({ error: "area_code must be 3 digits" }, 400);
+    const region = String(body.region ?? "").trim().toUpperCase().slice(0, 2);
+    if (!/^\d{3}$/.test(areaCode) && !region) {
+      return json({ error_code: "bad_request", error: "area_code (3 digits) or region required" }, 400);
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
     if (!LOVABLE_API_KEY || !TWILIO_API_KEY) {
-      return json({ error: "Twilio not configured" }, 500);
+      return json({ error_code: "missing_secret", error: "Twilio not configured" }, 500);
     }
 
-    const params = new URLSearchParams({
-      AreaCode: areaCode,
-      SmsEnabled: "true",
-      VoiceEnabled: "true",
-      PageSize: "5",
-    });
-
-    const r = await fetch(
-      `${GATEWAY_URL}/AvailablePhoneNumbers/US/Local.json?${params}`,
-      {
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "X-Connection-Api-Key": TWILIO_API_KEY,
+    async function search(query: Record<string, string>) {
+      const params = new URLSearchParams({
+        SmsEnabled: "true",
+        VoiceEnabled: "true",
+        PageSize: "5",
+        ...query,
+      });
+      const r = await fetch(
+        `${GATEWAY_URL}/AvailablePhoneNumbers/US/Local.json?${params}`,
+        {
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "X-Connection-Api-Key": TWILIO_API_KEY,
+          },
         },
-      },
-    );
-    const data = await r.json();
-    if (!r.ok) {
-      console.error("Twilio search error", r.status, data);
-      return json({ error: data?.message ?? "Twilio search failed" }, 502);
+      );
+      const data = await r.json().catch(() => ({} as any));
+      return { ok: r.ok, status: r.status, data };
     }
 
-    const numbers = (data.available_phone_numbers ?? []).slice(0, 5).map((n: any) => ({
-      phone_number: n.phone_number,
-      friendly_name: n.friendly_name,
-      locality: n.locality ?? null,
-      region: n.region ?? null,
-    }));
+    function mapNumbers(data: any) {
+      return (data?.available_phone_numbers ?? []).slice(0, 5).map((n: any) => ({
+        phone_number: n.phone_number,
+        friendly_name: n.friendly_name,
+        locality: n.locality ?? null,
+        region: n.region ?? null,
+      }));
+    }
 
-    return json({ numbers });
+    // Primary lookup by area code (or region if no area code)
+    const primary = areaCode
+      ? await search({ AreaCode: areaCode })
+      : await search({ InRegion: region });
+
+    if (!primary.ok) {
+      console.error("Twilio search error", primary.status, primary.data);
+      const code =
+        primary.status === 401 || primary.status === 403
+          ? "twilio_auth_failed"
+          : "twilio_error";
+      return json(
+        { error_code: code, error: primary.data?.message ?? "Twilio search failed", status: primary.status },
+        502,
+      );
+    }
+
+    const numbers = mapNumbers(primary.data);
+    if (numbers.length > 0) return json({ numbers, fallback_reason: null, nearby: [] });
+
+    // Fallback 1: search by region (state) if we had one
+    let nearby: any[] = [];
+    let fallback_reason: string | null = "no_numbers_in_area_code";
+    if (region) {
+      const byRegion = await search({ InRegion: region });
+      if (byRegion.ok) nearby = mapNumbers(byRegion.data);
+    }
+    // Fallback 2: any US local
+    if (nearby.length === 0) {
+      const anyUs = await search({});
+      if (anyUs.ok) nearby = mapNumbers(anyUs.data);
+      fallback_reason = "no_numbers_in_area_code_showing_us";
+    }
+
+    return json({ numbers: [], nearby, fallback_reason });
   } catch (e) {
     console.error(e);
-    return json({ error: (e as Error).message }, 500);
+    return json({ error_code: "exception", error: (e as Error).message }, 500);
   }
 });
 
