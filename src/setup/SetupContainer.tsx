@@ -61,6 +61,13 @@ export default function SetupContainer() {
   const StepComp = STEP_COMPONENTS[step];
   const isLast = step === STEPS.length - 1;
 
+  // Block Next on the phone step until a number is assigned/linked.
+  const PHONE_STEP_INDEX = 3;
+  const nextBlockedReason: string | null =
+    step === PHONE_STEP_INDEX && !data.assigned_callcapture_number
+      ? "Choose, link, or test a number before continuing."
+      : null;
+
   async function next() {
     await save({ ...data, setup_step: Math.min(STEPS.length - 1, step + 1) });
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
@@ -160,13 +167,19 @@ export default function SetupContainer() {
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         {!isLast ? (
-          <Button
-            onClick={next}
-            className="bg-cta hover:opacity-90"
-            type="button"
-          >
-            Next <ArrowRight className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              onClick={next}
+              className="bg-cta hover:opacity-90"
+              type="button"
+              disabled={!!nextBlockedReason}
+            >
+              Next <ArrowRight className="h-4 w-4" />
+            </Button>
+            {nextBlockedReason && (
+              <span className="text-xs text-muted-foreground">{nextBlockedReason}</span>
+            )}
+          </div>
         ) : (
           <Button
             onClick={launch}
