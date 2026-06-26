@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,20 @@ type Result = {
   error?: string;
 };
 
+type DiagEvent = { id: string; step: string; status: "ok" | "error" | "skipped"; detail: any; created_at: string };
+
+const STEP_LABELS: { step: string; label: string }[] = [
+  { step: "test_call_placed", label: "Call placed" },
+  { step: "received", label: "Call received" },
+  { step: "tenant_matched", label: "Tenant matched" },
+  { step: "call_started", label: "Call row created" },
+  { step: "transcript_received", label: "Transcript captured" },
+  { step: "call_ended", label: "Call ended" },
+  { step: "lead_extracted", label: "Lead extracted" },
+  { step: "lead_created", label: "Lead saved to inbox" },
+  { step: "sms_sent", label: "SMS sent" },
+];
+
 export function TestCallButton({
   clientId,
   disabled,
@@ -34,11 +48,30 @@ export function TestCallButton({
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<Result | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [events, setEvents] = useState<DiagEvent[]>([]);
+
+  // Poll diagnostics for the active call id
+  useEffect(() => {
+    if (!result?.callId) return;
+    let cancelled = false;
+    const tick = async () => {
+      const { data } = await supabase
+        .from("callcapture_webhook_events")
+        .select("id, step, status, detail, created_at")
+        .eq("vapi_call_id", result.callId)
+        .order("created_at", { ascending: true });
+      if (!cancelled && data) setEvents(data as DiagEvent[]);
+    };
+    tick();
+    const t = setInterval(tick, 3000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [result?.callId]);
 
   function reset() {
     setStatus("idle");
     setResult(null);
     setShowDetails(false);
+    setEvents([]);
   }
 
   async function placeCall() {
@@ -136,6 +169,25 @@ export function TestCallButton({
             <div className={`text-sm font-medium ${statusColor[status]}`}>
               {status === "calling" && <Loader2 className="h-4 w-4 animate-spin inline mr-2" />}
               {statusLabel[status]}
+            </div>
+          )}
+          {result?.callId && (
+            <div className="rounded-md border border-border bg-background p-3 text-xs space-y-1.5">
+              <div className="font-medium text-foreground mb-1">Test Call Result</div>
+              {STEP_LABELS.map(({ step, label }) => {
+                const ev = events.find((e) => e.step === step);
+                const icon = ev?.status === "ok" ? "✅" : ev?.status === "error" ? "❌" : ev?.status === "skipped" ? "⏭️" : "⏳";
+                const errorText = ev?.status === "error" ? (ev.detail?.error ?? ev.detail?.reason ?? JSON.stringify(ev.detail)) : null;
+                return (
+                  <div key={step} className="flex items-start gap-2">
+                    <span>{icon}</span>
+                    <div className="flex-1">
+                      <div>{label}</div>
+                      {errorText && <div className="text-destructive text-[11px] mt-0.5">{String(errorText).slice(0, 200)}</div>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
           {result && (status === "connected" || status === "completed" || status === "failed") && (
