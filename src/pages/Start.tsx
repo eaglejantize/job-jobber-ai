@@ -148,7 +148,13 @@ export default function Start() {
           toast({ title: "Please check your details", description: "Some fields are missing or invalid.", variant: "destructive" });
           return;
         }
-        throw signupErr ?? new Error(ctx.message ?? ctx.error ?? "Could not create account");
+        console.error("signup_failed", { signupErr, ctx });
+        const detail =
+          ctx.message ||
+          ctx.error ||
+          signupErr?.message ||
+          "Could not create account";
+        throw new Error(detail);
       }
       const clientId = ctx.client_id;
 
@@ -182,9 +188,15 @@ export default function Start() {
       window.location.href = checkout.url as string;
     } catch (err) {
       setSubmitting(false);
+      const message = (err as Error).message ?? "Unknown error";
+      console.error("signup_exception", err);
+      const rateLimited = /rate limit|after \d+ seconds/i.test(message);
+      if (rateLimited) {
+        setCooldownUntil(Date.now() + 50_000);
+      }
       toast({
-        title: "Couldn't start checkout",
-        description: (err as Error).message,
+        title: "Couldn't create account",
+        description: message,
         variant: "destructive",
       });
     }
