@@ -1,85 +1,125 @@
-# ServanaHQ Integration + Test Call Tenant Routing
+# ServanaHQ Lead Inbox Sync — Corrected Architecture
 
-## 1. Database
+Architecture: **Vektuor edge function → ServanaHQ Supabase Edge Function (`ingest-vektuor-lead`) → ServanaHQ Lead Inbox table**.
+
+## 1. Database (Vektuor side)
 
 Migration on `callcapture_clients`:
-- `servanahq_enabled boolean default false`
-- `servanahq_account_id text`
-- `servanahq_endpoint_url text` (optional override; defaults to global base URL)
+- Rename plan field `servanahq_account_id` → **`servanahq_tenant_id text`** (matches ServanaHQ terminology in payload).
+- Keep `servanahq_enabled boolean default false`.
+- Drop `servanahq_endpoint_url` (URL is global, not per-tenant).
 
-Add new step type to `callcapture_webhook_events.step` (text column — no enum change needed). New step names:
-- `servanahq_check`, `servanahq_mapping`, `servanahq_payload`, `servanahq_request`, `servanahq_response`, `servanahq_synced`, `servanahq_failed`
+On `callcapture_leads`:
+- `servanahq_lead_id text`
+- `servanahq_synced_at timestamptz`
+- `servanahq_sync_status text` (`pending` | `synced` | `failed` | `disabled` | `not_configured`)
+- `servanahq_sync_error text`
 
-Add `servanahq_lead_id text` and `servanahq_synced_at timestamptz` to `callcapture_leads` for traceability.
+(The earlier migration already added `servanahq_enabled`, `servanahq_account_id`, `servanahq_endpoint_url`, `servanahq_lead_id`, `servanahq_synced_at`. The new migration renames/drops to match.)
 
-## 2. Secret
+## 2. Secrets (Vektuor side)
 
-Add global `SERVANAHQ_API_KEY` via `add_secret` (also optional `SERVANAHQ_BASE_URL`, defaulting to `https://api.servanahq.com/v1` until user confirms real endpoint).
+Request via `add_secret`:
+- `SERVANAHQ_BASE_URL` — `https://<servanahq-project-ref>.supabase.co` (no trailing slash). User must provide once their ServanaHQ project is known.
+- `SERVANAHQ_API_KEY` — global bearer token both sides agree on.
 
-## 3. Edge Functions
+If either is missing at sync time → log `servanahq_check` = `skipped` with reason `not_configured`, mark lead `sync_status='not_configured'`, surface "ServanaHQ integration pending endpoint" in UI.
 
-**New: `supabase/functions/sync-servanahq/index.ts`**
-- Input: `{ client_id, lead_id }`
-- Loads client + lead with service role
-- Logs `servanahq_check` (enabled? account_id present?)
-- If disabled → log + exit (not a failure)
-- Logs `servanahq_mapping` with account_id
-- Builds payload: `{ account_id, source:'vektuor', name, phone, email, address, service, timing, notes, transcript_url }`
-- Logs `servanahq_payload`
-- POSTs to `${SERVANAHQ_BASE_URL}/leads` with `Authorization: Bearer SERVANAHQ_API_KEY`
-- Logs `servanahq_request` then `servanahq_response` with status + body
-- On 2xx: updates lead with `servanahq_lead_id`, logs `servanahq_synced`
-- On non-2xx: logs `servanahq_failed` with reason; returns error but does not throw
+## 3. New Vektuor edge function: `supabase/functions/sync-servanahq/index.ts`
 
-**Modify: `supabase/functions/vapi-webhook/index.ts`**
-- After successful lead insert + SMS send, invoke `sync-servanahq` (fire-and-forget via `supabase.functions.invoke`) passing `client_id` + `lead_id`. Wrap in try/catch so it never blocks core pipeline.
+Input: `{ client_id, lead_id }`. Service-role only.
 
-**Modify: `supabase/functions/place-test-call/index.ts`**
-- Require explicit `client_id`, `user_id`, `vapi_assistant_id`, `vapi_phone_number_id` in the body (from caller)
-- Reject if `client_id` is missing OR client is super_admin tenant (return 400 `"Select a tenant"`)
-- Pass `metadata: { client_id, user_id, is_test: true }` to Vapi
-- Pre-insert `callcapture_calls` row scoped to that tenant with `is_test=true`
-- Remove any default/fallback that resolves to the super admin or first client
+Steps with diagnostics (each logged to `callcapture_webhook_events`):
+1. `servanahq_check` — load client + lead; verify `servanahq_enabled`, `servanahq_tenant_id`, `SERVANAHQ_BASE_URL`, `SERVANAHQ_API_KEY`. Skip with explicit reason if any missing.
+2. `servanahq_mapping` — log `{servanahq_tenant_id, lead_id}`.
+3. `servanahq_payload` — build the exact body per spec (field map from `callcapture_leads` + client industry).
+4. `servanahq_request` — log POST URL + tenant id (never the bearer token).
+5. POST `${SERVANAHQ_BASE_URL}/functions/v1/ingest-vektuor-lead` with `Authorization: Bearer ${SERVANAHQ_API_KEY}` and JSON body.
+6. `servanahq_response` — log HTTP status + (truncated) response body.
+7. On 2xx: update lead `servanahq_lead_id`, `servanahq_synced_at`, `sync_status='synced'`; log `servanahq_synced`.
+8. On non-2xx: update lead `sync_status='failed'`, `servanahq_sync_error`; log `servanahq_failed`.
 
-## 4. Frontend
+Never throws — always returns 200 with `{ok:boolean, reason?}` so it can't break the call pipeline.
 
-**`src/components/TestCallButton.tsx`** — major refactor:
-- Two new selects above the phone input:
-  - Tenant select (queries `callcapture_clients where is_super_admin = false` ordered by name)
-  - Vektuor number select (queries `vapi_phone_number_id` + `twilio_number` for chosen tenant; disabled until tenant chosen)
-- Disable "Place Test Call" until tenant + number + destination phone are valid
-- Pass `client_id, user_id, vapi_assistant_id, vapi_phone_number_id` into `place-test-call`
-- Extend the **Test Call Result checklist** (polls `callcapture_webhook_events` filtered by `client_id` + recent timeframe):
-  1. Call received
-  2. Tenant resolved
-  3. Transcript captured
-  4. **Vektuor lead created** (`lead_created`)
-  5. **SMS alert sent** (`sms_sent`)
-  6. **ServanaHQ lead synced** (`servanahq_synced`, `servanahq_failed`, or `servanahq_check` disabled → shows "Not connected")
-- Each row shows status icon + last log message; failures expand to show the logged `reason`.
+### Payload field mapping
 
-**`src/pages/Admin.tsx`**:
-- TestCallButton is rendered only in admin context with the tenant picker (remove any prior placements that defaulted to current user)
-- Add **"Impersonate Tenant"** action per row: opens a new tab to `/dashboard?impersonate=<client_id>` with a signed JWT-style param handled by a small `useImpersonation` hook that overrides the `client_id` used by Dashboard / LeadInbox queries (super-admin gated). Persist in sessionStorage and add a banner "Viewing as <tenant>" with "Exit Impersonation".
+| Payload field | Source |
+|---|---|
+| `servanahq_tenant_id` | client.servanahq_tenant_id |
+| `source` | "Vektuor" |
+| `lead_source` | "AI Answering Service" |
+| `customer_name` | lead.name |
+| `phone` | lead.phone |
+| `email` | lead.email |
+| `service_address` | lead.address |
+| `business_category` | client.industry |
+| `service_requested` | lead.treatment / lead.service |
+| `appliance_type` / `brand` / `model_number` | `lead.intake_answers?.appliance_type` etc. |
+| `issue_description` | lead.summary |
+| `preferred_day` / `preferred_time` | parsed from lead.timing |
+| `call_summary` | call.issue_summary |
+| `transcript` | raw_payload.transcript |
+| `vektuor_call_id` | raw_payload.vapi_call_id |
+| `recording_url` | call.recording_url |
+| `metadata` | `{ vektuor_lead_id, vektuor_client_id, raw: lead.raw_payload }` |
 
-**ServanaHQ settings panel** (new `src/components/ServanaHqSettings.tsx`):
-- Toggle "Connect ServanaHQ"
-- Input "ServanaHQ Account ID"
-- Optional "Custom endpoint URL"
-- Saves to `callcapture_clients`
-- Mounted in `Setup.tsx` (CRM step) and in `Settings`/AI Settings tab
+## 4. Wire into call pipeline
 
-## 5. Removing super-admin leakage
+In `supabase/functions/vapi-webhook/index.ts`, after `lead_created` + SMS attempt, fire-and-forget invoke `sync-servanahq` with the new lead id. Wrap in try/catch — never blocks. Also remove the `(matchedBy:'assigned_callcapture_number')` super-admin filter loophole already in place — confirmed safe.
 
-Audit and remove any fallback that routes calls/leads to super admin:
-- `vapi-webhook`: keep the 4-tier resolver (metadata → number id → called number → assistant id) but **delete** the "fallback to single client / super_admin" branch. If unresolved, log `tenant_unresolved` and stop — do not insert a row.
-- `place-test-call`: described above.
-- `TestCallButton`: never falls back to current user when on Admin page.
+## 5. Place-test-call hardening
 
-## 6. Diagnostics surfacing
+`supabase/functions/place-test-call/index.ts`:
+- Already requires explicit `client_id`. Add: reject if target client has `is_super_admin=true` → 400 `"Cannot place test call to super admin tenant"`.
+- Accept optional `vapi_assistant_id` / `vapi_phone_number_id` overrides from the admin caller; otherwise use tenant's stored ids (no change for self-serve).
 
-`Admin.tsx` Diagnostics tab already streams `callcapture_webhook_events`. Add filter chips for the new ServanaHQ step types and color rows red on `servanahq_failed` / `tenant_unresolved`.
+## 6. UI
 
-## Open items to confirm during build
-- Real ServanaHQ base URL + request shape (currently stubbed to `/v1/leads`); will request from user before flipping `servanahq_enabled` on for production tenants.
-- Whether "Impersonate Tenant" should mint a real auth session (requires service-role `admin.generateLink`) or just a read-only client-side override. Plan defaults to read-only override; can upgrade later.
+**`src/components/settings/ServanaHqSettings.tsx`** (new):
+- Toggle "Enable ServanaHQ sync"
+- Input "ServanaHQ Tenant ID"
+- Shows current status:
+  - "Connected — last sync …" (green) when a lead was synced.
+  - "ServanaHQ integration pending endpoint" (amber) when global secrets are missing (queried via a tiny `servanahq-status` function that just returns `{configured: boolean}` — never exposes the key).
+- Mounted in AI Settings panel.
+
+**`src/components/TestCallButton.tsx`** — extend the result checklist with new steps:
+- ✅ Vektuor lead created (`lead_created`)
+- ✅ SMS alert sent (`sms_sent`)
+- 🆕 ServanaHQ lead synced (`servanahq_synced` | `servanahq_failed` | `servanahq_check skipped` → renders "Not connected")
+- Show `servanahq_sync_error` text on failure.
+
+**`src/pages/Admin.tsx`** Diagnostics tab — already streams `callcapture_webhook_events`; add a filter chip for steps starting with `servanahq_` and color `servanahq_failed` red.
+
+Admin TestCallButton already accepts `clientId` prop — confirm Admin renders it with the selected tenant id (not the admin's own client). Add tenant + Vektuor-number selectors in the Admin panel test-call dialog.
+
+## 7. Deliverable for the ServanaHQ project: `servanahq/functions/ingest-vektuor-lead/index.ts`
+
+Drop a reference implementation into the Vektuor repo at `servanahq/functions/ingest-vektuor-lead/index.ts` (not deployed — for the user to copy into the ServanaHQ Supabase project). Contents:
+
+- Validates `Authorization: Bearer <SERVANAHQ_API_KEY>` (compare to `Deno.env.get("SERVANAHQ_API_KEY")` set in ServanaHQ project).
+- Zod-validates request body.
+- Resolves tenant by `servanahq_tenant_id`. 404 if unknown. Refuses if matched tenant is flagged super-admin unless tenant_id was explicit (it always is here).
+- Inserts into ServanaHQ `lead_inbox` table with `tenant_id`, `source='Vektuor'`, all payload fields, plus `vektuor_call_id` for idempotency (unique index recommended).
+- Returns `{ok:true, lead_id}` or `{ok:false, error}` with appropriate status.
+- Logs each step via console for ServanaHQ diagnostics.
+
+The user copies this file into their ServanaHQ project and deploys it there.
+
+## 8. Pending-endpoint behavior
+
+If `SERVANAHQ_BASE_URL` or `SERVANAHQ_API_KEY` secret is missing in Vektuor:
+- `sync-servanahq` logs `servanahq_check` skipped with `not_configured`.
+- Lead marked `sync_status='not_configured'`.
+- UI badge: "ServanaHQ integration pending endpoint".
+- No 4xx noise in diagnostics — just a single skipped row per call.
+
+## Technical details
+
+- Per-tenant credentials are NOT used in v1 (global key, per-tenant id). Easy to upgrade later by reading `servanahq_api_key` from client row if present.
+- `SERVANAHQ_API_KEY` is generated by `add_secret`'s generate flow (or pasted by the user); same value must be set as a secret inside the ServanaHQ Supabase project.
+- All ServanaHQ calls happen post-SMS so a failure there never blocks core lead capture.
+
+## Open question
+
+Confirm the ServanaHQ Supabase project ref so I can pre-populate `SERVANAHQ_BASE_URL` when adding the secret — or you can paste it into the secure form when prompted.
