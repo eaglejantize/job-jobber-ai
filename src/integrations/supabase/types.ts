@@ -167,8 +167,10 @@ export type Database = {
           duration_seconds: number | null
           ended_at: string | null
           id: string
+          is_test: boolean
           issue_summary: string | null
           lead_id: string | null
+          metadata: Json | null
           recording_url: string | null
           started_at: string
           status: Database["public"]["Enums"]["call_status"]
@@ -184,8 +186,10 @@ export type Database = {
           duration_seconds?: number | null
           ended_at?: string | null
           id?: string
+          is_test?: boolean
           issue_summary?: string | null
           lead_id?: string | null
+          metadata?: Json | null
           recording_url?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["call_status"]
@@ -201,8 +205,10 @@ export type Database = {
           duration_seconds?: number | null
           ended_at?: string | null
           id?: string
+          is_test?: boolean
           issue_summary?: string | null
           lead_id?: string | null
+          metadata?: Json | null
           recording_url?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["call_status"]
@@ -291,11 +297,13 @@ export type Database = {
           twilio_phone_number_sid: string | null
           updated_at: string
           user_id: string | null
+          vapi_assistant_id: string | null
           vapi_phone_number_id: string | null
           voice_id: string | null
           voice_label: string | null
           voice_speed: string
           voicemail_fallback: boolean
+          webhook_status: string | null
           website: string | null
         }
         Insert: {
@@ -355,11 +363,13 @@ export type Database = {
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
+          vapi_assistant_id?: string | null
           vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
           voicemail_fallback?: boolean
+          webhook_status?: string | null
           website?: string | null
         }
         Update: {
@@ -419,11 +429,13 @@ export type Database = {
           twilio_phone_number_sid?: string | null
           updated_at?: string
           user_id?: string | null
+          vapi_assistant_id?: string | null
           vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
           voicemail_fallback?: boolean
+          webhook_status?: string | null
           website?: string | null
         }
         Relationships: []
@@ -717,6 +729,44 @@ export type Database = {
             columns: ["call_id"]
             isOneToOne: false
             referencedRelation: "callcapture_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      callcapture_webhook_events: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          detail: Json | null
+          id: string
+          status: string
+          step: string
+          vapi_call_id: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          id?: string
+          status: string
+          step: string
+          vapi_call_id?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          detail?: Json | null
+          id?: string
+          status?: string
+          step?: string
+          vapi_call_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_webhook_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_clients"
             referencedColumns: ["id"]
           },
         ]
