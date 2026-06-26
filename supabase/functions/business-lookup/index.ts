@@ -25,7 +25,20 @@ const LABEL_TO_VALUE: Record<string, string> = {
   "Other":"other",
 };
 
-const BodySchema = z.object({ phone: z.string().min(7).max(30) });
+const SearchSchema = z.object({
+  mode: z.literal("search").optional(),
+  name: z.string().trim().max(200).optional(),
+  phone: z.string().trim().max(30).optional(),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(50).optional(),
+}).refine((v) => (v.name && v.name.length >= 2) || (v.phone && v.phone.replace(/\D/g, "").length >= 7), {
+  message: "Provide a business name or phone number",
+});
+
+const DetailsSchema = z.object({
+  mode: z.literal("details"),
+  place_id: z.string().min(3).max(255),
+});
 
 function toE164(input: string): string {
   const digits = input.replace(/\D/g, "");
@@ -96,41 +109,133 @@ Deno.serve(async (req) => {
       });
     }
 
-    const parsed = BodySchema.safeParse(await req.json());
+    const body = await req.json().catch(() => ({}));
+
+    // ---------- DETAILS MODE ----------
+    if (body?.mode === "details") {
+      const parsed = DetailsSchema.safeParse(body);
+      if (!parsed.success) {
+        return new Response(JSON.stringify({ error: parsed.error.flatten().fieldErrors }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return await fetchDetails(parsed.data.place_id, placesKey);
+    }
+
+    // ---------- SEARCH MODE ----------
+    const parsed = SearchSchema.safeParse(body);
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: parsed.error.flatten().fieldErrors }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const phoneE164 = toE164(parsed.data.phone);
+    const { name, phone, city, state } = parsed.data;
+    const phoneE164 = phone ? toE164(phone) : "";
+    const phoneDigits = phone ? phone.replace(/\D/g, "") : "";
 
-    // Legacy Google Places: Find Place from Phone Number → Place Details
-    const findUrl =
-      `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
-      `?input=${encodeURIComponent(phoneE164)}` +
-      `&inputtype=phonenumber` +
-      `&fields=place_id` +
-      `&key=${encodeURIComponent(placesKey)}`;
+    const candidates: Array<{
+      place_id: string;
+      name: string;
+      address: string;
+      category: string;
+      types: string[];
+      rating: number | null;
+      business_status?: string;
+    }> = [];
+    const seen = new Set<string>();
 
-    const findRes = await fetch(findUrl);
-    if (!findRes.ok) {
-      const text = await findRes.text();
-      console.error("find place error", findRes.status, text);
-      return new Response(JSON.stringify({ error: "places_lookup_failed", detail: text }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // 1) Text Search when name is present
+    if (name && name.length >= 2) {
+      const query = [name, city, state].filter(Boolean).join(" ");
+      const textUrl =
+        `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+        `?query=${encodeURIComponent(query)}` +
+        `&key=${encodeURIComponent(placesKey)}`;
+      const r = await fetch(textUrl);
+      if (r.ok) {
+        const d = await r.json();
+        if (Array.isArray(d.results)) {
+          for (const p of d.results.slice(0, 12)) {
+            if (!p.place_id || seen.has(p.place_id)) continue;
+            seen.add(p.place_id);
+            const types: string[] = Array.isArray(p.types) ? p.types : [];
+            candidates.push({
+              place_id: p.place_id,
+              name: p.name ?? "",
+              address: p.formatted_address ?? "",
+              category: types[0] ?? "",
+              types,
+              rating: typeof p.rating === "number" ? p.rating : null,
+              business_status: p.business_status,
+            });
+          }
+        }
+      } else {
+        console.error("textsearch error", r.status, await r.text());
+      }
     }
-    const findData = await findRes.json();
-    const placeId = findData?.candidates?.[0]?.place_id;
 
-    if (!placeId || (findData?.status && findData.status !== "OK")) {
-      console.log("no place found", findData?.status, findData?.error_message);
-      return new Response(JSON.stringify({ found: false, business: null, phone: phoneE164 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // 2) Phone lookup (always tried when phone supplied — gives us a verified match to boost)
+    let phoneMatchId: string | null = null;
+    if (phoneE164) {
+      const findUrl =
+        `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
+        `?input=${encodeURIComponent(phoneE164)}` +
+        `&inputtype=phonenumber` +
+        `&fields=place_id,name,formatted_address,types,rating` +
+        `&key=${encodeURIComponent(placesKey)}`;
+      const r = await fetch(findUrl);
+      if (r.ok) {
+        const d = await r.json();
+        const c = d?.candidates?.[0];
+        if (c?.place_id) {
+          phoneMatchId = c.place_id;
+          if (!seen.has(c.place_id)) {
+            seen.add(c.place_id);
+            const types: string[] = Array.isArray(c.types) ? c.types : [];
+            candidates.push({
+              place_id: c.place_id,
+              name: c.name ?? "",
+              address: c.formatted_address ?? "",
+              category: types[0] ?? "",
+              types,
+              rating: typeof c.rating === "number" ? c.rating : null,
+            });
+          }
+        }
+      } else {
+        console.error("findplace error", r.status, await r.text());
+      }
     }
 
-    const detailsUrl =
+    // Sort: phone-verified match first, then by rating desc
+    candidates.sort((a, b) => {
+      if (phoneMatchId) {
+        if (a.place_id === phoneMatchId) return -1;
+        if (b.place_id === phoneMatchId) return 1;
+      }
+      return (b.rating ?? 0) - (a.rating ?? 0);
+    });
+
+    const top = candidates.slice(0, 8);
+
+    return new Response(JSON.stringify({
+      found: top.length > 0,
+      candidates: top,
+      phone: phoneE164,
+      phone_digits: phoneDigits,
+      phone_matched_place_id: phoneMatchId,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (e) {
+    console.error("business-lookup error", e);
+    return new Response(JSON.stringify({ error: String(e) }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
+
+async function fetchDetails(placeId: string, placesKey: string): Promise<Response> {
+  const detailsUrl =
       `https://maps.googleapis.com/maps/api/place/details/json` +
       `?place_id=${encodeURIComponent(placeId)}` +
       `&fields=${encodeURIComponent(
@@ -142,14 +247,14 @@ Deno.serve(async (req) => {
     if (!detailsRes.ok) {
       const text = await detailsRes.text();
       console.error("place details error", detailsRes.status, text);
-      return new Response(JSON.stringify({ found: false, business: null, phone: phoneE164 }), {
+    return new Response(JSON.stringify({ found: false, business: null }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const detailsData = await detailsRes.json();
     if (detailsData?.status !== "OK" || !detailsData?.result) {
       console.error("place details status", detailsData?.status, detailsData?.error_message);
-      return new Response(JSON.stringify({ found: false, business: null, phone: phoneE164 }), {
+    return new Response(JSON.stringify({ found: false, business: null }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -162,7 +267,7 @@ Deno.serve(async (req) => {
       phone:
         details.formatted_phone_number ??
         details.international_phone_number ??
-        phoneE164,
+      "",
       website: details.website ?? "",
       business_hours: Array.isArray(details.opening_hours?.weekday_text)
         ? details.opening_hours.weekday_text.join("\n")
@@ -184,13 +289,7 @@ Deno.serve(async (req) => {
       console.error("AI suggestion failed", e);
     }
 
-    return new Response(JSON.stringify({ found: true, business, suggestion, phone: phoneE164 }), {
+  return new Response(JSON.stringify({ found: true, business, suggestion }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("business-lookup error", e);
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+}
