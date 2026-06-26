@@ -721,3 +721,103 @@ function BypassBillingCard() {
     </div>
   );
 }
+
+/* ---------------- Diagnostics ---------------- */
+
+type DiagRow = {
+  id: string;
+  client_id: string | null;
+  vapi_call_id: string | null;
+  step: string;
+  status: string;
+  detail: any;
+  created_at: string;
+};
+
+function DiagnosticsTab() {
+  const [rows, setRows] = useState<DiagRow[]>([]);
+  const [clientNames, setClientNames] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("callcapture_webhook_events")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(150);
+    const list = (data as DiagRow[]) ?? [];
+    setRows(list);
+    const ids = Array.from(new Set(list.map((r) => r.client_id).filter(Boolean) as string[]));
+    if (ids.length) {
+      const { data: cs } = await supabase
+        .from("callcapture_clients")
+        .select("id, business_name")
+        .in("id", ids);
+      const map: Record<string, string> = {};
+      (cs ?? []).forEach((c: any) => { map[c.id] = c.business_name ?? c.id; });
+      setClientNames(map);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+    const ch = supabase
+      .channel("webhook_events_admin")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "callcapture_webhook_events" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  const color = (s: string) =>
+    s === "ok" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+    : s === "error" ? "text-red-400 bg-red-500/10 border-red-500/30"
+    : "text-slate-400 bg-slate-700/40 border-slate-600";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Webhook diagnostics</h2>
+          <p className="text-sm text-slate-400">Live stream of every call-pipeline step across all tenants. Newest first.</p>
+        </div>
+        <button onClick={load} className="px-3 py-1.5 text-xs rounded-md border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200">
+          Refresh
+        </button>
+      </div>
+      <div className="rounded-xl border border-slate-700 bg-slate-800 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-900/60 text-slate-400 text-xs uppercase">
+            <tr>
+              <th className="text-left px-3 py-2">When</th>
+              <th className="text-left px-3 py-2">Tenant</th>
+              <th className="text-left px-3 py-2">Step</th>
+              <th className="text-left px-3 py-2">Status</th>
+              <th className="text-left px-3 py-2">Call</th>
+              <th className="text-left px-3 py-2">Detail</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-700">
+            {loading ? (
+              <tr><td colSpan={6} className="text-center py-10 text-slate-400"><Loader2 className="inline h-4 w-4 animate-spin mr-2" />Loading…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={6} className="text-center py-10 text-slate-400">No webhook events yet. Place a test call.</td></tr>
+            ) : rows.map((r) => (
+              <tr key={r.id} className="text-slate-200">
+                <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{new Date(r.created_at).toLocaleTimeString()}</td>
+                <td className="px-3 py-2 text-xs">{r.client_id ? (clientNames[r.client_id] ?? r.client_id.slice(0, 8)) : <span className="text-amber-400">UNMATCHED</span>}</td>
+                <td className="px-3 py-2 text-xs font-mono">{r.step}</td>
+                <td className="px-3 py-2"><span className={`px-2 py-0.5 text-[10px] rounded border ${color(r.status)}`}>{r.status}</span></td>
+                <td className="px-3 py-2 text-xs font-mono text-slate-400">{r.vapi_call_id?.slice(0, 12) ?? "—"}</td>
+                <td className="px-3 py-2 text-xs text-slate-400 max-w-md truncate" title={r.detail ? JSON.stringify(r.detail) : ""}>
+                  {r.detail ? JSON.stringify(r.detail).slice(0, 120) : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
