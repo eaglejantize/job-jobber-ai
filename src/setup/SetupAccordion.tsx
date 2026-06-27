@@ -20,17 +20,21 @@ import {
   Step7Notifications,
   Step8Review,
 } from "./steps";
+import { StepWelcome, StepCrm, StepTestCall, StepGoLive } from "./extraSteps";
 
-const STEP_COMPONENTS = [
-  Step1FindBusiness,
-  Step2BusinessDetails,
-  Step3PhoneNumber,
-  Step4Voice,
-  Step5Script,
-  Step6CallHandling,
-  Step7Notifications,
-  Step8Review,
-];
+const STEP_COMPONENTS: Record<number, React.ComponentType<any>> = {
+  1: StepWelcome,
+  2: Step1FindBusiness,
+  3: Step2BusinessDetails,
+  4: Step3PhoneNumber,
+  5: Step4Voice,
+  6: Step5Script,
+  7: Step6CallHandling,
+  8: Step7Notifications,
+  9: StepCrm,
+  10: StepTestCall,
+  11: StepGoLive,
+};
 
 export default function SetupAccordion() {
   const { loading, data, update, save, clientId, saving } = useSetupData();
@@ -87,8 +91,9 @@ export default function SetupAccordion() {
         onValueChange={(v) => setOpen(v)}
         className="space-y-2"
       >
-        {STEPS.map((s, i) => {
-          const Comp = STEP_COMPONENTS[i];
+        {STEPS.map((s) => {
+          const Comp = STEP_COMPONENTS[s.id];
+          if (!Comp) return null;
           return (
             <AccordionItem
               key={s.id}
