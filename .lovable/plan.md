@@ -1,88 +1,87 @@
+# Vektuor MVP — Status Report
 
-## Findings — ServanaHQ's actual lead pipeline
+Scope check against the 7 MVP objectives, plus Google Calendar dual mode.
 
-The ServanaHQ project (Lovable workspace name "Git To Love", Supabase ref `vwnqekfnluvqwnlauxxh`) has **two existing intake entry points**, not one:
+## 1. Confirmed working end-to-end
 
-### 1. `public-external-booking` (website form submissions)
-Writes synchronously into 3 tables, then notifies via SendGrid + Twilio.
+- **AI receptionist answers calls.** Per-tenant Vapi assistants are provisioned in `provision-twilio-number` with a Twilio number attached. Inbound calls hit `vapi-webhook`.
+- **Tenant-scoped call ingestion.** `vapi-webhook` resolves the tenant by 4-tier lookup (metadata → vapi_phone_number_id → assigned number → assistant id), writes `callcapture_calls`, transcript turns, and a `callcapture_leads` row. Verified by recent test calls.
+- **Lead extraction from transcript.** Lovable AI Gateway (Gemini) fallback fills name/phone/address/service/timing when Vapi `structuredData` is empty.
+- **Owner SMS notification.** `send-sms` via Twilio connector, triggered from the webhook after lead insert. Fixed and working.
+- **Inbox loads leads in real time.** `LeadInbox` + Dashboard query `callcapture_leads`/`callcapture_calls` directly with Supabase realtime. Diagnostics panel surfaces every webhook step.
+- **Onboarding + provisioning.** 8-step setup wizard, Google Places business lookup, Twilio number search/purchase, tenant signup via service-role function, super-admin Admin panel with delete + billing bypass.
+- **ServanaHQ sync (optional).** `sync-servanahq` POSTs into ServanaHQ's existing `intake-vapi` queue when secrets are set; webhook fires it fire-and-forget.
 
-| Table | Required / notable columns | Notes |
-|---|---|---|
-| `customers` | `user_id` (tenant), `name`, `phone` (E.164), `email`, `status='lead'`, `addresses` (jsonb array of `{line}`), `appliances` (jsonb array of `{type,brand,model}`), `last_contacted_at` | Upsert keyed by `(user_id, phone)`. If found, merges new address + appliance into existing arrays. |
-| `jobs` | `job_number='pending'`, `user_id`, `customer_id`, `appliance_type`, `brand`, `model_number`, `issue_description`, `status='new'`, `address` | Always inserted. |
-| `leads` | `tenant_id`, `customer_id`, `job_id`, `status='new'`, `customer_name`, `phone`, `email`, `address`, `appliance_type`, `brand`, `model_number`, `issue_description`, `source`, `ai_summary` | Insert only. `source` defaults to "External Website". |
+## 2. Built but not tested / partially working
 
-Tenant resolution: looks up the single `profiles` row where `is_super_admin=true` (oldest) and uses that `user_id` as `tenant_id` / `user_id` on all rows. No RPCs.
+- **Lead field completeness.** Address and urgency depend on the AI extractor; reliability depends on the system prompt. Not measured.
+- **Per-tenant Vapi assistant tools.** `submit-intake` edge function exists as a Vapi tool, but the tool isn't wired into newly provisioned assistants by default — extraction is currently transcript-based.
+- **Owner SMS body.** Sends a summary, but tenant `alert_phone` must be set in setup; not validated for every tenant path.
+- **ServanaHQ multi-tenant routing.** Requires a paired edit in the ServanaHQ project (`x-vektuor-key` + `tenant_id` override) before non-default tenants land correctly. Not yet applied on that side.
 
-### 2. `intake-vapi` (Vapi voice intake — already exists and is the right reuse target)
-This is ServanaHQ's existing AI-call intake. It writes to a **moderation queue**, not directly to `leads`/`jobs`.
+## 3. Not built yet (MVP gaps)
 
-| Table | Notable columns | Notes |
-|---|---|---|
-| `intake_reviews` | `tenant_id`, `source='vapi_voice'`, `status='pending'`, `customer_name`, `phone`, `email`, `address`, `appliance_type`, `brand`, `model_number`, `issue_description`, `ai_summary`, `transcript`, `raw_payload`, `confidence_score`, `customer_id` (nullable, matched by phone last-10) | Required: `customer_name`, `phone`, `address`, `appliance_type`, `issue_description`. |
-| `communications_log` | `user_id`, `customer_id`, `channel='sms'`, `direction='outbound'`, `recipient`, `body_summary`, `status`, `payload` | Owner SMS notification (Twilio direct, not connector). |
+- **Google Calendar — availability check.** No calendar code anywhere in the repo. Objective #3 is 0%.
+- **Google Calendar — booking the job.** No event-create flow. Objective #4 is 0%.
+- **Per-tenant Google OAuth.** No OAuth flow, no token storage table, no refresh logic. The Lovable `google_calendar` connector only authenticates the workspace owner's calendar — usable for the single-calendar test mode, but not for production multi-tenant.
+- **Customer SMS confirmation.** `send-sms` only notifies the owner. No outbound SMS to the captured caller phone.
+- **Customer email confirmation.** No email infrastructure exists (no Lovable Emails setup, no Resend, no templates).
+- **Owner email notification.** Same — no email pipeline.
+- **Booking/appointment data model.** No `appointments` or `bookings` table; `callcapture_leads` has no `scheduled_at`/`calendar_event_id` columns.
 
-Tenant resolution: hard-coded `DEFAULT_TENANT_ID = '428e8ad3-75b8-4ba6-83ff-a8f81edf051c'`. It also accepts **top-level field payloads** (Path C) so a clean JSON POST with the canonical field names is sufficient — no Vapi-shaped wrapper required.
+## 4. Recommended next build priority (fastest path to full MVP)
 
-### Conclusion
-`intake-vapi` already does exactly what `ingest-vektuor-lead` was about to duplicate: validates fields, normalises phone, matches existing customer by last-10 digits, inserts into the review queue, and fires the owner SMS. Vektuor calls are conceptually identical to ServanaHQ's own Vapi calls — they should land in the same `intake_reviews` queue so the operator workflow is unified.
+Sequence is chosen so each step is independently demoable.
 
-The only gap is **multi-tenant routing**: `intake-vapi` currently ignores the caller and writes everything to one super-admin tenant.
+1. **Schema: appointments + calendar linkage.**
+   - Add `callcapture_appointments` (id, client_id, lead_id, start_at, end_at, status, calendar_provider, calendar_event_id, customer_name, customer_phone, customer_email, notes).
+   - Add `google_calendar_id`, `google_oauth_*` fields to `callcapture_clients` for production mode.
+   - Add `callcapture_google_tokens` (client_id, access_token, refresh_token, expires_at, scope) for per-tenant OAuth.
+
+2. **Google Calendar — single-account test mode (fastest).**
+   - Link the `google_calendar` workspace connector.
+   - New edge function `calendar-find-slots` (freebusy on primary calendar) and `calendar-book-slot` (events.insert with attendee email/phone in description).
+   - Wire both into the Vapi assistant as tools so the AI can offer real times and book during the call. Falls back to "we'll call you back" if the connector is missing.
+
+3. **Email infrastructure (Lovable Emails).**
+   - `email_domain--check_email_domain_status` → set up domain → `setup_email_infra` → `scaffold_transactional_email`.
+   - Templates: `booking-confirmation-customer`, `booking-notification-owner`, `lead-captured-owner` (fallback when no booking).
+
+4. **Customer + owner notifications.**
+   - On successful booking: send customer SMS (Twilio) + customer email (Lovable Emails) + owner SMS (already working) + owner email.
+   - On lead-without-booking: owner SMS (working) + owner email; no customer message (avoid spam).
+   - Trigger from `vapi-webhook` after the appointment row is created.
+
+5. **Per-tenant Google OAuth (production mode).**
+   - Google Cloud OAuth client (calendar.events scope).
+   - New edge functions: `google-oauth-start`, `google-oauth-callback`, `google-token-refresh`.
+   - Setup wizard step: "Connect your Google Calendar" with status badge.
+   - Calendar functions choose per-tenant tokens when present, else fall back to workspace connector (test mode).
+
+6. **Polish + verification.**
+   - End-to-end test script: place test call → verify lead, appointment, calendar event, 2 SMS, 2 emails, inbox row.
+   - Surface booking status in inbox + dashboard cards.
+
+## Technical notes
+
+- The Lovable `google_calendar` connector reaches `https://connector-gateway.lovable.dev/google_calendar/calendar/v3` and only ever talks to the builder's calendar — fine for test mode, must not be used for tenants in production.
+- Per-tenant OAuth must store refresh tokens server-side; never expose to the browser. Use service-role-only access plus the existing `owns_client` pattern for client-side reads of *status only*.
+- Vapi tool definitions for `findSlots` and `bookSlot` need to be attached to each provisioned assistant in `provision-twilio-number` so the AI can call them mid-conversation.
+- Email infra prerequisite chain (`check_email_domain_status` → `setup_email_infra` → `scaffold_transactional_email`) must run before any send code is written.
+
+## Estimated effort to MVP
+
+| Step | Effort |
+|---|---|
+| 1. Schema + columns | S |
+| 2. Calendar (test mode) + assistant tools | M |
+| 3. Email infra + templates | S–M (mostly tool-driven) |
+| 4. Confirmation/notification fan-out | S |
+| 5. Per-tenant Google OAuth | M–L |
+| 6. E2E verification | S |
+
+Recommend executing steps 1–4 first to hit "working MVP on the test calendar", then 5 to unlock production tenants.
 
 ---
 
-## Plan — reuse, don't duplicate
-
-### A. Changes in ServanaHQ (`Git To Love` project)
-Two small edits to `supabase/functions/intake-vapi/index.ts`:
-
-1. **Accept an explicit tenant override.** Read `body.tenant_id` (or header `x-vektuor-tenant-id`) and, if present and a valid uuid that exists in `profiles.user_id`, use it as `tenant_id` instead of `DEFAULT_TENANT_ID`. Fall back to the current behaviour when absent.
-2. **Authenticate cross-project callers.** Accept header `x-vektuor-key` and compare against new secret `VEKTUOR_INGEST_KEY`. Required only when `tenant_id` is provided (so existing Vapi traffic is unaffected). Reject mismatch with 401.
-3. Add `source='vektuor_voice'` when the request carries the Vektuor key, so reviewers can tell the two voice surfaces apart.
-
-No schema migration is needed — `intake_reviews`, `customers`, and `communications_log` are reused as-is.
-
-### B. Changes in Vektuor (this project)
-1. **Delete the unused stub** `servanahq/functions/ingest-vektuor-lead/index.ts` — we are not deploying a new ServanaHQ function.
-2. **Rewrite `supabase/functions/sync-servanahq/index.ts`** to POST to ServanaHQ's existing endpoint:
-   - URL: `${SERVANAHQ_BASE_URL}/intake-vapi` (where `SERVANAHQ_BASE_URL = https://vwnqekfnluvqwnlauxxh.supabase.co/functions/v1`).
-   - Headers: `x-vektuor-key: ${SERVANAHQ_INGEST_KEY}`, `Authorization: Bearer ${SERVANAHQ_ANON_KEY}` (Supabase functions require an apikey or auth header for routing).
-   - Body (top-level fields, hits intake-vapi's Path C):
-     ```json
-     {
-       "tenant_id": "<callcapture_clients.servanahq_tenant_id>",
-       "customer_name": "...",
-       "phone": "...",
-       "email": "...",
-       "address": "...",
-       "appliance_type": "<service / category>",
-       "brand": "...",
-       "model_number": "...",
-       "issue_description": "...",
-       "ai_summary": "...",
-       "transcript": "...",
-       "call_id": "<vapi call id>"
-     }
-     ```
-   - Map Vektuor fields → ServanaHQ canonical names: `service` → `appliance_type`, `summary` → `ai_summary`, `customer_name`/`phone`/`address`/`email`/`brand`/`model_number`/`issue_description`/`transcript` pass through unchanged.
-3. Update `callcapture_leads.servanahq_sync_status` / `_error` based on the HTTP response from `intake-vapi`.
-4. `servanahq-status` edge function: keep, but the "pending endpoint" warning now flips to green as soon as `SERVANAHQ_BASE_URL` + `SERVANAHQ_INGEST_KEY` are both set in Vektuor.
-
-### C. Secrets
-- Vektuor (this project, via add_secret after plan approval): `SERVANAHQ_BASE_URL = https://vwnqekfnluvqwnlauxxh.supabase.co/functions/v1`, `SERVANAHQ_INGEST_KEY = <generated>`.
-- ServanaHQ (set in that project by the user): `VEKTUOR_INGEST_KEY = <same value>`.
-
-### D. Verification
-1. Place one Vektuor test call against the active mock tenant.
-2. Expect: row in Vektuor `callcapture_leads` with `servanahq_sync_status='ok'`, row in ServanaHQ `intake_reviews` (`source='vektuor_voice'`, `tenant_id` = the mock tenant's mapped `servanahq_tenant_id`), and one Twilio SMS via `communications_log`.
-
----
-
-## Question for you before I switch to build
-
-The `intake-vapi` edits live in the **ServanaHQ** project (`Git To Love`), and cross-project tools are read-only — I can't push the edit there from here. Two ways to handle that:
-
-1. **You paste the change.** I'll write the full new `index.ts` for `intake-vapi` in this plan's follow-up so you can copy it into `Git To Love` yourself, then I do the Vektuor side here.
-2. **Skip the ServanaHQ edit for now** and have Vektuor POST with no `tenant_id`, accepting that every Vektuor call lands under the ServanaHQ super-admin tenant (same as today's ServanaHQ voice calls). Multi-tenant routing comes later.
-
-Which do you want — option 1 (proper multi-tenant, requires you to apply one file in ServanaHQ) or option 2 (single-tenant for now, no ServanaHQ change)?
+Want me to proceed with **step 1 + step 2 (schema + Google Calendar test mode wired into the Vapi assistant)** as the next build, or a different sequence?
