@@ -361,12 +361,6 @@ export function Step1FindBusiness({ data, update, save, mode }: StepProps) {
         </div>
       )}
 
-      <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Coming soon:</span>{" "}
-        Connect your Google Business Profile to import verified details
-        automatically.
-      </div>
-
       {data.business_name && (
         <p className="text-xs text-muted-foreground pt-1">
           Selected: <strong>{data.business_name}</strong>. You can change
