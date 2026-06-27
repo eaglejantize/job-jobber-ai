@@ -1,88 +1,47 @@
-# Root cause
+## Root cause
 
-The webhook chain is breaking at **step 1: tenant resolution**, which cascades into every downstream notification being skipped.
+In `supabase/functions/vapi-webhook/index.ts`, `send-transactional-email` is only reached indirectly via `send-appointment-emails`, and only when the lead has an `appointment_id`. Since the AI almost never invokes `bookSlot` on test calls, no email ever fires. The tenant row for `eaglejantize@gmail.com` also has `owner_email = NULL` (only `email` is set), so any future trigger must fall back to `email`.
 
-## What the logs show (call ended 2026‑06‑27 02:45:41 UTC)
+Customer SMS path is unaffected and stays as-is. Owner SMS (`send-sms`) is already working.
 
-The vapi-webhook **did** receive the post-call data. Each event was logged:
+## What to build
 
-```
-received           ok       (status-update, transcript, conversation-update, end-of-call-report)
-tenant_matched     ERROR    matchedBy: none
-                            phoneNumberId: 1b023a8a-5769-4b29-98b0-e86c91bea2a9
-                            assistantId:   05941684-9bec-4122-8c83-d16a57bd0376
-                            calledNumber:  null
-lead_extracted     ok       (Gemini parsed: name "Ellis in Wonderland", service "leaking tank", timing "afternoon")
-lead_created       SKIPPED  reason: no_tenant
-sms_sent           SKIPPED  reason: no_tenant
-```
+### 1. New email template: `new-lead-owner`
+File: `supabase/functions/_shared/transactional-email-templates/new-lead-owner.tsx`
 
-So:
-1. Webhook received the data ✅
-2. **No row was created** in `callcapture_calls` or `callcapture_leads` for this call — skipped because no tenant
-3. `bookSlot` was never invoked by the AI during the call (no tool-call events in the transcript) — separate issue from notifications
-4. `alert_phone` on `Eaglejantize@gmail.com` is already set to `+13027473683` ✅
-5. `send-sms` was never called — skipped at `lead_created` stage
-6. `send-transactional-email`/`send-customer-sms` were never called — they only fire on bookings, and no booking occurred
+React Email component matching the existing Vektuor branding (navy header, blue button). Fields:
+- `business_name`, `caller_name`, `caller_phone`, `service`, `timing`, `summary`, `transcript_excerpt`, `dashboard_link`
+- Subject: `New call lead: {caller_name or "Unknown"} — {business_name}`
 
-## Why tenant resolution failed
-
-The webhook tries to match in 4 ways:
-1. `metadata.client_id` — Vapi did not surface our metadata in the end-of-call payload (we set it in `place-test-call` but it didn't echo back on the field we read)
-2. `vapi_phone_number_id` — **the eaglejantize client row has this column NULL**, so `1b023a8a-…` matches nothing
-3. `assigned_callcapture_number` vs `calledNumber` — `calledNumber` is null in payload
-4. `vapi_assistant_id` — **also NULL on the eaglejantize row**, so `05941684-…` matches nothing
-
-Even if any match had succeeded, the row is `is_super_admin = true`, and the webhook **explicitly nulls `clientId` for super-admin rows** ("safety: never write to super admin row for tenant calls"). So for the owner's own account, every test call is guaranteed to be dropped.
-
-# Fix
-
-## 1. Persist the Vapi IDs on the eaglejantize tenant
-
-Update the row so `phoneNumberId` resolution succeeds on subsequent calls:
-
-```sql
-UPDATE callcapture_clients
-SET vapi_phone_number_id = '1b023a8a-5769-4b29-98b0-e86c91bea2a9',
-    vapi_assistant_id    = '05941684-9bec-4122-8c83-d16a57bd0376'
-WHERE id = '7020a651-f4c4-46f4-8383-a4d9aea4925a';
+### 2. Register the template
+Add to `supabase/functions/_shared/transactional-email-templates/registry.ts`:
+```ts
+import { template as newLeadOwner } from './new-lead-owner.tsx'
+// ...
+'new-lead-owner': newLeadOwner,
 ```
 
-## 2. Allow super-admin tenants to receive their own test-call data
+### 3. Fire owner email unconditionally on `end-of-call-report`
+In `vapi-webhook/index.ts`, after the lead insert block (around line 267), add a new block that runs whenever `clientId` is set — independent of `leadId` and independent of `appointment_id`:
 
-In `supabase/functions/vapi-webhook/index.ts`, remove the hard-null of `clientId` when the matched row is `is_super_admin`. The block exists to prevent stray inbound calls from being attributed to the admin, but it also kills the admin's own test calls. Replace with: keep the match if it came from `metadata.client_id`, `vapi_phone_number_id`, or `vapi_assistant_id` (these are owner-specific), and only null it for the wide `assigned_callcapture_number` fallback.
+- Fetch `business_name, owner_email, email, timezone` from `callcapture_clients`.
+- Resolve recipient: `owner_email || email`. If missing, log `owner_email_sent` `skipped` `{reason: "no_owner_email"}`.
+- Invoke `send-transactional-email` with:
+  - `templateName: "new-lead-owner"`
+  - `recipientEmail: <resolved>`
+  - `idempotencyKey: \`owner-lead-${vapiCallId}\``
+  - `templateData: { business_name, caller_name, caller_phone, service: extracted.service, timing: extracted.timing, summary: summary || extracted.notes, transcript_excerpt: transcriptText?.slice(0, 1500), dashboard_link: "https://vektuor.com/dashboard" }`
+- Log result via `logEvent(..., "owner_email_sent", ok/error, {status, body})`.
 
-## 3. Strengthen metadata extraction (so the primary path actually works)
+The existing booking-only `send-appointment-emails` call stays — it provides the richer customer+owner confirmation when a booking actually happens.
 
-`place-test-call` sets `metadata: { client_id, user_id, test_call }` on the Vapi call. Add fallback paths in the webhook to read it from:
-- `message.call.metadata`
-- `message.call.assistantOverrides.metadata`
-- `message.metadata`
-- `message.artifact.metadata`
+### 4. Customer email behavior (unchanged)
+Customer email continues to fire only when an appointment exists and the lead/appointment has a customer email captured. No change required — `send-appointment-emails` already skips with `no_email` when missing.
 
-Log the raw metadata blob (truncated) on the `received` event so we can see exactly what Vapi sends back next time.
+## Files touched
+- `supabase/functions/_shared/transactional-email-templates/new-lead-owner.tsx` (new)
+- `supabase/functions/_shared/transactional-email-templates/registry.ts` (add entry)
+- `supabase/functions/vapi-webhook/index.ts` (add owner-email block in `end-of-call-report`)
 
-## 4. Verify the SMS chain end-to-end
-
-Once tenant resolves, `send-sms` runs with:
-- `alert_phone` = `+13027473683` ✅
-- `TWILIO_FROM_NUMBER`, `TWILIO_API_KEY`, `LOVABLE_API_KEY` all configured ✅
-
-The owner SMS will fire on every completed call with a lead — no booking required. Customer SMS and confirmation emails only fire when a booking is created.
-
-## 5. Note on bookSlot (separate, not blocking notifications)
-
-The AI didn't call the `bookSlot` tool during these tests, so customer SMS + emails wouldn't fire even with tenant resolution fixed. That's a Vapi assistant-config issue (tools/system-prompt not yet pushed to assistant `05941684-…`). I'll flag it after notifications are confirmed; fixing the chain above will at minimum get **owner SMS** working on the next test call.
-
-# Verification
-
-After the fix, place one test call and confirm:
-- `callcapture_webhook_events` shows `tenant_matched ok` (`matchedBy: vapi_phone_number_id` or `metadata`)
-- A row appears in `callcapture_calls` and `callcapture_leads` for the call
-- `sms_sent ok` event logged
-- Owner phone receives the SMS
-
-# Files touched
-
-- SQL migration: backfill `vapi_phone_number_id` + `vapi_assistant_id` on the eaglejantize row
-- `supabase/functions/vapi-webhook/index.ts`: scope the super-admin block + add metadata fallbacks + log raw metadata
+## Verification
+After deploy, place a test call. Expect in `callcapture_webhook_events`: `owner_email_sent` `ok`, and a row in `email_send_log` with `template_name='new-lead-owner'` going to `Eaglejantize@gmail.com`. The email lands once DNS/queue is healthy (already verified per user).
