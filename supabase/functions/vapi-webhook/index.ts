@@ -267,6 +267,44 @@ Deno.serve(async (req) => {
       await logEvent(clientId, vapiCallId, "sms_sent", "skipped", { reason: !clientId ? "no_tenant" : "no_lead" });
     }
 
+    // If an appointment was booked during the call (via the bookSlot tool),
+    // send customer SMS + customer email + owner email confirmations.
+    if (clientId && leadId) {
+      const { data: leadRow } = await supabase
+        .from("callcapture_leads")
+        .select("appointment_id, email")
+        .eq("id", leadId).maybeSingle();
+      const apptId = leadRow?.appointment_id ?? null;
+      if (apptId) {
+        // Customer SMS confirmation
+        try {
+          const r = await fetch(`${SUPABASE_URL}/functions/v1/send-customer-sms`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ client_id: clientId, appointment_id: apptId }),
+          });
+          const txt = await r.text();
+          await logEvent(clientId, vapiCallId, r.ok ? "customer_sms_sent" : "customer_sms_failed", r.ok ? "ok" : "error", { status: r.status, body: txt.slice(0, 300) });
+        } catch (e) {
+          await logEvent(clientId, vapiCallId, "customer_sms_failed", "error", { error: String(e) });
+        }
+        // Email confirmations (no-op until email infra is set up)
+        try {
+          const r = await fetch(`${SUPABASE_URL}/functions/v1/send-appointment-emails`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ client_id: clientId, appointment_id: apptId }),
+          });
+          const txt = await r.text();
+          await logEvent(clientId, vapiCallId, r.ok ? "emails_sent" : "emails_failed", r.ok ? "ok" : "error", { status: r.status, body: txt.slice(0, 300) });
+        } catch (e) {
+          await logEvent(clientId, vapiCallId, "emails_failed", "error", { error: String(e) });
+        }
+      } else {
+        await logEvent(clientId, vapiCallId, "appointment_booked", "skipped", { reason: "no_appointment_on_lead" });
+      }
+    }
+
     // ServanaHQ sync — fire-and-forget, never blocks lead capture.
     if (clientId && leadId) {
       try {
