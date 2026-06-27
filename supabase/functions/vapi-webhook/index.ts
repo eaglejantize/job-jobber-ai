@@ -67,10 +67,20 @@ Deno.serve(async (req) => {
   const phoneNumberId = getStr(callObj, "phoneNumberId") ?? getStr(msg, "phoneNumberId");
   const phoneObj = (callObj.phoneNumber as Json | undefined) ?? {};
   const calledNumber = getStr(phoneObj, "number") ?? getStr(callObj, "to", "calledNumber");
-  const metaObj = ((callObj.metadata as Json | undefined) ?? (msg.metadata as Json | undefined) ?? {}) as Json;
+  const assistantOverrides = (callObj.assistantOverrides as Json | undefined) ?? {};
+  const artifact = (msg.artifact as Json | undefined) ?? (callObj.artifact as Json | undefined) ?? {};
+  const metaObj = ((callObj.metadata as Json | undefined)
+    ?? (msg.metadata as Json | undefined)
+    ?? (assistantOverrides.metadata as Json | undefined)
+    ?? (artifact.metadata as Json | undefined)
+    ?? {}) as Json;
   const metaClientId = getStr(metaObj, "client_id", "clientId");
 
-  await logEvent(metaClientId ?? null, vapiCallId || null, "received", "ok", { type, phoneNumberId, calledNumber });
+  await logEvent(metaClientId ?? null, vapiCallId || null, "received", "ok", {
+    type, phoneNumberId, calledNumber,
+    metaKeys: Object.keys(metaObj ?? {}),
+    metaSample: JSON.stringify(metaObj ?? {}).slice(0, 300),
+  });
 
   if (!vapiCallId) {
     await logEvent(null, null, "received", "skipped", { reason: "no_call_id" });
@@ -104,14 +114,20 @@ Deno.serve(async (req) => {
     if (data?.id) { clientId = data.id; matchedBy = "vapi_assistant_id"; }
   }
 
-  // Safety: never write to super admin row for tenant calls
+  // Safety: only block super-admin attribution when the match came from a wide
+  // fallback (assigned_callcapture_number). Owner-specific matches (metadata,
+  // vapi_phone_number_id, vapi_assistant_id) are kept so the admin can receive
+  // notifications for their own test calls.
   if (clientId) {
     const { data: c } = await supabase.from("callcapture_clients").select("is_super_admin, business_id").eq("id", clientId).maybeSingle();
-    if (c?.is_super_admin) {
-      await logEvent(clientId, vapiCallId, "tenant_matched", "error", { reason: "resolved_to_super_admin", matchedBy });
+    if (c?.is_super_admin && matchedBy === "assigned_callcapture_number") {
+      await logEvent(clientId, vapiCallId, "tenant_matched", "error", { reason: "resolved_to_super_admin_via_wide_match", matchedBy });
       clientId = null;
     } else {
       businessId = (c as any)?.business_id ?? null;
+      if (c?.is_super_admin) {
+        await logEvent(clientId, vapiCallId, "tenant_matched", "ok", { note: "super_admin_owner_match_allowed", matchedBy });
+      }
     }
   }
 
