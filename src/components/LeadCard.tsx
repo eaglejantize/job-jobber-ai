@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Phone } from "lucide-react";
+import { ChevronDown, ChevronUp, Phone, CalendarCheck } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export type Lead = {
   id: string;
@@ -23,6 +24,8 @@ export type Lead = {
   raw_payload: Record<string, unknown> | null;
   status: string;
   created_at: string;
+  appointment_id?: string | null;
+  booking_status?: string | null;
 };
 
 function timeAgo(iso: string): string {
@@ -47,8 +50,31 @@ function statusColor(s: string) {
 export default function LeadCard({ lead, onMarkContacted }: { lead: Lead; onMarkContacted?: () => void }) {
   const [open, setOpen] = useState(false);
   const intake = lead.intake_answers ?? {};
+  const [bookedAt, setBookedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!lead.appointment_id) { setBookedAt(null); return; }
+    void supabase
+      .from("callcapture_appointments")
+      .select("start_at")
+      .eq("id", lead.appointment_id)
+      .maybeSingle()
+      .then(({ data }) => { if (active) setBookedAt((data as any)?.start_at ?? null); });
+    return () => { active = false; };
+  }, [lead.appointment_id]);
+
+  const bookedLabel = bookedAt
+    ? new Date(bookedAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    : null;
+
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-card-soft">
+      {bookedLabel && (
+        <div className="mb-2 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-600 dark:text-emerald-400">
+          <CalendarCheck className="h-3 w-3" /> Booked {bookedLabel}
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-semibold">

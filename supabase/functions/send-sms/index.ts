@@ -18,8 +18,8 @@ Deno.serve(async (req) => {
     );
 
     const [{ data: client }, { data: lead }] = await Promise.all([
-      supabase.from("callcapture_clients").select("alert_phone, business_name").eq("id", client_id).maybeSingle(),
-      supabase.from("callcapture_leads").select("name, phone, summary, issue, treatment, type, timing, new_or_returning, referral").eq("id", lead_id).maybeSingle(),
+      supabase.from("callcapture_clients").select("alert_phone, business_name, timezone").eq("id", client_id).maybeSingle(),
+      supabase.from("callcapture_leads").select("name, phone, summary, issue, treatment, type, timing, new_or_returning, referral, appointment_id").eq("id", lead_id).maybeSingle(),
     ]);
 
     if (!client?.alert_phone || !lead) {
@@ -27,6 +27,24 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: "missing client phone or lead" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // If a booking was made during the call, fetch the appointment so we can
+    // include the scheduled time in the owner SMS.
+    let bookingLine: string | null = null;
+    if ((lead as any).appointment_id) {
+      const { data: appt } = await supabase
+        .from("callcapture_appointments")
+        .select("start_at, service")
+        .eq("id", (lead as any).appointment_id)
+        .maybeSingle();
+      if (appt?.start_at) {
+        const when = new Date(appt.start_at).toLocaleString("en-US", {
+          timeZone: client.timezone || "America/New_York",
+          weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+        });
+        bookingLine = `BOOKED ${when}`;
+      }
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -45,7 +63,7 @@ Deno.serve(async (req) => {
     }
 
     const lines = [
-      `New ${client.business_name ?? "CallCapture"} lead`,
+      bookingLine ?? `New ${client.business_name ?? "Vektuor"} lead`,
       lead.name ? `Name: ${lead.name}` : null,
       lead.phone ? `Phone: ${lead.phone}` : null,
       (lead.treatment ?? lead.type ?? lead.issue) ? `Service: ${lead.treatment ?? lead.type ?? lead.issue}` : null,
