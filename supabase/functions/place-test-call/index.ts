@@ -59,11 +59,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (cErr || !client) return json(404, { ok: false, error: cErr?.message ?? "Client not found" });
 
-    // Hard block: never test-call into the super-admin tenant.
-    if ((client as any).is_super_admin) {
-      return json(400, { ok: false, error: "Cannot place test call to super admin tenant" });
-    }
-
     // Authorization: owner or super admin
     let allowed = client.user_id === userId;
     if (!allowed) {
