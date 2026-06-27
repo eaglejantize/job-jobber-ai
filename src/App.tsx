@@ -20,6 +20,7 @@ import Auth from "./pages/Auth.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import LeadInbox from "./pages/LeadInbox.tsx";
 import Admin from "./pages/Admin.tsx";
+import Unsubscribe from "./pages/Unsubscribe.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import { RequireAuth, RedirectIfAuthed } from "./components/route-guards";
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
@@ -52,6 +53,7 @@ const App = () => (
           <Route path="/auth" element={<RedirectIfAuthed><Auth /></RedirectIfAuthed>} />
           <Route path="/login" element={<RedirectIfAuthed><Auth /></RedirectIfAuthed>} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/unsubscribe" element={<Unsubscribe />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
