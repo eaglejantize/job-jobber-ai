@@ -69,6 +69,21 @@ Deno.serve(async (req) => {
       }).eq("id", lead_id);
     }
 
+    // Flip the corresponding call row to `booked` so the Dashboard updates in real time.
+    try {
+      const callQuery = supabase.from("callcapture_calls").update({
+        status: "booked",
+        lead_id: lead_id ?? undefined,
+      });
+      if (vapi_call_id) {
+        await callQuery.eq("vapi_call_id", vapi_call_id);
+      } else if (lead_id) {
+        await callQuery.eq("lead_id", lead_id);
+      }
+    } catch (e) {
+      console.error("[calendar-book-slot] call status update failed", e);
+    }
+
     return new Response(JSON.stringify({
       ok: true, appointment_id: appt.id,
       calendar_event_id: ev.id, calendar_event_link: ev.htmlLink,
