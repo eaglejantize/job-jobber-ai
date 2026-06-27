@@ -123,6 +123,50 @@ Deno.serve(async (req) => {
       firstMessage = `Thanks for calling ${client.business_name}, how can I help you today?`
     }
 
+    // Attach calendar tools so the assistant can offer real availability and book.
+    const toolsUrl = `${SUPABASE_URL}/functions/v1/vapi-tools`
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/vapi-webhook`
+    const webhookSecret = Deno.env.get('VAPI_WEBHOOK_SECRET') ?? ''
+    const tools = [
+      {
+        type: 'function', async: false,
+        function: {
+          name: 'findSlots',
+          description: "Get real available appointment times from the business's Google Calendar. Call this before offering times to the caller.",
+          parameters: {
+            type: 'object',
+            properties: {
+              days: { type: 'number', description: 'How many days out to search (1-14). Default 5.' },
+              max: { type: 'number', description: 'Max number of slots to return (1-10). Default 6.' },
+            },
+          },
+        },
+        server: { url: toolsUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
+      },
+      {
+        type: 'function', async: false,
+        function: {
+          name: 'bookSlot',
+          description: "Book the chosen appointment on the business's Google Calendar. Use exact ISO start/end times returned by findSlots.",
+          parameters: {
+            type: 'object',
+            required: ['start_iso', 'end_iso', 'customer_name', 'customer_phone'],
+            properties: {
+              start_iso: { type: 'string', description: 'ISO 8601 start datetime from findSlots.' },
+              end_iso: { type: 'string', description: 'ISO 8601 end datetime from findSlots.' },
+              customer_name: { type: 'string' },
+              customer_phone: { type: 'string', description: 'E.164 if possible.' },
+              customer_email: { type: 'string' },
+              customer_address: { type: 'string' },
+              service: { type: 'string' },
+              notes: { type: 'string' },
+            },
+          },
+        },
+        server: { url: toolsUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
+      },
+    ]
+
     const patchRes = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
       method: 'PATCH',
       headers: {
@@ -135,7 +179,11 @@ Deno.serve(async (req) => {
           provider: 'openai',
           model: 'gpt-4o-mini',
           messages: [{ role: 'system', content: systemPrompt }],
+          tools,
         },
+        server: { url: webhookUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
+        serverMessages: ['status-update', 'transcript', 'end-of-call-report', 'conversation-update', 'tool-calls'],
+        metadata: { client_id: clientId, user_id: userId },
       }),
     })
     if (!patchRes.ok) {
