@@ -27,6 +27,13 @@ function buildSystemPrompt(c: Record<string, any>): string {
     questions.forEach((q: string, i: number) => lines.push(`${i + 1}. ${q}`));
   }
   lines.push("");
+  lines.push("Scheduling:");
+  lines.push("- Once you have the caller's name, phone, address, and the issue, offer to book a time on the calendar.");
+  lines.push("- Call the `findSlots` tool to get real availability, then read 2-3 options aloud (e.g. 'Tuesday at 10am or Wednesday at 2pm').");
+  lines.push("- When the caller picks one, call the `bookSlot` tool with the exact ISO start/end times from findSlots plus the captured customer details.");
+  lines.push("- After booking, confirm the date/time back to the caller and tell them they will receive a text confirmation.");
+  lines.push("- If no times work, take the lead details and tell them the team will call back to schedule.");
+  lines.push("");
   lines.push("Never invent pricing, availability, or promises. If unsure, say the team will follow up.");
   return lines.join("\n");
 }
@@ -46,10 +53,58 @@ async function vapiFetch(apiKey: string, path: string, init: RequestInit = {}) {
   return { ok: r.ok, status: r.status, body };
 }
 async function upsertAssistant(client: Record<string, any>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const toolsUrl = `${supabaseUrl}/functions/v1/vapi-tools`;
+  const tools = [
+    {
+      type: "function",
+      async: false,
+      function: {
+        name: "findSlots",
+        description: "Get real available appointment times from the business's Google Calendar. Call this before offering times to the caller.",
+        parameters: {
+          type: "object",
+          properties: {
+            days: { type: "number", description: "How many days out to search (1-14). Default 5." },
+            max: { type: "number", description: "Max number of slots to return (1-10). Default 6." },
+          },
+        },
+      },
+      server: { url: toolsUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
+    },
+    {
+      type: "function",
+      async: false,
+      function: {
+        name: "bookSlot",
+        description: "Book the chosen appointment on the business's Google Calendar. Use exact ISO start/end times returned by findSlots.",
+        parameters: {
+          type: "object",
+          required: ["start_iso", "end_iso", "customer_name", "customer_phone"],
+          properties: {
+            start_iso: { type: "string", description: "ISO 8601 start datetime from findSlots." },
+            end_iso: { type: "string", description: "ISO 8601 end datetime from findSlots." },
+            customer_name: { type: "string" },
+            customer_phone: { type: "string", description: "E.164 if possible." },
+            customer_email: { type: "string" },
+            customer_address: { type: "string" },
+            service: { type: "string", description: "What service the appointment is for." },
+            notes: { type: "string", description: "Any extra context for the technician." },
+          },
+        },
+      },
+      server: { url: toolsUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
+    },
+  ];
   const payload = {
     name: `Vektuor — ${client.business_name ?? "Tenant"}`.slice(0, 40),
     firstMessage: buildGreeting(client),
-    model: { provider: "openai", model: "gpt-4o-mini", messages: [{ role: "system", content: buildSystemPrompt(client) }] },
+    model: {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      messages: [{ role: "system", content: buildSystemPrompt(client) }],
+      tools,
+    },
     voice: client.voice_id ? { provider: "11labs", voiceId: client.voice_id } : { provider: "vapi", voiceId: "Elliot" },
     server: { url: webhookUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
     serverMessages: ["status-update", "transcript", "end-of-call-report", "conversation-update", "tool-calls"],
