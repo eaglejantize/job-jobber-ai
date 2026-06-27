@@ -35,6 +35,81 @@ export type Database = {
         }
         Relationships: []
       }
+      callcapture_appointments: {
+        Row: {
+          calendar_event_id: string | null
+          calendar_event_link: string | null
+          calendar_provider: string | null
+          client_id: string
+          created_at: string
+          customer_address: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          end_at: string
+          id: string
+          lead_id: string | null
+          notes: string | null
+          service: string | null
+          start_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          calendar_event_id?: string | null
+          calendar_event_link?: string | null
+          calendar_provider?: string | null
+          client_id: string
+          created_at?: string
+          customer_address?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          end_at: string
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          service?: string | null
+          start_at: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          calendar_event_id?: string | null
+          calendar_event_link?: string | null
+          calendar_provider?: string | null
+          client_id?: string
+          created_at?: string
+          customer_address?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          end_at?: string
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          service?: string | null
+          start_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_appointments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "callcapture_appointments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       callcapture_assistant_configs: {
         Row: {
           after_hours_enabled: boolean | null
@@ -247,6 +322,7 @@ export type Database = {
           alert_phone: string
           answer_after_hours: boolean
           assigned_callcapture_number: string | null
+          business_hours: Json | null
           business_hours_24_7: boolean
           business_hours_schedule: Json | null
           business_name: string
@@ -255,13 +331,20 @@ export type Database = {
           crm_connected_at: string | null
           crm_interest: string[] | null
           crm_provider: string | null
+          default_job_duration_minutes: number | null
           email: string
           faqs: Json
           first_test_call_id: string | null
           forward_first: boolean
           forward_phone: string | null
           forwarding_from_number: string | null
+          google_calendar_id: string | null
           google_category: string | null
+          google_oauth_access_token: string | null
+          google_oauth_email: string | null
+          google_oauth_expires_at: string | null
+          google_oauth_refresh_token: string | null
+          google_oauth_scope: string | null
           google_place_id: string | null
           google_rating: number | null
           greeting: string | null
@@ -277,6 +360,7 @@ export type Database = {
           number_status: string | null
           number_test_expires_at: string | null
           onboarding_completed_at: string | null
+          owner_email: string | null
           owner_name: string
           payment_status: string
           phone_mode: string | null
@@ -315,6 +399,7 @@ export type Database = {
           alert_phone: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
+          business_hours?: Json | null
           business_hours_24_7?: boolean
           business_hours_schedule?: Json | null
           business_name: string
@@ -323,13 +408,20 @@ export type Database = {
           crm_connected_at?: string | null
           crm_interest?: string[] | null
           crm_provider?: string | null
+          default_job_duration_minutes?: number | null
           email: string
           faqs?: Json
           first_test_call_id?: string | null
           forward_first?: boolean
           forward_phone?: string | null
           forwarding_from_number?: string | null
+          google_calendar_id?: string | null
           google_category?: string | null
+          google_oauth_access_token?: string | null
+          google_oauth_email?: string | null
+          google_oauth_expires_at?: string | null
+          google_oauth_refresh_token?: string | null
+          google_oauth_scope?: string | null
           google_place_id?: string | null
           google_rating?: number | null
           greeting?: string | null
@@ -345,6 +437,7 @@ export type Database = {
           number_status?: string | null
           number_test_expires_at?: string | null
           onboarding_completed_at?: string | null
+          owner_email?: string | null
           owner_name: string
           payment_status?: string
           phone_mode?: string | null
@@ -383,6 +476,7 @@ export type Database = {
           alert_phone?: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
+          business_hours?: Json | null
           business_hours_24_7?: boolean
           business_hours_schedule?: Json | null
           business_name?: string
@@ -391,13 +485,20 @@ export type Database = {
           crm_connected_at?: string | null
           crm_interest?: string[] | null
           crm_provider?: string | null
+          default_job_duration_minutes?: number | null
           email?: string
           faqs?: Json
           first_test_call_id?: string | null
           forward_first?: boolean
           forward_phone?: string | null
           forwarding_from_number?: string | null
+          google_calendar_id?: string | null
           google_category?: string | null
+          google_oauth_access_token?: string | null
+          google_oauth_email?: string | null
+          google_oauth_expires_at?: string | null
+          google_oauth_refresh_token?: string | null
+          google_oauth_scope?: string | null
           google_place_id?: string | null
           google_rating?: number | null
           greeting?: string | null
@@ -413,6 +514,7 @@ export type Database = {
           number_status?: string | null
           number_test_expires_at?: string | null
           onboarding_completed_at?: string | null
+          owner_email?: string | null
           owner_name?: string
           payment_status?: string
           phone_mode?: string | null
@@ -494,9 +596,12 @@ export type Database = {
       callcapture_leads: {
         Row: {
           address: string | null
+          appointment_id: string | null
+          booking_status: string | null
           business_id: string | null
           client_id: string | null
           created_at: string
+          email: string | null
           id: string
           intake_answers: Json | null
           issue: string | null
@@ -519,9 +624,12 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          appointment_id?: string | null
+          booking_status?: string | null
           business_id?: string | null
           client_id?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           intake_answers?: Json | null
           issue?: string | null
@@ -544,9 +652,12 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          appointment_id?: string | null
+          booking_status?: string | null
           business_id?: string | null
           client_id?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           intake_answers?: Json | null
           issue?: string | null
@@ -568,6 +679,13 @@ export type Database = {
           urgency?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "callcapture_leads_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_appointments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "callcapture_leads_business_id_fkey"
             columns: ["business_id"]
