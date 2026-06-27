@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
             recurring: { interval: "month" },
             unit_amount: 9900,
             product_data: {
-              name: "CallCapture Pro",
+              name: "Vektuor",
               description: "AI receptionist + lead capture",
             },
           },
