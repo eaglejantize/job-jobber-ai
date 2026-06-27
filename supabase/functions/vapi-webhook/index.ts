@@ -283,6 +283,45 @@ Deno.serve(async (req) => {
       await logEvent(clientId, vapiCallId, "sms_sent", "skipped", { reason: !clientId ? "no_tenant" : "no_lead" });
     }
 
+    // Owner email notification — fires on EVERY call with a resolved tenant,
+    // independent of booking or customer email capture.
+    if (clientId) {
+      try {
+        const { data: tenant } = await supabase
+          .from("callcapture_clients")
+          .select("business_name, owner_email, email")
+          .eq("id", clientId).maybeSingle();
+        const recipient = (tenant?.owner_email || (tenant as any)?.email || "").trim();
+        if (!recipient) {
+          await logEvent(clientId, vapiCallId, "owner_email_sent", "skipped", { reason: "no_owner_email" });
+        } else {
+          const r = await fetch(`${SUPABASE_URL}/functions/v1/send-transactional-email`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              templateName: "new-lead-owner",
+              recipientEmail: recipient,
+              idempotencyKey: `owner-lead-${vapiCallId}`,
+              templateData: {
+                business_name: tenant?.business_name ?? "your business",
+                caller_name: extracted.name ?? callerName ?? "Unknown caller",
+                caller_phone: extracted.phone ?? callerPhone ?? "",
+                service: extracted.service ?? "",
+                timing: extracted.timing ?? "",
+                summary: summary ?? extracted.notes ?? "",
+                transcript_excerpt: typeof transcriptText === "string" ? transcriptText.slice(0, 1500) : "",
+                dashboard_link: "https://vektuor.com/dashboard",
+              },
+            }),
+          });
+          const txt = await r.text();
+          await logEvent(clientId, vapiCallId, r.ok ? "owner_email_sent" : "owner_email_failed", r.ok ? "ok" : "error", { status: r.status, body: txt.slice(0, 300) });
+        }
+      } catch (e) {
+        await logEvent(clientId, vapiCallId, "owner_email_failed", "error", { error: String(e) });
+      }
+    }
+
     // If an appointment was booked during the call (via the bookSlot tool),
     // send customer SMS + customer email + owner email confirmations.
     if (clientId && leadId) {
