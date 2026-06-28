@@ -43,16 +43,7 @@ export default function TestingTab({ ctx }: { ctx: UseControlCenterData }) {
       .eq("call_id", open.id)
       .order("created_at", { ascending: true })
       .then(({ data }) => setTurns(data || []));
-    if (open.vapi_call_id) {
-      supabase
-        .from("callcapture_leads")
-        .select("*")
-        .eq("vapi_call_id", open.vapi_call_id)
-        .maybeSingle()
-        .then(({ data }) => setLead(data));
-    } else {
-      setLead(null);
-    }
+    setLead(open.structured_data ?? null);
   }, [open]);
 
   return (
