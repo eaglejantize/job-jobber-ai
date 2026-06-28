@@ -7,6 +7,7 @@ import { UseControlCenterData } from "../useControlCenterData";
 
 type CallRow = {
   id: string;
+  vapi_call_id?: string | null;
   caller_number?: string | null;
   status?: string | null;
   duration_seconds?: number | null;
@@ -42,12 +43,16 @@ export default function TestingTab({ ctx }: { ctx: UseControlCenterData }) {
       .eq("call_id", open.id)
       .order("created_at", { ascending: true })
       .then(({ data }) => setTurns(data || []));
-    supabase
-      .from("callcapture_leads")
-      .select("*")
-      .eq("call_id", open.id)
-      .maybeSingle()
-      .then(({ data }) => setLead(data));
+    if (open.vapi_call_id) {
+      supabase
+        .from("callcapture_leads")
+        .select("*")
+        .eq("vapi_call_id", open.vapi_call_id)
+        .maybeSingle()
+        .then(({ data }) => setLead(data));
+    } else {
+      setLead(null);
+    }
   }, [open]);
 
   return (
