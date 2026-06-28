@@ -1,10 +1,10 @@
 import Layout from "@/components/Layout";
-import SetupAccordion from "@/setup/SetupAccordion";
+import ControlCenter from "@/settings/ControlCenter";
 
 export default function Settings() {
   return (
     <Layout>
-      <SetupAccordion />
+      <ControlCenter />
     </Layout>
   );
 }
