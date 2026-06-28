@@ -26,6 +26,88 @@ function buildPrompt(c: Record<string, unknown>): string {
   lines.push(`Industry: ${industry}.`)
   lines.push(`Tone: ${tone}. Speak naturally, warmly, and concisely.`)
   lines.push('')
+  const style = c.conversation_style as string | null
+  const personality = c.ai_personality as string | null
+  if (style) lines.push(`Conversation style: ${style}.`)
+  if (personality) lines.push(`Personality: ${personality}`)
+  const language = (c.language as string) || 'en-US'
+  lines.push(`Language: ${language}.`)
+  lines.push('')
+
+  const services = (c.services as string[] | null) ?? []
+  if (services.length) {
+    lines.push('Services offered:')
+    services.forEach((s) => lines.push(`- ${s}`))
+    lines.push('')
+  }
+
+  const brands = (c.brands_serviced as string[] | null) ?? []
+  if (brands.length) {
+    lines.push(`Brands serviced: ${brands.join(', ')}.`)
+    lines.push('')
+  }
+
+  const hours = c.business_hours_schedule as Record<string, { open: string; close: string; closed: boolean }> | null
+  if (hours) {
+    const list = Object.entries(hours)
+      .map(([d, h]) => (h.closed ? `${d}: Closed` : `${d}: ${h.open}-${h.close}`))
+      .join(', ')
+    lines.push(`Business hours: ${list}.`)
+    lines.push('')
+  }
+
+  const sa = c.service_area as { cities?: string[]; zips?: string[]; radius_miles?: number } | null
+  if (sa && (sa.cities?.length || sa.zips?.length || sa.radius_miles)) {
+    const parts: string[] = []
+    if (sa.cities?.length) parts.push(`Cities: ${sa.cities.join(', ')}`)
+    if (sa.zips?.length) parts.push(`Zips: ${sa.zips.join(', ')}`)
+    if (sa.radius_miles) parts.push(`Radius: ${sa.radius_miles} miles`)
+    lines.push(`Service area — ${parts.join(' · ')}.`)
+    lines.push('')
+  }
+
+  if (c.emergency_services) {
+    const notes = (c.emergency_rules as { notes?: string } | null)?.notes || ''
+    lines.push(`Emergency service: AVAILABLE. ${notes}`)
+    lines.push('')
+  }
+
+  const scheduling = c.scheduling_enabled as boolean | null
+  const schedMode = c.scheduling_mode as string | null
+  if (scheduling) {
+    lines.push(`Scheduling mode: ${schedMode || 'intake_only'}.`)
+    if (c.diagnostic_fee != null) lines.push(`Diagnostic / service fee: $${c.diagnostic_fee}.`)
+    if (schedMode === 'transfer_to_office' && c.transfer_number) {
+      lines.push(`If the caller wants to book, transfer to ${c.transfer_number}.`)
+    }
+    lines.push('')
+  }
+
+  const faqs = (c.faqs as Array<{ q: string; a: string }> | null) ?? []
+  if (faqs.length) {
+    lines.push('Frequently asked questions (answer using these):')
+    faqs.forEach((f) => lines.push(`Q: ${f.q}\nA: ${f.a}`))
+    lines.push('')
+  }
+
+  if (c.company_policies) {
+    lines.push(`Company policies: ${c.company_policies}`)
+    lines.push('')
+  }
+  if (c.warranty_terms) {
+    lines.push(`Warranty: ${c.warranty_terms}`)
+    lines.push('')
+  }
+  if (c.service_area_notes) {
+    lines.push(`Service area notes: ${c.service_area_notes}`)
+    lines.push('')
+  }
+  if (c.knowledge_base) {
+    lines.push('Knowledge base:')
+    lines.push(String(c.knowledge_base))
+    lines.push('')
+  }
+
   lines.push('Your job is to answer the call, capture lead information, and let the caller know someone will follow up shortly.')
   lines.push('')
   if (questions.length) {
@@ -188,8 +270,17 @@ Deno.serve(async (req) => {
     })
     if (!patchRes.ok) {
       const text = await patchRes.text()
+      await admin.from('callcapture_clients').update({
+        last_vapi_sync_at: new Date().toISOString(),
+        last_vapi_sync_status: `error: ${patchRes.status} ${text.slice(0, 200)}`,
+      } as never).eq('id', clientId)
       return new Response(JSON.stringify({ ok: false, error: `Vapi update failed: ${patchRes.status} ${text}`, assistant_id: assistantId }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
+
+    await admin.from('callcapture_clients').update({
+      last_vapi_sync_at: new Date().toISOString(),
+      last_vapi_sync_status: 'ok',
+    } as never).eq('id', clientId)
 
     return new Response(JSON.stringify({ ok: true, assistant_id: assistantId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
