@@ -270,8 +270,17 @@ Deno.serve(async (req) => {
     })
     if (!patchRes.ok) {
       const text = await patchRes.text()
+      await admin.from('callcapture_clients').update({
+        last_vapi_sync_at: new Date().toISOString(),
+        last_vapi_sync_status: `error: ${patchRes.status} ${text.slice(0, 200)}`,
+      } as never).eq('id', clientId)
       return new Response(JSON.stringify({ ok: false, error: `Vapi update failed: ${patchRes.status} ${text}`, assistant_id: assistantId }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
+
+    await admin.from('callcapture_clients').update({
+      last_vapi_sync_at: new Date().toISOString(),
+      last_vapi_sync_status: 'ok',
+    } as never).eq('id', clientId)
 
     return new Response(JSON.stringify({ ok: true, assistant_id: assistantId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {
