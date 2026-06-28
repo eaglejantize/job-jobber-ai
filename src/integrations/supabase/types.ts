@@ -319,20 +319,31 @@ export type Database = {
           address: string | null
           after_hours_message: string | null
           after_hours_mode: string
+          ai_personality: string | null
           alert_phone: string
           answer_after_hours: boolean
           assigned_callcapture_number: string | null
+          brands_serviced: string[] | null
+          business_category_group: string | null
+          business_email: string | null
           business_hours: Json | null
           business_hours_24_7: boolean
           business_hours_schedule: Json | null
           business_name: string
           business_phone: string | null
+          call_recording_enabled: boolean | null
+          call_summary_enabled: boolean | null
+          company_policies: string | null
+          conversation_style: string | null
           created_at: string
           crm_connected_at: string | null
           crm_interest: string[] | null
           crm_provider: string | null
           default_job_duration_minutes: number | null
+          diagnostic_fee: number | null
           email: string
+          emergency_rules: Json | null
+          emergency_services: boolean | null
           faqs: Json
           first_test_call_id: string | null
           forward_first: boolean
@@ -348,12 +359,18 @@ export type Database = {
           google_place_id: string | null
           google_rating: number | null
           greeting: string | null
+          holiday_hours: Json | null
           human_pause: boolean
           id: string
           include_business_name: boolean
           industry: string | null
+          industry_workflow: Json | null
           intake_questions: Json | null
           is_super_admin: boolean | null
+          knowledge_base: string | null
+          language: string | null
+          last_vapi_sync_at: string | null
+          last_vapi_sync_status: string | null
           launched_at: string | null
           notification_settings: Json
           number_provisioned_at: string | null
@@ -366,11 +383,16 @@ export type Database = {
           phone_mode: string | null
           preferred_area_code: string | null
           rings_before_answer: number
+          scheduling_enabled: boolean | null
+          scheduling_mode: string | null
           servanahq_enabled: boolean
           servanahq_tenant_id: string | null
+          service_area: Json | null
+          service_area_notes: string | null
           services: string[]
           setup_status: string
           setup_step: number
+          sms_followup_enabled: boolean | null
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -378,6 +400,7 @@ export type Database = {
           timezone: string
           tone: string
           transfer_fallback: string
+          transfer_number: string | null
           transfer_triggers: string[]
           trial_ends_at: string | null
           twilio_phone_number_sid: string | null
@@ -388,28 +411,43 @@ export type Database = {
           voice_id: string | null
           voice_label: string | null
           voice_speed: string
+          voicemail_enabled: boolean | null
           voicemail_fallback: boolean
+          warranty_terms: string | null
+          webhook_secret: string | null
           webhook_status: string | null
+          webhook_urls: Json | null
           website: string | null
         }
         Insert: {
           address?: string | null
           after_hours_message?: string | null
           after_hours_mode?: string
+          ai_personality?: string | null
           alert_phone: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
+          brands_serviced?: string[] | null
+          business_category_group?: string | null
+          business_email?: string | null
           business_hours?: Json | null
           business_hours_24_7?: boolean
           business_hours_schedule?: Json | null
           business_name: string
           business_phone?: string | null
+          call_recording_enabled?: boolean | null
+          call_summary_enabled?: boolean | null
+          company_policies?: string | null
+          conversation_style?: string | null
           created_at?: string
           crm_connected_at?: string | null
           crm_interest?: string[] | null
           crm_provider?: string | null
           default_job_duration_minutes?: number | null
+          diagnostic_fee?: number | null
           email: string
+          emergency_rules?: Json | null
+          emergency_services?: boolean | null
           faqs?: Json
           first_test_call_id?: string | null
           forward_first?: boolean
@@ -425,12 +463,18 @@ export type Database = {
           google_place_id?: string | null
           google_rating?: number | null
           greeting?: string | null
+          holiday_hours?: Json | null
           human_pause?: boolean
           id?: string
           include_business_name?: boolean
           industry?: string | null
+          industry_workflow?: Json | null
           intake_questions?: Json | null
           is_super_admin?: boolean | null
+          knowledge_base?: string | null
+          language?: string | null
+          last_vapi_sync_at?: string | null
+          last_vapi_sync_status?: string | null
           launched_at?: string | null
           notification_settings?: Json
           number_provisioned_at?: string | null
@@ -443,11 +487,16 @@ export type Database = {
           phone_mode?: string | null
           preferred_area_code?: string | null
           rings_before_answer?: number
+          scheduling_enabled?: boolean | null
+          scheduling_mode?: string | null
           servanahq_enabled?: boolean
           servanahq_tenant_id?: string | null
+          service_area?: Json | null
+          service_area_notes?: string | null
           services?: string[]
           setup_status?: string
           setup_step?: number
+          sms_followup_enabled?: boolean | null
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -455,6 +504,7 @@ export type Database = {
           timezone?: string
           tone?: string
           transfer_fallback?: string
+          transfer_number?: string | null
           transfer_triggers?: string[]
           trial_ends_at?: string | null
           twilio_phone_number_sid?: string | null
@@ -465,28 +515,43 @@ export type Database = {
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
+          voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
+          warranty_terms?: string | null
+          webhook_secret?: string | null
           webhook_status?: string | null
+          webhook_urls?: Json | null
           website?: string | null
         }
         Update: {
           address?: string | null
           after_hours_message?: string | null
           after_hours_mode?: string
+          ai_personality?: string | null
           alert_phone?: string
           answer_after_hours?: boolean
           assigned_callcapture_number?: string | null
+          brands_serviced?: string[] | null
+          business_category_group?: string | null
+          business_email?: string | null
           business_hours?: Json | null
           business_hours_24_7?: boolean
           business_hours_schedule?: Json | null
           business_name?: string
           business_phone?: string | null
+          call_recording_enabled?: boolean | null
+          call_summary_enabled?: boolean | null
+          company_policies?: string | null
+          conversation_style?: string | null
           created_at?: string
           crm_connected_at?: string | null
           crm_interest?: string[] | null
           crm_provider?: string | null
           default_job_duration_minutes?: number | null
+          diagnostic_fee?: number | null
           email?: string
+          emergency_rules?: Json | null
+          emergency_services?: boolean | null
           faqs?: Json
           first_test_call_id?: string | null
           forward_first?: boolean
@@ -502,12 +567,18 @@ export type Database = {
           google_place_id?: string | null
           google_rating?: number | null
           greeting?: string | null
+          holiday_hours?: Json | null
           human_pause?: boolean
           id?: string
           include_business_name?: boolean
           industry?: string | null
+          industry_workflow?: Json | null
           intake_questions?: Json | null
           is_super_admin?: boolean | null
+          knowledge_base?: string | null
+          language?: string | null
+          last_vapi_sync_at?: string | null
+          last_vapi_sync_status?: string | null
           launched_at?: string | null
           notification_settings?: Json
           number_provisioned_at?: string | null
@@ -520,11 +591,16 @@ export type Database = {
           phone_mode?: string | null
           preferred_area_code?: string | null
           rings_before_answer?: number
+          scheduling_enabled?: boolean | null
+          scheduling_mode?: string | null
           servanahq_enabled?: boolean
           servanahq_tenant_id?: string | null
+          service_area?: Json | null
+          service_area_notes?: string | null
           services?: string[]
           setup_status?: string
           setup_step?: number
+          sms_followup_enabled?: boolean | null
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -532,6 +608,7 @@ export type Database = {
           timezone?: string
           tone?: string
           transfer_fallback?: string
+          transfer_number?: string | null
           transfer_triggers?: string[]
           trial_ends_at?: string | null
           twilio_phone_number_sid?: string | null
@@ -542,8 +619,12 @@ export type Database = {
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
+          voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
+          warranty_terms?: string | null
+          webhook_secret?: string | null
           webhook_status?: string | null
+          webhook_urls?: Json | null
           website?: string | null
         }
         Relationships: []
