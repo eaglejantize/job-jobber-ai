@@ -334,6 +334,7 @@ export type Database = {
           call_recording_enabled: boolean | null
           call_summary_enabled: boolean | null
           company_policies: string | null
+          concierge_state: Json | null
           conversation_style: string | null
           created_at: string
           crm_connected_at: string | null
@@ -393,6 +394,7 @@ export type Database = {
           setup_status: string
           setup_step: number
           sms_followup_enabled: boolean | null
+          sms_followup_template: string | null
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -438,6 +440,7 @@ export type Database = {
           call_recording_enabled?: boolean | null
           call_summary_enabled?: boolean | null
           company_policies?: string | null
+          concierge_state?: Json | null
           conversation_style?: string | null
           created_at?: string
           crm_connected_at?: string | null
@@ -497,6 +500,7 @@ export type Database = {
           setup_status?: string
           setup_step?: number
           sms_followup_enabled?: boolean | null
+          sms_followup_template?: string | null
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -542,6 +546,7 @@ export type Database = {
           call_recording_enabled?: boolean | null
           call_summary_enabled?: boolean | null
           company_policies?: string | null
+          concierge_state?: Json | null
           conversation_style?: string | null
           created_at?: string
           crm_connected_at?: string | null
@@ -601,6 +606,7 @@ export type Database = {
           setup_status?: string
           setup_step?: number
           sms_followup_enabled?: boolean | null
+          sms_followup_template?: string | null
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null

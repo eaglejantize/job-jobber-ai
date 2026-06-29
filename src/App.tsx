@@ -9,6 +9,7 @@ import Pricing from "./pages/Pricing.tsx";
 import Setup from "./pages/Setup.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
+import Concierge from "./pages/Concierge.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Home from "./pages/Home.tsx";
 import Support from "./pages/Support.tsx";
@@ -44,6 +45,7 @@ const App = () => (
           <Route path="/setup" element={<RequireAuth><Setup /></RequireAuth>} />
           <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><OnboardingGate><Settings /></OnboardingGate></RequireAuth>} />
+          <Route path="/settings/concierge" element={<RequireAuth><OnboardingGate><Concierge /></OnboardingGate></RequireAuth>} />
           <Route path="/dashboard" element={<RequireAuth><OnboardingGate><Dashboard /></OnboardingGate></RequireAuth>} />
           <Route path="/home" element={<RequireAuth><OnboardingGate><Home /></OnboardingGate></RequireAuth>} />
           <Route path="/leads" element={<RequireAuth><OnboardingGate><LeadInbox /></OnboardingGate></RequireAuth>} />
