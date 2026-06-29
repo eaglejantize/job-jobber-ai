@@ -1,0 +1,1 @@
+ALTER TABLE public.callcapture_clients ADD COLUMN IF NOT EXISTS sms_followup_template TEXT;

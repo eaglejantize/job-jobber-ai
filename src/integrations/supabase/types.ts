@@ -394,6 +394,7 @@ export type Database = {
           setup_status: string
           setup_step: number
           sms_followup_enabled: boolean | null
+          sms_followup_template: string | null
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -499,6 +500,7 @@ export type Database = {
           setup_status?: string
           setup_step?: number
           sms_followup_enabled?: boolean | null
+          sms_followup_template?: string | null
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -604,6 +606,7 @@ export type Database = {
           setup_status?: string
           setup_step?: number
           sms_followup_enabled?: boolean | null
+          sms_followup_template?: string | null
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
