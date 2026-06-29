@@ -334,6 +334,7 @@ export type Database = {
           call_recording_enabled: boolean | null
           call_summary_enabled: boolean | null
           company_policies: string | null
+          concierge_state: Json | null
           conversation_style: string | null
           created_at: string
           crm_connected_at: string | null
@@ -438,6 +439,7 @@ export type Database = {
           call_recording_enabled?: boolean | null
           call_summary_enabled?: boolean | null
           company_policies?: string | null
+          concierge_state?: Json | null
           conversation_style?: string | null
           created_at?: string
           crm_connected_at?: string | null
@@ -542,6 +544,7 @@ export type Database = {
           call_recording_enabled?: boolean | null
           call_summary_enabled?: boolean | null
           company_policies?: string | null
+          concierge_state?: Json | null
           conversation_style?: string | null
           created_at?: string
           crm_connected_at?: string | null

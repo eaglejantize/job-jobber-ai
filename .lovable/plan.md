@@ -1,153 +1,119 @@
-# Vektuor AI Control Center — Settings Redesign
+# AI Setup Concierge v1
 
-Replace the current 11-step accordion Settings page with a tabbed AI Control Center that becomes the single source of truth for every receptionist. Subscribers configure everything in Vektuor; Vapi is mirrored automatically.
+A guided, conversational setup assistant that interviews the business owner section-by-section and proposes Vektuor configuration. It writes to the **same `callcapture_clients` fields** that the AI Control Center and Sync to Vapi already use — no parallel data model.
 
-## Goals
+## Entry Points
 
-- Replace `/settings` (currently `SetupAccordion`) with a `ControlCenter` shell using horizontal tabs.
-- Make the tab framework extensible: each tab is a self-contained panel registered in one config array.
-- Keep onboarding wizard (`/setup`) untouched — it stays the guided first-run flow. Settings is the power-user surface.
-- Add a single "Sync to Vapi" action available from every tab (sticky header) plus an auto-sync on save.
+- New prominent **"Launch AI Setup Concierge"** button at the top of `/settings` (next to the Sync to Vapi button in `ControlCenter.tsx`).
+- Inline **"Let the Concierge fill this in"** prompts on empty/incomplete sections in Business, AI Receptionist, and Knowledge tabs.
+- New route `/settings/concierge` opens the assistant in a focused full-screen layout. State persists so the user can leave and return.
 
-## Information Architecture
+## The 14 Sections
 
-```text
-/settings
-└── ControlCenter (tabs)
-    ├── Business         → profile, grouped category, hours, service area, emergency, holidays
-    ├── AI Receptionist  → greetings, voice, style, scheduling mode, fees, recording, live preview
-    ├── Knowledge        → services, FAQs, policies, warranty, brands, area notes, KB, uploads (stub)
-    ├── Integrations     → Vapi, Twilio, Google/MS calendars, Stripe, QBO, Jobber, HCP, ST, Zapier, webhooks
-    ├── Industry Workflow (Preview)  → read-only preview of workflow schema; "coming soon"
-    ├── Testing          → place test call, recent calls, transcripts, extracted intake, replay, prompt debug
-    └── Analytics        → calls, answered/missed, appts, avg length, conversion, AI performance
-```
+Asked one at a time, each with: pre-filled current value, AI-suggested value (when applicable), edit field, and per-section actions.
 
-## Tab 1 — Business
+1. Business Profile (name, phone, email, address, website)
+2. Industry Selection (uses existing `IndustryCombobox`, group + specific)
+3. Services Offered
+4. Business Hours (visual editor reused from BusinessTab)
+5. Service Area
+6. Emergency Service Rules
+7. Scheduling Preferences (enabled + mode)
+8. Service / Diagnostic Fee
+9. AI Greeting (`first_message`)
+10. After-Hours Message
+11. SMS Follow-up Template
+12. FAQs
+13. Policies
+14. **Review & Apply** (before/after diff with per-field apply toggles)
 
-- Fields: name, owner, phone, email, address, website, time zone.
-- **Grouped Business Category**: replace flat dropdown with a 2-level Combobox grouped by category group (Home Services, Automotive, Commercial Services, Industrial / Manufacturing, IT / Technical, Cleaning, Logistics, Pet, Personal, Specialty Trades, Other). Persist both `business_category_group` and `business_industry`.
-- Business Hours editor (existing day-hours schema reused).
-- Service Area: list of cities/zips + radius.
-- Emergency Services toggle + after-hours rules.
-- Holiday Hours: date overrides.
+## Behavior Rules
 
-## Tab 2 — AI Receptionist
+- **Pre-fill** every section from the user's current `callcapture_clients` row.
+- **Google Business data**: if `address`/`website` are present, offer a "Use my Google Business data" action that calls the existing `business-lookup` edge function and merges the result into pending answers (user-approved only).
+- **Industry-aware suggestions**: each AI generation call includes industry + group + business name so output is tailored.
+- **Never overwrite without confirmation** — concierge stages all proposals in local "pending" state; nothing is written to the DB until the user approves in Review.
+- **Safety**: AI must not invent hours, prices, licenses, warranties, or emergency policies. Prompts explicitly instruct the model to ask via a `needs_user_input` flag rather than fabricate. Generated content is labeled "Suggested" until approved.
 
-- Greeting + After-Hours Greeting (textarea with AI rewrite button — reuse `ai-rewrite-greeting`).
-- Voice Selection (reuse `VoicePicker`), Language, Conversation Style/Tone, AI Personality.
-- Transfer Number, Voicemail enabled, Call Recording, Call Summary, SMS Follow-up toggles.
-- Scheduling block:
-  - `scheduling_enabled`
-  - `scheduling_mode` ∈ {intake_only, collect_preferred_time, book_from_calendar, transfer_to_office}
-  - `diagnostic_fee` (numeric) + display rules
-- Live Greeting Preview card (text + "Place Test Call" button reusing `TestCallButton`).
+## Per-Section AI Actions
 
-## Tab 3 — Knowledge
+A shared action bar on each step:
+- Generate for me
+- Improve this
+- Make it more professional
+- Make it warmer
+- Use my industry
+- Use my Google Business data (only when address/website exist)
 
-- Services Offered (chip list).
-- FAQs (Q/A repeater — existing schema).
-- Company Policies, Warranty, Brands Serviced, Service Area Notes (textareas).
-- Knowledge Base: long-form markdown.
-- File Uploads: UI stub + storage bucket placeholder; "Coming soon" badge, no functional upload yet.
+All actions call a single new edge function `concierge-generate` with `{ section, action, context, currentValue }`.
 
-## Tab 4 — Integrations
+## Review & Apply Screen
 
-- Cards grid. Each card: logo, status badge (Connected / Not Connected / Coming Soon), connect/disconnect action.
-- Live: Vapi (read-only status from existing assistant), Twilio (number + provisioning), Google Calendar (existing), Stripe (existing billing).
-- Coming Soon (visible but disabled): Microsoft 365, Outlook, QuickBooks, Jobber, Housecall Pro, ServiceTitan, Zapier.
-- Webhook Settings: list of outbound webhook URLs + secret reveal/regenerate.
+Table with rows per field:
+- Field label
+- Current value (from DB)
+- Suggested value (editable)
+- Apply toggle (default on for changed rows)
 
-## Tab 5 — Industry Workflow (Preview)
+Footer: **Apply Selected**, **Apply All**, **Back to Edit**.
 
-- Read-only preview panel describing the workflow schema fields: `required_fields`, `trade_questions`, `urgency_rules`, `scheduling_rules`, `service_fee_rules`, `intake_summary_format`.
-- "Coming soon" state. No editor yet. Database columns prepared so future builds drop in without migration churn.
+After apply: single `UPDATE callcapture_clients` for the chosen fields, then a success screen with:
+- Sync to Vapi (reuses existing `update-vapi-agent` invocation)
+- Test Call (links to existing TestCallButton flow)
+- Return to AI Control Center
 
-## Tab 6 — Testing
+## UX Shell
 
-- Place Test Call (reuse `TestCallButton`).
-- Recent Calls table (from `callcapture_calls`) with status, duration, caller.
-- Row drawer: transcript (`callcapture_transcript_turns`), extracted intake (lead row), structured output JSON, audio replay (if `recording_url`), prompt-debug panel showing the exact system prompt sent for that call.
+- Top progress bar (14 steps) + step list sidebar on desktop, collapsed on mobile.
+- Buttons: **Back**, **Skip Section**, **Save & Continue Later**, **Exit Without Saving**, **Restart Setup**.
+- Save & Continue Later persists `{ pendingAnswers, currentStep }` to a new `concierge_state` JSONB column on `callcapture_clients` (single column, no new tables).
+- Restart clears that column.
 
-## Tab 7 — Analytics
-
-- KPI cards: total / answered / missed calls, appts requested, appts booked, avg call length, conversion rate (booked / answered).
-- AI Performance: tool-call success rate, extraction completeness, transfer rate.
-- Customer Satisfaction: placeholder.
-
-## Sync to Vapi
-
-- Sticky header in `ControlCenter` shows last sync time + "Sync to Vapi" button.
-- Auto-sync triggered on Save in any tab (debounced, toast on success/failure).
-- Extend `update-vapi-agent` edge function to push the full mirrored payload: business name, industry, services, hours, service area, greeting, after-hours greeting, scheduling settings, service fee, knowledge base, FAQs, voice settings. Builds `systemPrompt` from all of the above so Vapi is purely the voice engine.
-- Add `last_vapi_sync_at` and `last_vapi_sync_status` to `callcapture_clients`.
-
-## Data Model Changes
-
-Single migration adding columns to `callcapture_clients`:
-
-- `business_category_group text`
-- `business_email text`
-- `service_area jsonb` (cities, zips, radius)
-- `emergency_services boolean`, `emergency_rules jsonb`
-- `holiday_hours jsonb`
-- `language text default 'en-US'`
-- `conversation_style text`
-- `ai_personality text`
-- `transfer_number text` (if missing)
-- `voicemail_enabled boolean`, `call_recording_enabled boolean`, `call_summary_enabled boolean`, `sms_followup_enabled boolean`
-- `scheduling_enabled boolean`, `scheduling_mode text`, `diagnostic_fee numeric`
-- `company_policies text`, `warranty_terms text`, `brands_serviced text[]`, `service_area_notes text`, `knowledge_base text`
-- `webhook_urls jsonb`, `webhook_secret text`
-- `industry_workflow jsonb` (preview schema slot)
-- `last_vapi_sync_at timestamptz`, `last_vapi_sync_status text`
-
-New `src/lib/industries.ts` replacement: grouped industry catalog exporting `INDUSTRY_GROUPS` and helper `findIndustry(value)`.
-
-## File Plan
+## Files to Add
 
 ```text
-src/pages/Settings.tsx                          # render <ControlCenter />
-src/settings/ControlCenter.tsx                  # tab shell, sticky header, sync action
-src/settings/tabs/BusinessTab.tsx
-src/settings/tabs/AiReceptionistTab.tsx
-src/settings/tabs/KnowledgeTab.tsx
-src/settings/tabs/IntegrationsTab.tsx
-src/settings/tabs/IndustryWorkflowTab.tsx       # preview-only
-src/settings/tabs/TestingTab.tsx
-src/settings/tabs/AnalyticsTab.tsx
-src/settings/tabs/registry.ts                   # [{ id, label, icon, component, requiresFlag? }]
-src/settings/useControlCenterData.ts            # extends useSetupData with new fields
-src/settings/IndustryCombobox.tsx               # grouped combobox
-src/settings/SyncToVapiButton.tsx
-src/lib/industries.ts                           # replaced with grouped catalog
-supabase/functions/update-vapi-agent/index.ts   # extended payload + status writeback
-supabase/functions/sync-vapi-full/index.ts      # optional dedicated full-sync entry
+src/concierge/
+  ConciergePage.tsx          # route shell, progress, nav, persistence
+  useConcierge.ts            # state machine: pending answers, step, load/save
+  sections.ts                # 14 section definitions (id, label, fields, prompt hints)
+  SectionRenderer.tsx        # dispatches to per-section editors
+  ActionBar.tsx              # Generate/Improve/Professional/Warmer/Industry/GBP
+  ReviewAndApply.tsx         # before/after diff with toggles
+  PostApply.tsx              # Sync to Vapi / Test Call / Return
+  sections/                  # small editors per section, reusing Business/AI/Knowledge tab inputs
+src/pages/Concierge.tsx      # thin Layout wrapper around ConciergePage
+supabase/functions/concierge-generate/index.ts
 ```
 
-`SetupAccordion` and `/setup` wizard remain untouched.
+## Files to Modify
 
-## Rollout
+- `src/App.tsx` — add `/settings/concierge` route.
+- `src/settings/ControlCenter.tsx` — add "Launch AI Setup Concierge" button in the header.
+- `src/settings/tabs/BusinessTab.tsx`, `AiReceptionistTab.tsx`, `KnowledgeTab.tsx` — small "Let the Concierge handle this" callouts on empty sections (no logic change to existing fields).
 
-1. Migration: add columns + grouped industry storage.
-2. Replace `src/lib/industries.ts` with grouped catalog; build `IndustryCombobox`.
-3. Build `ControlCenter` shell + tab registry; wire `/settings` to it.
-4. Implement Business, AI Receptionist, Knowledge tabs first (covers Vapi sync surface).
-5. Extend `update-vapi-agent` to mirror full payload + write `last_vapi_sync_*`.
-6. Add Integrations tab (Vapi/Twilio/Calendar/Stripe live; others as "coming soon" cards).
-7. Add Testing tab (call list + drawer).
-8. Add Analytics tab (KPI queries from `callcapture_calls` / `callcapture_appointments`).
-9. Add Industry Workflow preview tab.
+## Database
 
-## Out of Scope
+One migration: add `concierge_state JSONB` column to `callcapture_clients` for save-and-resume. No new tables. All applied values land in existing columns already used by `update-vapi-agent`.
 
-- Workflow engine execution (only schema prep).
-- Real integrations for QBO, Jobber, HCP, ServiceTitan, Zapier, MS365 (UI stubs only).
-- Knowledge file uploads (UI stub only).
-- Customer Satisfaction analytics.
+## Edge Function: `concierge-generate`
 
-## Open Questions
+- Auth: verifies caller, loads their `callcapture_clients` row server-side for context (industry, business name, hours, etc.).
+- Input: `{ section: SectionId, action: "generate"|"improve"|"professional"|"warmer"|"industry"|"gbp", currentValue, userNotes? }`.
+- Uses Lovable AI Gateway with `google/gemini-3-flash-preview`.
+- For `gbp`: calls existing `business-lookup` internally if address/website present; otherwise returns `needs_user_input`.
+- Returns `{ value, notes?, needs_user_input? }`. For FAQs/services/policies, `value` is a typed array; for messages, a string.
+- Output schemas kept small to stay within Gemini constrained-decoding limits (per ai-sdk-agent-patterns guidance).
 
-1. Should saving any tab auto-trigger Vapi sync, or only the explicit "Sync to Vapi" button?
-2. For Industry Workflow, do you want the preview tab visible to all subscribers now, or hidden behind a super-admin flag until shipped?
-3. Should the existing 11-step wizard at `/setup` keep using the old flat industry list, or also adopt the grouped catalog?
+## Reuse, Not Rebuild
+
+- Hours editor, IndustryCombobox, services/FAQ/policy editors are imported from existing tab components where possible.
+- Sync to Vapi reuses `SyncToVapiButton` / `update-vapi-agent`.
+- Test Call reuses `TestCallButton`.
+- Google Business reuses `business-lookup`.
+
+## Out of Scope (v1)
+
+- No standalone "concierge sessions" table or analytics.
+- No multi-user collaboration on a single concierge run.
+- No voice-first concierge (text chat-style UI only).
+- No automatic background regeneration — every change is user-initiated.
