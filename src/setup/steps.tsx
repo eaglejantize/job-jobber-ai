@@ -16,6 +16,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import PhoneNumberPicker from "@/components/PhoneNumberPicker";
+import { useEnsureClient } from "@/setup/useEnsureClient";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -504,6 +505,7 @@ export function Step2BusinessDetails({ data, update, mode }: StepProps) {
 // -------------------- Step 3: Phone number --------------------
 
 export function Step3PhoneNumber({ data, update, clientId, mode }: StepProps) {
+  const { ensureClient, initializing } = useEnsureClient();
   return (
     <div className="space-y-4">
       {mode === "wizard" && (
@@ -518,6 +520,20 @@ export function Step3PhoneNumber({ data, update, clientId, mode }: StepProps) {
         onAreaCodeChange={(v) => update({ preferred_area_code: v })}
         assignedNumber={data.assigned_callcapture_number}
         numberStatus={data.number_status}
+        initializing={initializing}
+        onEnsureClient={async () => {
+          const r = await ensureClient();
+          if (r.ok) {
+            // Reload the page-level data so clientId/derived fields pick up.
+            try {
+              window.dispatchEvent(new CustomEvent("setup:reload"));
+            } catch {
+              /* no-op */
+            }
+            return { ok: true, clientId: r.clientId };
+          }
+          return { ok: false, message: r.message };
+        }}
         onProvisioned={(phone, _sid, status) => {
           update({
             assigned_callcapture_number: phone,
