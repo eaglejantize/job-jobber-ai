@@ -18,15 +18,16 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
     (async () => {
       const { data } = await supabase
         .from("callcapture_clients")
-        .select("onboarding_completed_at, launched_at, is_super_admin")
+        .select("onboarding_completed_at, launched_at, is_super_admin, onboarding_state")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (cancelled) return;
       const row = data as any;
+      const activated = row?.onboarding_state?.activated_at;
       // Super admins always pass; treat legacy launched accounts as complete too.
-      if (!row || row.is_super_admin || row.onboarding_completed_at || row.launched_at) {
+      if (!row || row.is_super_admin || activated || row.onboarding_completed_at || row.launched_at) {
         setState("complete");
       } else {
         setState("incomplete");
@@ -39,7 +40,7 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
     return <div className="container py-20 text-sm text-muted-foreground">Loading…</div>;
   }
   if (state === "incomplete") {
-    return <Navigate to="/setup" replace />;
+    return <Navigate to="/settings/concierge" replace />;
   }
   return <>{children}</>;
 }

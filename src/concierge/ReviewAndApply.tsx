@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2 } from "lucide-react";
+import { Loader2, Rocket, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { FIELD_LABELS } from "./sections";
 import type { UseConcierge } from "./useConcierge";
+import { useOnboardingState } from "@/onboarding/useOnboardingState";
+import { ITEM_LABELS, REQUIRED_FOR_ACTIVATION } from "@/onboarding/status";
+import { ProgressPanel } from "@/onboarding/ProgressTracker";
 
 function display(v: unknown): string {
   if (v == null || v === "") return "—";
@@ -32,6 +35,7 @@ export default function ReviewAndApply({
   ctx: UseConcierge;
   onApplied: () => void;
 }) {
+  const onboarding = useOnboardingState();
   const rows = useMemo(() => {
     return Object.keys(ctx.pending).map((key) => ({
       key,
@@ -64,20 +68,26 @@ export default function ReviewAndApply({
       return;
     }
     toast({ title: "Settings updated" });
+    await onboarding.reload();
     onApplied();
   }
 
-  if (rows.length === 0) {
-    return (
-      <div className="text-center py-10 text-muted-foreground">
-        You haven't proposed any changes yet. Go back to the sections to fill things in.
-      </div>
-    );
+  async function activate() {
+    // Apply any remaining pending changes first
+    if (rows.length > 0) {
+      await ctx.apply(rows.map((r) => r.key));
+    }
+    await onboarding.activate();
+    toast({ title: "AI receptionist activated" });
+    onApplied();
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-border overflow-hidden">
+      <ProgressPanel />
+
+      {rows.length > 0 && (
+        <div className="rounded-lg border border-border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -105,8 +115,11 @@ export default function ReviewAndApply({
             ))}
           </tbody>
         </table>
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" onClick={() => doApply(false)} disabled={applying} type="button">
           {applying && <Loader2 className="h-4 w-4 animate-spin" />}
           Apply selected
@@ -115,6 +128,42 @@ export default function ReviewAndApply({
           {applying && <Loader2 className="h-4 w-4 animate-spin" />}
           Apply all
         </Button>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-border p-4">
+        <div className="font-semibold mb-2 flex items-center gap-2">
+          <Rocket className="h-4 w-4 text-primary" /> Activation checklist
+        </div>
+        <ul className="text-sm space-y-1 mb-4">
+          {REQUIRED_FOR_ACTIVATION.map((id) => {
+            const done = onboarding.state.items[id]?.status === "complete";
+            return (
+              <li key={id} className="flex items-center gap-2">
+                {done ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                )}
+                <span className={done ? "" : "text-muted-foreground"}>{ITEM_LABELS[id]}</span>
+              </li>
+            );
+          })}
+        </ul>
+        <Button
+          onClick={activate}
+          disabled={!onboarding.readiness.ready || applying}
+          className="w-full bg-cta hover:opacity-90 text-base py-6"
+          type="button"
+        >
+          <Rocket className="h-5 w-5" />
+          ACTIVATE MY AI RECEPTIONIST
+        </Button>
+        {!onboarding.readiness.ready && (
+          <p className="text-xs text-muted-foreground mt-2 text-center">
+            Complete the required items above to activate.
+          </p>
+        )}
       </div>
     </div>
   );
