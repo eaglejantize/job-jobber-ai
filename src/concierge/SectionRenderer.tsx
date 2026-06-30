@@ -673,3 +673,133 @@ export default function SectionRenderer({
       return null;
   }
 }
+
+function GoogleBusinessSection({ ctx }: { ctx: UseConcierge }) {
+  const [loading, setLoading] = useState(false);
+  const name = String((ctx.current as any)?.business_name ?? "");
+  const address = String((ctx.current as any)?.address ?? "");
+  const website = String((ctx.current as any)?.website ?? "");
+
+  async function importFromGoogle() {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("business-lookup", {
+        body: { name, address, website },
+      });
+      if (error) throw error;
+      const b = (data as any)?.business;
+      if (b) {
+        if (b.business_name) ctx.setField("business_name", b.business_name);
+        if (b.address) ctx.setField("address", b.address);
+        if (b.website) ctx.setField("website", b.website);
+        if (b.phone) ctx.setField("business_phone", b.phone);
+        if (b.place_id) ctx.setField("google_place_id", b.place_id);
+      }
+      toast({ title: "Imported from Google" });
+    } catch (e) {
+      toast({
+        title: "Couldn't reach Google",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        We'll look up your business on Google and pull verified name, address, phone,
+        and website.
+      </p>
+      <Button onClick={importFromGoogle} disabled={loading || (!name && !address && !website)} type="button">
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+        Import from Google
+      </Button>
+    </div>
+  );
+}
+
+function WebsiteImportSection({ ctx }: { ctx: UseConcierge }) {
+  const [loading, setLoading] = useState(false);
+  const website = String(ctx.pending.website ?? (ctx.current as any)?.website ?? "");
+
+  async function importFromWebsite() {
+    if (!website) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-prefill-setup", {
+        body: { website },
+      });
+      if (error) throw error;
+      const out = (data as any) ?? {};
+      const map: Record<string, string> = {
+        business_name: "business_name",
+        industry: "industry",
+        greeting: "greeting",
+        services: "services",
+        faqs: "faqs",
+        knowledge_base: "knowledge_base",
+      };
+      for (const [k, dest] of Object.entries(map)) {
+        if (out[k] != null && out[k] !== "") ctx.setField(dest, out[k]);
+      }
+      toast({ title: "Website imported" });
+    } catch (e) {
+      toast({
+        title: "Couldn't read site",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <Label>Website URL</Label>
+      <Input
+        value={website}
+        onChange={(e) => ctx.setField("website", e.target.value)}
+        placeholder="https://acmeplumbing.com"
+      />
+      <Button onClick={importFromWebsite} disabled={loading || !website} type="button">
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+        Read site and prefill
+      </Button>
+    </div>
+  );
+}
+
+function TestCallSection({ ctx }: { ctx: UseConcierge }) {
+  const passedAt = (ctx.current as any)?.test_call_passed_at;
+  async function markPassed() {
+    if (!ctx.clientId) return;
+    await supabase
+      .from("callcapture_clients")
+      .update({ test_call_passed_at: new Date().toISOString() } as never)
+      .eq("id", ctx.clientId);
+    toast({ title: "Test call marked complete" });
+    await ctx.reload();
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Place a real outbound call from your AI receptionist to confirm everything sounds right.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <TestCallButton clientId={ctx.clientId ?? undefined} />
+        <Button variant="outline" size="sm" onClick={markPassed} type="button">
+          Mark test call complete
+        </Button>
+      </div>
+      {passedAt && (
+        <div className="text-xs text-emerald-600">
+          Last successful test: {new Date(passedAt).toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
