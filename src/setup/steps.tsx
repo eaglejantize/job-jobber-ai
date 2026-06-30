@@ -532,7 +532,7 @@ export function Step3PhoneNumber({ data, update, clientId, mode }: StepProps) {
             }
             return { ok: true, clientId: r.clientId };
           }
-          return { ok: false, message: r.message };
+          return { ok: false, message: (r as { message?: string }).message };
         }}
         onProvisioned={(phone, _sid, status) => {
           update({
