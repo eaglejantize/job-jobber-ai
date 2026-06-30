@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar, CreditCard, FileText, MessageSquare, Phone, Webhook, Zap } from "lucide-react";
+import { Calendar, CreditCard, FileText, MessageSquare, Phone, Webhook, Zap, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { UseControlCenterData } from "../useControlCenterData";
 
@@ -16,11 +17,14 @@ type Integration = {
 
 export default function IntegrationsTab({ ctx }: { ctx: UseControlCenterData }) {
   const { data, update, save } = ctx;
+  const [calendarId, setCalendarId] = useState<string>(data.google_calendar_id || "primary");
+  const [connectingCal, setConnectingCal] = useState(false);
+  const calendarConnected = !!data.google_calendar_connected_at || !!data.google_calendar_refresh_token;
 
   const integrations: Integration[] = [
     { id: "vapi", name: "Vapi", description: "AI voice engine. Managed by Vektuor.", icon: Phone, status: data.vapi_assistant_id ? "connected" : "not_connected" },
     { id: "twilio", name: "Twilio", description: "Phone numbers, SMS, and call routing.", icon: MessageSquare, status: data.assigned_callcapture_number ? "connected" : "not_connected" },
-    { id: "google_calendar", name: "Google Calendar", description: "Real-time appointment booking.", icon: Calendar, status: data.google_calendar_refresh_token ? "connected" : "not_connected" },
+    { id: "google_calendar", name: "Google Calendar", description: "Real-time appointment booking.", icon: Calendar, status: calendarConnected ? "connected" : "not_connected" },
     { id: "ms365", name: "Microsoft 365", description: "Office 365 mail and calendar.", icon: Calendar, status: "coming_soon" },
     { id: "outlook", name: "Outlook Calendar", description: "Outlook calendar booking.", icon: Calendar, status: "coming_soon" },
     { id: "stripe", name: "Stripe", description: "Subscription billing.", icon: CreditCard, status: data.stripe_customer_id ? "connected" : "not_connected" },
@@ -32,6 +36,30 @@ export default function IntegrationsTab({ ctx }: { ctx: UseControlCenterData }) 
   ];
 
   const webhooks: string[] = data.webhook_urls || [];
+
+  async function connectCalendar() {
+    setConnectingCal(true);
+    const { error } = await save({
+      google_calendar_id: calendarId.trim() || "primary",
+      google_calendar_connected_at: new Date().toISOString(),
+    } as any);
+    setConnectingCal(false);
+    if (error) {
+      toast({ title: "Calendar connect failed", description: (error as Error).message, variant: "destructive" });
+    } else {
+      toast({ title: "Google Calendar connected" });
+      try { window.dispatchEvent(new CustomEvent("setup:reload")); } catch { /* ignore */ }
+    }
+  }
+
+  async function disconnectCalendar() {
+    const { error } = await save({
+      google_calendar_connected_at: null,
+      google_calendar_refresh_token: null,
+    } as any);
+    if (error) toast({ title: "Disconnect failed", description: (error as Error).message, variant: "destructive" });
+    else toast({ title: "Google Calendar disconnected" });
+  }
 
   return (
     <div className="space-y-8">
@@ -54,6 +82,35 @@ export default function IntegrationsTab({ ctx }: { ctx: UseControlCenterData }) 
             </div>
           ))}
         </div>
+      </section>
+
+      <section id="calendar" className="space-y-3 rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-5 w-5" />
+          <h2 className="text-lg font-semibold">Google Calendar</h2>
+          {calendarConnected && <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30">Connected</Badge>}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Vektuor uses the shared Google Calendar connector. Pick which calendar to book into, then click Connect.
+        </p>
+        <div className="grid sm:grid-cols-[1fr,auto] gap-2 max-w-md">
+          <div className="space-y-1.5">
+            <Label htmlFor="cal-id">Calendar ID</Label>
+            <Input id="cal-id" value={calendarId} onChange={(e) => setCalendarId(e.target.value)} placeholder="primary or you@domain.com" />
+          </div>
+          <div className="flex items-end gap-2">
+            {calendarConnected ? (
+              <Button variant="outline" onClick={disconnectCalendar}>Disconnect</Button>
+            ) : (
+              <Button onClick={connectCalendar} disabled={connectingCal} className="bg-cta hover:opacity-90">
+                {connectingCal ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</> : "Connect"}
+              </Button>
+            )}
+          </div>
+        </div>
+        {data.google_calendar_connected_at && (
+          <div className="text-xs text-muted-foreground">Connected {new Date(data.google_calendar_connected_at).toLocaleString()}</div>
+        )}
       </section>
 
       <section className="space-y-3">
