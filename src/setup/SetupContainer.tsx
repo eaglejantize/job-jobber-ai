@@ -36,7 +36,7 @@ const STEP_COMPONENTS = [
 export default function SetupContainer() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { loading, data, update, save, clientId, setupStep } = useSetupData();
+  const { loading, data, update, save, clientId, setupStep, reload } = useSetupData();
   const [step, setStep] = useState<number>(0);
   const [launched, setLaunched] = useState(false);
   const [launching, setLaunching] = useState(false);
@@ -51,6 +51,14 @@ export default function SetupContainer() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
+
+  useEffect(() => {
+    const handler = () => {
+      reload();
+    };
+    window.addEventListener("setup:reload", handler);
+    return () => window.removeEventListener("setup:reload", handler);
+  }, [reload]);
 
   if (loading) {
     return (
