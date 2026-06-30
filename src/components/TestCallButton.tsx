@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +52,7 @@ export function TestCallButton({
   const [result, setResult] = useState<Result | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [events, setEvents] = useState<DiagEvent[]>([]);
+  const qc = useQueryClient();
 
   // Poll diagnostics for the active call id
   useEffect(() => {
@@ -63,11 +65,17 @@ export function TestCallButton({
         .eq("vapi_call_id", result.callId)
         .order("created_at", { ascending: true });
       if (!cancelled && data) setEvents(data as DiagEvent[]);
+      // If the webhook stamped the activation event, refresh client-scoped queries
+      // so the onboarding checklist flips to "complete" without a page reload.
+      if (!cancelled && (data ?? []).some((e: any) => e.step === "test_call_passed" && e.status === "ok")) {
+        try { await qc.invalidateQueries(); } catch { /* ignore */ }
+        try { window.dispatchEvent(new CustomEvent("setup:reload")); } catch { /* ignore */ }
+      }
     };
     tick();
     const t = setInterval(tick, 3000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [result?.callId]);
+  }, [result?.callId, qc]);
 
   function reset() {
     setStatus("idle");
