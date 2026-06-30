@@ -4,8 +4,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus, X } from "lucide-react";
+import { Plus, X, ExternalLink, Globe, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import IndustryCombobox from "@/settings/IndustryCombobox";
+import VoicePicker from "@/components/VoicePicker";
+import { TestCallButton } from "@/components/TestCallButton";
 import ActionBar from "./ActionBar";
 import type { SectionId } from "./sections";
 import type { UseConcierge } from "./useConcierge";
@@ -78,6 +84,194 @@ export default function SectionRenderer({
           />
         </div>
       );
+
+    case "google_business":
+      return <GoogleBusinessSection ctx={ctx} />;
+
+    case "website_import":
+      return <WebsiteImportSection ctx={ctx} />;
+
+    case "ai_personality": {
+      const tone = String(getValue(ctx, "tone") ?? "Friendly");
+      const persona = String(getValue(ctx, "ai_personality") ?? "");
+      return (
+        <div className="space-y-3">
+          <div>
+            <Label>Tone{isPending(ctx, "tone") && <Suggested />}</Label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {["Professional", "Friendly", "Energetic", "Calm", "Concierge"].map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  size="sm"
+                  variant={tone === t ? "default" : "outline"}
+                  onClick={() => set("tone", t)}
+                >
+                  {t}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label>Personality notes{isPending(ctx, "ai_personality") && <Suggested />}</Label>
+            <Textarea
+              rows={3}
+              value={persona}
+              onChange={(e) => set("ai_personality", e.target.value)}
+              placeholder="E.g. warm, concise, never pushy. Mirror the caller's energy."
+            />
+          </div>
+        </div>
+      );
+    }
+
+    case "voice": {
+      const voiceId = String(getValue(ctx, "voice_id") ?? "");
+      return (
+        <div className="space-y-3">
+          <Label>Voice{isPending(ctx, "voice_id") && <Suggested />}</Label>
+          <VoicePicker
+            value={voiceId}
+            onChange={(v) => {
+              set("voice_id", v.id);
+              set("voice_label", v.label);
+            }}
+          />
+        </div>
+      );
+    }
+
+    case "hours_routing": {
+      const mode = String(getValue(ctx, "phone_mode") ?? "ai_first");
+      const forwardFirst = !!getValue(ctx, "forward_first");
+      const rings = Number(getValue(ctx, "rings_before_answer") ?? 2);
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label>How should calls be routed?</Label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {[
+                ["ai_first", "AI answers first"],
+                ["forward_first", "Try forwarding first"],
+                ["ai_only", "AI only"],
+              ].map(([v, l]) => (
+                <Button
+                  key={v}
+                  type="button"
+                  size="sm"
+                  variant={mode === v ? "default" : "outline"}
+                  onClick={() => {
+                    set("phone_mode", v);
+                    set("forward_first", v === "forward_first");
+                  }}
+                >
+                  {l}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={forwardFirst}
+              onCheckedChange={(v) => set("forward_first", v)}
+            />
+            <Label>Try forwarding to your team before AI picks up</Label>
+          </div>
+          <div>
+            <Label>Rings before AI answers</Label>
+            <Input
+              type="number"
+              min={1}
+              max={6}
+              value={rings}
+              onChange={(e) => set("rings_before_answer", Number(e.target.value))}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    case "call_forwarding": {
+      const v = String(getValue(ctx, "forward_phone") ?? "");
+      return (
+        <div className="space-y-2">
+          <Label>Forward-to phone (E.164){isPending(ctx, "forward_phone") && <Suggested />}</Label>
+          <Input
+            value={v}
+            onChange={(e) => set("forward_phone", e.target.value)}
+            placeholder="+15551234567"
+          />
+          <p className="text-xs text-muted-foreground">
+            When the AI transfers a call, it will dial this number.
+          </p>
+        </div>
+      );
+    }
+
+    case "voicemail": {
+      const enabled = !!getValue(ctx, "voicemail_enabled");
+      const fallback = !!getValue(ctx, "voicemail_fallback");
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Switch checked={enabled} onCheckedChange={(v) => set("voicemail_enabled", v)} />
+            <Label>Voicemail enabled</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={fallback} onCheckedChange={(v) => set("voicemail_fallback", v)} />
+            <Label>Fall back to voicemail if AI can't handle</Label>
+          </div>
+        </div>
+      );
+    }
+
+    case "calendar": {
+      const calId = String(getValue(ctx, "google_calendar_id") ?? "");
+      const connectedAt = (ctx.current as any)?.google_calendar_connected_at;
+      return (
+        <div className="space-y-3">
+          {connectedAt ? (
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm">
+              Google Calendar is connected.
+              {calId && <div className="text-xs text-muted-foreground mt-1">Calendar: {calId}</div>}
+            </div>
+          ) : (
+            <div className="rounded-md border border-border bg-secondary/30 p-3 text-sm">
+              Calendar isn't connected yet. Connect it from the Integrations tab.
+            </div>
+          )}
+          <Button asChild variant="outline" size="sm">
+            <Link to="/settings?tab=integrations#calendar">
+              <ExternalLink className="h-4 w-4" /> Open Calendar Integration
+            </Link>
+          </Button>
+        </div>
+      );
+    }
+
+    case "knowledge": {
+      const v = String(getValue(ctx, "knowledge_base") ?? "");
+      return (
+        <div className="space-y-3">
+          <Label>Knowledge base{isPending(ctx, "knowledge_base") && <Suggested />}</Label>
+          <Textarea
+            rows={8}
+            value={v}
+            onChange={(e) => set("knowledge_base", e.target.value)}
+            placeholder="Pricing details, service guarantees, brands you carry, anything callers ask about."
+          />
+          <ActionBar
+            section="policies"
+            currentValue={v}
+            disableGbp={disableGbp}
+            onResult={(val) => typeof val === "string" && set("knowledge_base", val)}
+          />
+        </div>
+      );
+    }
+
+    case "test_call":
+      return <TestCallSection ctx={ctx} />;
 
     case "services": {
       const list = (getValue(ctx, "services") as string[] | null) ?? [];
