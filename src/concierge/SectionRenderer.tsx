@@ -775,25 +775,13 @@ function WebsiteImportSection({ ctx }: { ctx: UseConcierge }) {
 
 function TestCallSection({ ctx }: { ctx: UseConcierge }) {
   const passedAt = (ctx.current as any)?.test_call_passed_at;
-  async function markPassed() {
-    if (!ctx.clientId) return;
-    await supabase
-      .from("callcapture_clients")
-      .update({ test_call_passed_at: new Date().toISOString() } as never)
-      .eq("id", ctx.clientId);
-    toast({ title: "Test call marked complete" });
-    await ctx.reload();
-  }
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Place a real outbound call from your AI receptionist to confirm everything sounds right.
+        Place a real outbound call from your AI receptionist. Once the call connects and lasts a few seconds, this step completes automatically.
       </p>
       <div className="flex flex-wrap gap-2">
         <TestCallButton clientId={ctx.clientId ?? undefined} />
-        <Button variant="outline" size="sm" onClick={markPassed} type="button">
-          Mark test call complete
-        </Button>
       </div>
       {passedAt && (
         <div className="text-xs text-emerald-600">

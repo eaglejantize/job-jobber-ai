@@ -199,6 +199,32 @@ Deno.serve(async (req) => {
     }).eq("id", callId);
     await logEvent(clientId, vapiCallId, "call_ended", "ok", { duration });
 
+    // Stamp test_call_passed_at when this is a test call that actually connected.
+    // Recognized via metadata.test_call=true (set by place-test-call) or the
+    // call row's is_test flag. Requires a minimum duration so dropped/failed
+    // calls don't flip the activation gate.
+    try {
+      const isTestMeta = (metaObj as any)?.test_call === true;
+      let isTestRow = false;
+      if (!isTestMeta && callId) {
+        const { data: cr } = await supabase
+          .from("callcapture_calls").select("is_test").eq("id", callId).maybeSingle();
+        isTestRow = !!(cr as any)?.is_test;
+      }
+      if (clientId && (isTestMeta || isTestRow) && (duration ?? 0) >= 5) {
+        const { data: cur } = await supabase
+          .from("callcapture_clients").select("test_call_passed_at").eq("id", clientId).maybeSingle();
+        if (!(cur as any)?.test_call_passed_at) {
+          await supabase.from("callcapture_clients")
+            .update({ test_call_passed_at: new Date().toISOString() } as never)
+            .eq("id", clientId);
+          await logEvent(clientId, vapiCallId, "test_call_passed", "ok", { duration });
+        }
+      }
+    } catch (e) {
+      await logEvent(clientId, vapiCallId, "test_call_passed", "error", { error: String(e) });
+    }
+
     // Extract lead fields from transcript via Lovable AI Gateway
     let extracted: any = {};
     if (transcriptText) {
