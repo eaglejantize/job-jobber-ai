@@ -350,6 +350,7 @@ export type Database = {
           forward_first: boolean
           forward_phone: string | null
           forwarding_from_number: string | null
+          google_calendar_connected_at: string | null
           google_calendar_id: string | null
           google_category: string | null
           google_oauth_access_token: string | null
@@ -378,6 +379,7 @@ export type Database = {
           number_status: string | null
           number_test_expires_at: string | null
           onboarding_completed_at: string | null
+          onboarding_state: Json | null
           owner_email: string | null
           owner_name: string
           payment_status: string
@@ -399,6 +401,7 @@ export type Database = {
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string | null
+          test_call_passed_at: string | null
           timezone: string
           tone: string
           transfer_fallback: string
@@ -456,6 +459,7 @@ export type Database = {
           forward_first?: boolean
           forward_phone?: string | null
           forwarding_from_number?: string | null
+          google_calendar_connected_at?: string | null
           google_calendar_id?: string | null
           google_category?: string | null
           google_oauth_access_token?: string | null
@@ -484,6 +488,7 @@ export type Database = {
           number_status?: string | null
           number_test_expires_at?: string | null
           onboarding_completed_at?: string | null
+          onboarding_state?: Json | null
           owner_email?: string | null
           owner_name: string
           payment_status?: string
@@ -505,6 +510,7 @@ export type Database = {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          test_call_passed_at?: string | null
           timezone?: string
           tone?: string
           transfer_fallback?: string
@@ -562,6 +568,7 @@ export type Database = {
           forward_first?: boolean
           forward_phone?: string | null
           forwarding_from_number?: string | null
+          google_calendar_connected_at?: string | null
           google_calendar_id?: string | null
           google_category?: string | null
           google_oauth_access_token?: string | null
@@ -590,6 +597,7 @@ export type Database = {
           number_status?: string | null
           number_test_expires_at?: string | null
           onboarding_completed_at?: string | null
+          onboarding_state?: Json | null
           owner_email?: string | null
           owner_name?: string
           payment_status?: string
@@ -611,6 +619,7 @@ export type Database = {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          test_call_passed_at?: string | null
           timezone?: string
           tone?: string
           transfer_fallback?: string
