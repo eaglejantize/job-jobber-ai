@@ -379,9 +379,34 @@ export default function PhoneNumberPicker({
       </Tabs>
 
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
-          <span>{error}</span>
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
+            <span>{error}</span>
+          </div>
+          {initError && (
+            <>
+              <div className="flex items-center gap-2 pl-6">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={retryInitialization}
+                  disabled={retrying || initializing}
+                >
+                  {retrying || initializing ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  Retry Setup Initialization
+                </Button>
+              </div>
+              <p className="pl-6 text-xs text-muted-foreground break-words">
+                Details: {initError}
+              </p>
+            </>
+          )}
         </div>
       )}
     </div>
