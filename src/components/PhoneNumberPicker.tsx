@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Phone, CheckCircle2, AlertTriangle, PhoneForwarded, Sparkles, Search } from "lucide-react";
+import { Loader2, Phone, CheckCircle2, AlertTriangle, PhoneForwarded, Sparkles, Search, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -27,6 +27,8 @@ export default function PhoneNumberPicker({
   assignedNumber,
   numberStatus,
   onProvisioned,
+  onEnsureClient,
+  initializing,
 }: {
   clientId: string | null;
   preferredAreaCode: string;
@@ -34,10 +36,15 @@ export default function PhoneNumberPicker({
   assignedNumber: string | null;
   numberStatus: string | null;
   onProvisioned: (phone: string, sid: string, status: string) => void;
+  onEnsureClient?: () => Promise<{ ok: boolean; clientId?: string; message?: string }>;
+  initializing?: boolean;
 }) {
   const [searching, setSearching] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [initError, setInitError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [pendingRetry, setPendingRetry] = useState<null | (() => void)>(null);
   const [numbers, setNumbers] = useState<Available[]>([]);
   const [nearby, setNearby] = useState<Available[]>([]);
   const [fallbackReason, setFallbackReason] = useState<string | null>(null);
@@ -48,16 +55,49 @@ export default function PhoneNumberPicker({
     setError(null);
   }, [preferredAreaCode]);
 
-  function ensureClient(): boolean {
-    if (!clientId) {
-      toast({
-        title: "Account not ready",
-        description: "Complete signup before connecting a number.",
-        variant: "destructive",
-      });
-      return false;
+  async function resolveClientId(): Promise<string | null> {
+    if (clientId) return clientId;
+    if (!onEnsureClient) {
+      const msg = "Workspace not ready. Please complete signup before connecting a number.";
+      setError(msg);
+      return null;
     }
-    return true;
+    const result = await onEnsureClient();
+    if (result.ok && result.clientId) {
+      setInitError(null);
+      setError(null);
+      return result.clientId;
+    }
+    setError(
+      "We need to finish initializing your workspace before connecting this number. Retry setup initialization.",
+    );
+    setInitError(result.message ?? "Unknown initialization error");
+    return null;
+  }
+
+  async function retryInitialization() {
+    if (!onEnsureClient) return;
+    setRetrying(true);
+    try {
+      const result = await onEnsureClient();
+      if (result.ok && result.clientId) {
+        setError(null);
+        setInitError(null);
+        toast({ title: "Workspace ready", description: "You can continue setup." });
+        if (pendingRetry) {
+          const fn = pendingRetry;
+          setPendingRetry(null);
+          fn();
+        }
+      } else {
+        setInitError(result.message ?? "Unknown initialization error");
+        setError(
+          "We need to finish initializing your workspace before connecting this number. Retry setup initialization.",
+        );
+      }
+    } finally {
+      setRetrying(false);
+    }
   }
 
   function reportError(d: any, fallback: string) {
@@ -109,13 +149,17 @@ export default function PhoneNumberPicker({
   }
 
   async function purchase(num: string) {
-    if (!ensureClient()) return;
+    const cid = await resolveClientId();
+    if (!cid) {
+      setPendingRetry(() => () => purchase(num));
+      return;
+    }
     setPurchasing(num);
     setError(null);
     try {
       const { data, error: invokeError } = await supabase.functions.invoke(
         "provision-twilio-number",
-        { body: { phone_number: num, client_id: clientId } },
+        { body: { phone_number: num, client_id: cid } },
       );
       const d = (data ?? {}) as any;
       if (invokeError || d?.error_code) {
@@ -135,11 +179,15 @@ export default function PhoneNumberPicker({
   }
 
   async function linkExisting(mode: "byo" | "forward" | "test") {
-    if (!ensureClient()) return;
+    const cid = await resolveClientId();
+    if (!cid) {
+      setPendingRetry(() => () => linkExisting(mode));
+      return;
+    }
     setBusyAction(mode);
     setError(null);
     try {
-      const body: Record<string, unknown> = { mode, client_id: clientId };
+      const body: Record<string, unknown> = { mode, client_id: cid };
       if (mode !== "test") body.phone_number = byoPhone;
       const { data, error: invokeError } = await supabase.functions.invoke(
         "link-existing-number",
