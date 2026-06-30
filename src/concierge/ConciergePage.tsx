@@ -10,6 +10,7 @@ import SectionRenderer from "./SectionRenderer";
 import ReviewAndApply from "./ReviewAndApply";
 import PostApply from "./PostApply";
 import { toast } from "@/hooks/use-toast";
+import { ProgressPanel } from "@/onboarding/ProgressTracker";
 
 export default function ConciergePage() {
   const navigate = useNavigate();
@@ -103,6 +104,7 @@ export default function ConciergePage() {
 
       <div className="grid md:grid-cols-[220px_1fr] gap-6">
         <nav className="hidden md:block">
+          <ProgressPanel compact className="mb-4" />
           <ol className="space-y-1 text-sm">
             {SECTIONS.map((s, i) => {
               const active = i === ctx.step;

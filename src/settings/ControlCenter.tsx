@@ -7,11 +7,16 @@ import { cn } from "@/lib/utils";
 import { useControlCenterData } from "./useControlCenterData";
 import { TABS } from "./tabs/registry";
 import SyncToVapiButton from "./SyncToVapiButton";
+import { ProgressPanel } from "@/onboarding/ProgressTracker";
 
 export default function ControlCenter() {
   const ctx = useControlCenterData();
   const navigate = useNavigate();
-  const [active, setActive] = useState(TABS[0].id);
+  const initialTab =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("tab") || TABS[0].id
+      : TABS[0].id;
+  const [active, setActive] = useState(initialTab);
 
   if (ctx.loading) {
     return <div className="container py-20 text-muted-foreground">Loading…</div>;
@@ -35,6 +40,8 @@ export default function ControlCenter() {
           onSynced={ctx.reload}
         />
       </div>
+
+      <ProgressPanel className="mb-6" />
 
       <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-start gap-3">
