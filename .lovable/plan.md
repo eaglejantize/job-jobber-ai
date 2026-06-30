@@ -1,116 +1,53 @@
+## Problem
 
-# Concierge as Onboarding Engine
+`PhoneNumberPicker` hard-blocks every action with the toast **"Account not ready. Complete signup before connecting a number."** whenever `clientId` is `null`. During Concierge/Setup, that can happen even though the user is authenticated, because no row in `callcapture_clients` exists yet (or the row exists but isn't linked to `auth.uid()`). The picker should self-heal instead of bouncing the user.
 
-Make the AI Setup Concierge the single onboarding hub. Reuse every existing settings/wizard module — do not create parallel UIs. Track per-step status in the DB, surface a visual progress tracker, gate "Activate AI Receptionist" on required items, and ship a Go Live readiness screen.
+## Fix
 
-## 1. Onboarding state model
+### 1. Add a workspace initializer hook — `src/setup/useEnsureClient.ts` (new)
 
-New JSONB column `onboarding_state` on `callcapture_clients`:
+A single async helper that the picker (and any other onboarding surface) can call to guarantee a usable `client_id` before performing a Twilio purchase / link.
 
-```json
-{
-  "items": {
-    "business_info":     { "status": "complete",       "updated_at": "..." },
-    "industry":          { "status": "complete" },
-    "google_business":   { "status": "skipped" },
-    "website_import":    { "status": "in_progress" },
-    "hours":             { "status": "complete" },
-    "service_areas":     { "status": "not_started" },
-    "services":          { "status": "complete" },
-    "faqs":              { "status": "needs_attention" },
-    "ai_personality":    { "status": "complete" },
-    "voice":             { "status": "complete" },
-    "greeting":          { "status": "complete" },
-    "hours_routing":     { "status": "complete" },
-    "after_hours":       { "status": "complete" },
-    "call_forwarding":   { "status": "not_started" },
-    "voicemail":         { "status": "complete" },
-    "sms_fallback":      { "status": "complete" },
-    "calendar":          { "status": "not_started" },
-    "knowledge_base":    { "status": "in_progress" },
-    "test_call":         { "status": "not_started" }
-  },
-  "activated_at": null
-}
-```
+Steps inside `ensureClient()`:
 
-Status enum (string): `not_started | in_progress | complete | needs_attention | skipped`.
+1. `supabase.auth.getUser()` — require a session; if missing return `{ ok: false, code: "not_authenticated" }`.
+2. Look up an existing row in `callcapture_clients` by `user_id`, then by `lower(email)`. If found but `user_id` is null, patch it with the current uid.
+3. If no row exists, call the existing `signup-tenant` edge function (it already creates the tenant row with service role and bypasses RLS). Pass the authed user's email + a minimal `business_name` fallback (`"My Business"` or the email local-part). On success it returns the new `client_id`.
+4. Ensure required onboarding scaffolding exists on the row by writing safe defaults only when null: `onboarding_state` (empty object), `concierge_state` left alone, `setup_step` (0 if null). No overwrites of user data.
+5. Fire-and-forget `supabase.functions.invoke("update-vapi-agent", { body: { client_id }})` so a default Vapi assistant exists; failure does NOT block — it's surfaced as a warning only.
+6. Return `{ ok: true, clientId }` or `{ ok: false, code, message }` with the real backend error string for display.
 
-Status is computed from underlying `callcapture_clients` fields by a single pure function `deriveOnboardingStatus(client)` in `src/onboarding/status.ts`, then merged with explicit user overrides (skip, mark complete) persisted in `onboarding_state`. Recompute on every load and after every save so the checklist stays accurate even when fields are edited outside the Concierge.
+The hook exposes `{ ensureClient, initializing, lastError }` so callers can render state.
 
-Required-for-activation set (drives the GO LIVE button):
-`business_info, business_phone (vapi_phone_number_id), greeting, voice, hours, ≥1 service, knowledge_source (faqs OR knowledge_base OR services), test_call`.
+### 2. Update `src/components/PhoneNumberPicker.tsx`
 
-## 2. Module audit — reuse what exists
+- Accept new optional props: `onEnsureClient?: () => Promise<{ ok: boolean; clientId?: string; message?: string }>` and `initializing?: boolean`.
+- Replace the `ensureClient()` early-return-and-toast pattern. New flow inside `purchase()` and `linkExisting()`:
+  1. If `clientId` is already set → proceed as today.
+  2. Else if `onEnsureClient` is provided → `await onEnsureClient()`. On success, continue with the returned `clientId`. On failure, set `error` to:
+     > "We need to finish initializing your workspace before connecting this number. Retry setup initialization."
+     and remember the underlying backend message in a secondary state (`initError`) for the inline detail.
+  3. Else (legacy callers without the prop) → keep current behavior.
+- Replace the existing inline error banner with one that, when `initError` is present, also renders a **"Retry Setup Initialization"** button that re-invokes `onEnsureClient` and, on success, automatically retries the pending action (number purchase / link) the user just clicked. Show the raw backend error/field name beneath the button so the missing piece is visible.
+- Remove the "Account not ready" toast entirely.
 
-| Concierge item | Existing surface to launch | Action |
-| --- | --- | --- |
-| Business Information | `BusinessTab` + concierge `business_profile` section | Reuse concierge section (already wired) |
-| Industry | `IndustryCombobox` in `BusinessTab` / concierge `industry` | Reuse |
-| Google Business Profile | `business-lookup` edge fn (used in Setup step 2) | Add "Import from Google" action inside Concierge business section, deep-link to Setup step 2 for full flow |
-| Website Import | `ai-prefill-setup` edge fn | Add inline action in business section |
-| Business Hours | concierge `hours` section | Reuse |
-| Service Areas | concierge `service_area` section | Reuse |
-| Services | concierge `services` section | Reuse |
-| FAQs | concierge `faqs` section | Reuse |
-| AI Personality | `AiReceptionistTab` (tone, persona) | Add new concierge `personality` section that writes the same `tone`/persona fields |
-| Voice Selection | `VoicePicker` component | Embed `VoicePicker` inside a new `voice` concierge section |
-| Greeting | concierge `greeting` section | Reuse |
-| Business Hours Routing | `PhoneSetupWizard` / call-handling fields | New `hours_routing` section editing `rings_before_answer`, after-hours mode |
-| After-Hours Greeting | concierge `after_hours` section | Reuse |
-| Call Forwarding | `forward_phone` field in `PhoneSetupWizard` | New `call_forwarding` section editing same field |
-| Voicemail | `voicemail_enabled`, `voicemail_fallback` | New `voicemail` section |
-| SMS Fallback | concierge `sms_followup` | Reuse |
-| Calendar Connection | `IntegrationsTab` Google Calendar block | Deep-link button "Open Calendar Integration" → `/settings?tab=integrations#calendar` |
-| Knowledge Base | `KnowledgeTab` (`knowledge_base` field) | New concierge `knowledge` section with same editor |
-| Test Call | existing `TestCallButton` | Embed in new `test_call` concierge section; mark complete when `place-test-call` reports success |
+### 3. Wire it into the existing phone step — `src/setup/steps.tsx` (`Step3PhoneNumber`)
 
-No new standalone settings pages. Where a feature lives in an existing tab and is too heavy to inline (Calendar OAuth, full phone provisioning), the Concierge launches that tab via deep-link and listens for the underlying field to flip, then auto-marks the step complete.
+- Use `useEnsureClient()` and pass `onEnsureClient` + `initializing` into `<PhoneNumberPicker>`.
+- After a successful `ensureClient()` that produced a new id, call `reload()` from `useSetupData` so the rest of the wizard sees the new `clientId`. (Add `reload` to `StepProps` — already returned by `useSetupData`.)
 
-## 3. Visual progress tracker
+### 4. Concierge surface
 
-New component `src/onboarding/ProgressTracker.tsx`:
-- Compact pill (header, all pages) showing `X / N complete` with overall %.
-- Full panel (Concierge sidebar + Dashboard widget + new "Setup" panel at top of `/settings`) listing each item with its status icon and a `Resume` / `Open` button that jumps to the right Concierge section or settings deep-link.
+The Concierge currently has no phone-number section, but the user is on `/setup`. To make the same flow reachable from Concierge later, export `Step3PhoneNumber` is enough — no Concierge change needed in this pass. (Call out in summary.)
 
-Replace `SetupProgressBadge` / `SetupProgressBanner` content with this tracker (keep the components as thin wrappers so existing imports keep working).
+## Out of scope / unchanged
 
-## 4. Completion gate + Activate button
+- `signup-tenant`, `provision-twilio-number`, `link-existing-number`, RLS, and the SMS flow are untouched.
+- The wizard's "Next" gating remains: number must be assigned before advancing past the phone step.
 
-`src/onboarding/readiness.ts` exports `isReadyToActivate(state)` based on the required set above. Concierge `review` step's primary CTA becomes:
+## Files touched
 
-- Disabled while not ready, with a checklist of what's missing.
-- When ready: `ACTIVATE MY AI RECEPTIONIST` — runs the existing apply flow + `update-vapi-agent` sync + sets `onboarding_state.activated_at` and `launched_at`.
-
-## 5. Final readiness screen
-
-After activation, replace `PostApply.tsx` content with a Go-Live readiness report: green check rows for each required item, optional rows (Calendar) shown as "Connected" or "Skipped", and a large `GO LIVE` button that navigates to `/dashboard` and fires `update-vapi-agent` one last time.
-
-## Technical changes
-
-- **Migration**: add `onboarding_state jsonb` to `callcapture_clients` (nullable, default `null`).
-- **New files**:
-  - `src/onboarding/status.ts` — derive + merge status, types, required set.
-  - `src/onboarding/readiness.ts` — `isReadyToActivate`.
-  - `src/onboarding/ProgressTracker.tsx` — pill + full panel.
-  - `src/onboarding/useOnboardingState.ts` — load/save/merge hook.
-  - Concierge sections: `personality.tsx`, `voice.tsx`, `hours_routing.tsx`, `call_forwarding.tsx`, `voicemail.tsx`, `knowledge.tsx`, `calendar.tsx`, `test_call.tsx` (each one a thin wrapper that mounts the existing component/editor and reports completion back to `useConcierge`).
-- **Edits**:
-  - `src/concierge/sections.ts` — extend `SectionId` and `SECTIONS` with the new sections (insert before `review`), keep existing ones.
-  - `src/concierge/SectionRenderer.tsx` — route new IDs to the new wrappers.
-  - `src/concierge/ReviewAndApply.tsx` — show readiness checklist, gate Activate button on `isReadyToActivate`.
-  - `src/concierge/PostApply.tsx` — rewrite as readiness/Go-Live screen.
-  - `src/concierge/useConcierge.ts` — on `apply`, also update `onboarding_state` items to `complete`; expose `markStatus(itemId, status)`.
-  - `src/settings/ControlCenter.tsx` — add `ProgressTracker` panel at top; add `?tab=` + hash deep-link support so Concierge can jump to Integrations → Calendar, etc.
-  - `src/pages/Dashboard.tsx` — add compact tracker widget when onboarding incomplete.
-  - `src/components/SetupProgressBadge.tsx` — read from `onboarding_state` instead of `setup_step`.
-  - `src/components/OnboardingGate.tsx` — treat `onboarding_state.activated_at` as the "complete" signal alongside legacy `launched_at` / `onboarding_completed_at`.
-
-## Deliverable: Audit report (will be included in final response)
-
-- **Existing modules reused**: BusinessTab, IndustryCombobox, business-lookup, ai-prefill-setup, AiReceptionistTab persona/tone, VoicePicker, KnowledgeTab, IntegrationsTab (Calendar), TestCallButton, PhoneSetupWizard call-handling fields, all current Concierge sections.
-- **New modules required**: onboarding state hook + status deriver, ProgressTracker, 8 new Concierge section wrappers (personality, voice, hours_routing, call_forwarding, voicemail, knowledge, calendar, test_call), readiness gate, Go-Live screen, deep-link support in ControlCenter.
-- **Duplicate settings pages to retire (later, not in this change)**: `/setup` 11-step wizard becomes redundant once Concierge covers everything — keep it for one release behind a feature flag, then remove. `AiSettingsPanel` is already superseded by the AI Control Center; mark for removal.
-- **Remaining blockers before Founder Beta**: Google Calendar OAuth callback must reliably flip a `google_calendar_connected_at` field (needed so Concierge can auto-detect); phone provisioning must set `vapi_phone_number_id` synchronously (already does for Twilio path); test-call success must be recorded on the client row (add `test_call_passed_at`).
-
-Two small additive schema fields requested in the same migration: `google_calendar_connected_at timestamptz`, `test_call_passed_at timestamptz`.
+- `src/setup/useEnsureClient.ts` (new)
+- `src/components/PhoneNumberPicker.tsx` (props + error UX + retry)
+- `src/setup/steps.tsx` (`Step3PhoneNumber` wiring)
+- `src/setup/schema.ts` or step prop type — minor: add optional `reload` to `StepProps` if not already present
