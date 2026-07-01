@@ -67,11 +67,12 @@ Deno.serve(async (req) => {
           500,
         );
       }
+      const demoE164 = normalizeE164(demo) ?? demo;
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const { error: updErr } = await userClient
         .from("callcapture_clients")
         .update({
-          assigned_callcapture_number: demo,
+          assigned_callcapture_number: demoE164,
           number_status: "test",
           phone_mode: "test",
           number_provisioned_at: now,
@@ -80,7 +81,7 @@ Deno.serve(async (req) => {
         .eq("id", clientId);
       if (updErr) return json({ error_code: "db_error", error: updErr.message }, 500);
       return json({
-        phone_number: demo,
+        phone_number: demoE164,
         status: "test",
         message: "Temporary test number assigned for 7 days.",
         expires_at: expires,
