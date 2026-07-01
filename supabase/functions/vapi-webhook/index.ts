@@ -345,6 +345,27 @@ Deno.serve(async (req) => {
       }
     } else {
       await logEvent(null, vapiCallId, "lead_created", "skipped", { reason: "no_tenant" });
+      // Safety net: never drop a captured lead. Insert an unattributed row so
+      // the super admin can reassign it from the Admin panel.
+      const { data: orphan, error: orphanErr } = await supabase.from("callcapture_leads").insert({
+        client_id: null,
+        name: extracted.name ?? callerName,
+        phone: extracted.phone ?? callerPhone,
+        treatment: extracted.service ?? null,
+        timing: extracted.timing ?? null,
+        new_or_returning: extracted.new_or_returning ?? null,
+        referral: extracted.referral ?? null,
+        summary: summary ?? extracted.notes ?? null,
+        status: "Unattributed",
+        raw_payload: {
+          vapi_call_id: vapiCallId, source: "vapi-webhook-unattributed",
+          extracted, transcript: transcriptText,
+          hints: { phoneNumberId, assistantId, calledNumber },
+        },
+      }).select("id").single();
+      leadId = orphan?.id ?? null;
+      await logEvent(null, vapiCallId, "unattributed_lead_created", leadId ? "ok" : "error", { lead_id: leadId, error: orphanErr?.message });
+      if (callId && leadId) await supabase.from("callcapture_calls").update({ lead_id: leadId }).eq("id", callId);
     }
 
     // Tenant-scoped SMS notification
