@@ -114,6 +114,61 @@ Deno.serve(async (req) => {
     if (data?.id) { clientId = data.id; matchedBy = "vapi_assistant_id"; }
   }
 
+  // Tier 5 (self-healing): if we still don't have a tenant but Vapi told us a
+  // phoneNumberId or assistantId, look them up via Vapi's API and match by the
+  // phone number returned. Persist the ids back to the tenant row so future
+  // calls resolve on tier 2 without an extra network hop.
+  if (!clientId && (phoneNumberId || assistantId)) {
+    const vapiKey = Deno.env.get("VAPI_API_KEY");
+    if (vapiKey) {
+      try {
+        let numberFromVapi: string | null = null;
+        let assistantFromVapi: string | null = assistantId ?? null;
+        if (phoneNumberId) {
+          const r = await fetch(`https://api.vapi.ai/phone-number/${phoneNumberId}`, {
+            headers: { Authorization: `Bearer ${vapiKey}` },
+          });
+          if (r.ok) {
+            const j = await r.json();
+            numberFromVapi = getStr(j as Json, "number");
+            assistantFromVapi = getStr(j as Json, "assistantId") ?? assistantFromVapi;
+          }
+        }
+        if (!numberFromVapi && assistantFromVapi) {
+          const r = await fetch(`https://api.vapi.ai/assistant/${assistantFromVapi}`, {
+            headers: { Authorization: `Bearer ${vapiKey}` },
+          });
+          if (r.ok) {
+            const j = await r.json();
+            const meta = ((j as Json)?.metadata as Json | undefined) ?? {};
+            const metaId = getStr(meta, "client_id", "clientId");
+            if (metaId) {
+              const { data } = await supabase.from("callcapture_clients").select("id").eq("id", metaId).maybeSingle();
+              if (data?.id) { clientId = data.id; matchedBy = "vapi_api_assistant_metadata"; }
+            }
+          }
+        }
+        if (!clientId && numberFromVapi) {
+          const digits = normalize(numberFromVapi);
+          const { data: all } = await supabase.from("callcapture_clients").select("id, assigned_callcapture_number, is_super_admin");
+          const hit = (all ?? []).find((c: any) => normalize(c.assigned_callcapture_number) === digits);
+          if (hit?.id) { clientId = hit.id; matchedBy = "vapi_api_phone_lookup"; }
+        }
+        if (clientId) {
+          const patch: Record<string, unknown> = {};
+          if (phoneNumberId) patch.vapi_phone_number_id = phoneNumberId;
+          if (assistantFromVapi) patch.vapi_assistant_id = assistantFromVapi;
+          if (Object.keys(patch).length) {
+            await supabase.from("callcapture_clients").update(patch).eq("id", clientId);
+          }
+          await logEvent(clientId, vapiCallId, "tenant_selfhealed", "ok", { patched: patch, matchedBy });
+        }
+      } catch (e) {
+        await logEvent(null, vapiCallId, "tenant_selfhealed", "error", { error: String(e) });
+      }
+    }
+  }
+
   // Safety: only block super-admin attribution when the match came from a wide
   // fallback (assigned_callcapture_number). Owner-specific matches (metadata,
   // vapi_phone_number_id, vapi_assistant_id) are kept so the admin can receive
@@ -290,6 +345,27 @@ Deno.serve(async (req) => {
       }
     } else {
       await logEvent(null, vapiCallId, "lead_created", "skipped", { reason: "no_tenant" });
+      // Safety net: never drop a captured lead. Insert an unattributed row so
+      // the super admin can reassign it from the Admin panel.
+      const { data: orphan, error: orphanErr } = await supabase.from("callcapture_leads").insert({
+        client_id: null,
+        name: extracted.name ?? callerName,
+        phone: extracted.phone ?? callerPhone,
+        treatment: extracted.service ?? null,
+        timing: extracted.timing ?? null,
+        new_or_returning: extracted.new_or_returning ?? null,
+        referral: extracted.referral ?? null,
+        summary: summary ?? extracted.notes ?? null,
+        status: "Unattributed",
+        raw_payload: {
+          vapi_call_id: vapiCallId, source: "vapi-webhook-unattributed",
+          extracted, transcript: transcriptText,
+          hints: { phoneNumberId, assistantId, calledNumber },
+        },
+      }).select("id").single();
+      leadId = orphan?.id ?? null;
+      await logEvent(null, vapiCallId, "unattributed_lead_created", leadId ? "ok" : "error", { lead_id: leadId, error: orphanErr?.message });
+      if (callId && leadId) await supabase.from("callcapture_calls").update({ lead_id: leadId }).eq("id", callId);
     }
 
     // Tenant-scoped SMS notification
