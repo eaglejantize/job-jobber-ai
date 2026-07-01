@@ -1,60 +1,33 @@
-## Sprint: Activation Stamp + Clean User QA
+# White-screen after sign-in — root cause and fix
 
-### 1. Google Calendar connection stamp
+## What's happening
 
-**Find the OAuth callback handler** (likely `supabase/functions/google-calendar-callback/` or similar) and on successful token exchange:
+Reproduced in a headless browser signed in as an authed user: every protected route (`/home`, `/dashboard`, `/settings`, `/settings/concierge`, `/leads`) renders a completely empty `#root` (only the toaster is there). No JS errors are thrown — the app renders literally nothing.
 
-```ts
-await supabase
-  .from("callcapture_clients")
-  .update({ google_calendar_connected_at: new Date().toISOString() })
-  .eq("id", clientId);
-```
+The cause is a self-redirect loop inside `OnboardingGate`:
 
-**Frontend refresh** — in the Integrations tab / Concierge calendar step, after the OAuth popup returns:
-- Invalidate the React Query key for the current client (`["client", clientId]` or equivalent used in `useOnboardingStatus`).
-- Re-run `deriveOnboardingStatus()` in `src/onboarding/status.ts` so the Calendar item flips to Complete and `ProgressPanel` updates without a manual refresh.
+- `App.tsx` wraps `/settings/concierge` with `<RequireAuth><OnboardingGate><Concierge /></OnboardingGate></RequireAuth>`.
+- For any user whose `onboarding_completed_at` and `launched_at` are both null (i.e. every brand-new signup, plus anyone whose onboarding isn't marked complete yet), `OnboardingGate` returns `<Navigate to="/settings/concierge" replace />`.
+- Because the current URL is already `/settings/concierge`, React Router treats this as a no-op navigation. `<Navigate>` renders `null`, so the route renders nothing → white screen.
+- The same gate is on `/dashboard`, `/home`, `/settings`, `/leads`, so those all redirect into the broken concierge route and also go blank.
 
-### 2. Test call success stamp
+`/setup` is not wrapped in `OnboardingGate`, which is exactly why it still renders — that's the smoking gun.
 
-In `supabase/functions/place-test-call/index.ts` (and/or the Vapi call-end webhook path in `vapi-webhook`), when the test call ends with a successful status:
-- Detect the call originated from `place-test-call` (use metadata `{ source: "test_call" }` set at call creation time).
-- On `status === "ended"` with successful end reason (`customer-ended-call`, `assistant-ended-call`, duration > N seconds), update:
+## Fix
 
-```ts
-test_call_passed_at: new Date().toISOString()
-```
+1. **Do not gate the onboarding destinations with `OnboardingGate`.**
+   In `src/App.tsx`, remove `<OnboardingGate>` from the `/settings/concierge` route (and, for the same reason, remove it from `/setup` if it's ever added — currently it isn't). The concierge/setup pages are the onboarding flow; they must always render for signed-in users.
 
-**Frontend**: `TestCallButton.tsx` already polls call status — when it sees success, invalidate the client query so `ProgressPanel` updates. Remove the manual "Mark complete" button / checkbox from the Test Call step in `src/concierge/SectionRenderer.tsx` and from `src/onboarding/sections.ts` definitions.
+2. **Belt-and-braces guard in `OnboardingGate`** (`src/components/OnboardingGate.tsx`):
+   before returning `<Navigate to="/settings/concierge" />`, check `useLocation()` and short-circuit to `children` if the current pathname is already `/settings/concierge` or `/setup`. This prevents the same class of bug if the gate is ever added to another onboarding route in the future.
 
-### 3. Clean user QA
+3. **No database or backend changes.** The data is fine; the bug is purely in the route wiring.
 
-Run a full end-to-end test by creating a brand-new auth user with zero rows in `callcapture_clients`.
+## Verification
 
-Walk through:
-1. Signup at `/auth`
-2. Land on `/setup` (OnboardingGate routes new users here)
-3. Phone picker step — verify `useEnsureClient` self-heals and creates the client row
-4. Buy/connect a Twilio number
-5. Services step
-6. Hours step
-7. Voice picker
-8. Greeting
-9. Knowledge base
-10. Test call (verify auto-stamp from step 2)
-11. Activate (Go Live) button enables and Sync-to-Vapi succeeds
+After the change, re-run the Playwright probe against `/settings/concierge`, `/dashboard`, `/home`, `/settings`, and `/leads` while signed in and confirm each renders real content instead of an empty `#root`. Then sign in through the UI as `eaglejantize@gmail.com` (already flipped to super admin) and confirm the Admin link is visible and the dashboard loads.
 
-For each step return one of: **Passed / Failed / Fixed / Still blocked** with the specific error and file touched if a fix was needed.
+## Out of scope
 
-### Technical notes
-
-- The Calendar OAuth callback may be a Supabase Edge Function or a frontend `/auth/google-calendar/callback` route — I will locate and patch whichever exists.
-- The `place-test-call` function should attach `metadata.source = "test_call"` on the Vapi call payload so `vapi-webhook` can recognize and stamp it.
-- Both stamps should be idempotent (only set if currently null, or always overwrite — confirm preference; default: only set if null to preserve first-success timestamp).
-- No schema changes needed — both columns already exist.
-
-### Deliverables
-
-- Patched calendar callback + frontend refresh
-- Patched `place-test-call` / `vapi-webhook` test-call stamp + removed manual mark-complete UI
-- QA report with Pass/Fail/Fixed/Blocked per step
+- No changes to auth, Supabase schema, RLS, or the concierge/setup content itself.
+- The existing super-admin restore for `eaglejantize@gmail.com` stays as-is.
