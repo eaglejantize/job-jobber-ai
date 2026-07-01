@@ -45,7 +45,7 @@ const App = () => (
           <Route path="/setup" element={<RequireAuth><Setup /></RequireAuth>} />
           <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><OnboardingGate><Settings /></OnboardingGate></RequireAuth>} />
-          <Route path="/settings/concierge" element={<RequireAuth><OnboardingGate><Concierge /></OnboardingGate></RequireAuth>} />
+          <Route path="/settings/concierge" element={<RequireAuth><Concierge /></RequireAuth>} />
           <Route path="/dashboard" element={<RequireAuth><OnboardingGate><Dashboard /></OnboardingGate></RequireAuth>} />
           <Route path="/home" element={<RequireAuth><OnboardingGate><Home /></OnboardingGate></RequireAuth>} />
           <Route path="/leads" element={<RequireAuth><OnboardingGate><LeadInbox /></OnboardingGate></RequireAuth>} />

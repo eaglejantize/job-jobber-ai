@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
  */
 export default function OnboardingGate({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
+  const location = useLocation();
   const [state, setState] = useState<"loading" | "complete" | "incomplete">("loading");
 
   useEffect(() => {
@@ -40,6 +41,14 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
     return <div className="container py-20 text-sm text-muted-foreground">Loading…</div>;
   }
   if (state === "incomplete") {
+    // Never redirect if we're already on an onboarding route — would cause a
+    // blank-screen self-redirect loop.
+    if (
+      location.pathname === "/settings/concierge" ||
+      location.pathname.startsWith("/setup")
+    ) {
+      return <>{children}</>;
+    }
     return <Navigate to="/settings/concierge" replace />;
   }
   return <>{children}</>;
