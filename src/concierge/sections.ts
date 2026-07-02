@@ -2,7 +2,6 @@ export type SectionId =
   | "business_profile"
   | "services"
   | "hours"
-  | "google_business"
   | "website_import"
   | "knowledge"
   | "ai_receptionist"
@@ -24,8 +23,19 @@ export const SECTIONS: SectionDef[] = [
   {
     id: "business_profile",
     title: "Business Profile",
-    subtitle: "Business name, industry, contact info, and address.",
-    fields: ["business_name", "business_phone", "business_email", "address", "website", "industry", "business_category_group"],
+    subtitle: "Import from Google, then confirm your business details.",
+    fields: [
+      "business_name",
+      "business_phone",
+      "business_email",
+      "address",
+      "website",
+      "industry",
+      "business_category_group",
+      "google_place_id",
+      "google_category",
+      "google_rating",
+    ],
     aiSupported: false,
   },
   {
@@ -40,13 +50,6 @@ export const SECTIONS: SectionDef[] = [
     title: "Business Hours",
     subtitle: "When you're open, and how calls route during and after hours.",
     fields: ["business_hours_schedule", "business_hours_24_7", "phone_mode", "forward_first", "rings_before_answer"],
-    aiSupported: false,
-  },
-  {
-    id: "google_business",
-    title: "Google Business Profile",
-    subtitle: "Import your verified details from Google.",
-    fields: ["google_place_id", "google_category", "google_rating"],
     aiSupported: false,
   },
   {
