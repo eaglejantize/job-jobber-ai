@@ -14,7 +14,6 @@ export type ItemId =
   | "business_info"
   | "services"
   | "hours"
-  | "google_business"
   | "website_import"
   | "knowledge_base"
   | "ai_receptionist"
@@ -32,7 +31,6 @@ export const ITEM_LABELS: Record<ItemId, string> = {
   business_info: "Business Profile",
   services: "Services",
   hours: "Business Hours",
-  google_business: "Google Business Profile",
   website_import: "Website Import",
   knowledge_base: "Knowledge Base",
   ai_receptionist: "AI Receptionist",
@@ -44,7 +42,6 @@ export const ITEM_ORDER: ItemId[] = [
   "business_info",
   "services",
   "hours",
-  "google_business",
   "website_import",
   "knowledge_base",
   "ai_receptionist",
@@ -85,10 +82,14 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
   const gbpOk = has("google_place_id") || has("google_category");
 
   return {
-    business_info: businessOk ? "complete" : has("business_name") ? "in_progress" : "not_started",
+    business_info:
+      businessOk || gbpOk
+        ? "complete"
+        : has("business_name")
+        ? "in_progress"
+        : "not_started",
     services: servicesOk ? "complete" : "not_started",
     hours: hoursOk ? "complete" : "not_started",
-    google_business: gbpOk ? "complete" : "not_started",
     website_import: has("website") ? "complete" : "not_started",
     knowledge_base: knowledgeOk ? "complete" : "not_started",
     ai_receptionist: aiOk ? "complete" : "not_started",
