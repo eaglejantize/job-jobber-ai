@@ -66,7 +66,8 @@ export default function SectionRenderer({
   switch (sectionId as string) {
     case "business_profile":
       return (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <GoogleBusinessSection ctx={ctx} />
           {[
             ["business_name", "Business name"],
             ["business_phone", "Business phone"],
@@ -102,9 +103,6 @@ export default function SectionRenderer({
           />
         </div>
       );
-
-    case "google_business":
-      return <GoogleBusinessSection ctx={ctx} />;
 
     case "website_import":
       return <WebsiteImportSection ctx={ctx} />;
