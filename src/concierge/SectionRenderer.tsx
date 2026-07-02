@@ -13,7 +13,6 @@ import IndustryCombobox from "@/settings/IndustryCombobox";
 import VoicePicker from "@/components/VoicePicker";
 import { TestCallButton } from "@/components/TestCallButton";
 import ActionBar from "./ActionBar";
-import type { SectionId } from "./sections";
 import type { UseConcierge } from "./useConcierge";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -39,13 +38,32 @@ export default function SectionRenderer({
   sectionId,
   ctx,
 }: {
-  sectionId: SectionId;
+  sectionId: string;
   ctx: UseConcierge;
 }) {
   const set = ctx.setField;
   const disableGbp = !ctx.current?.address && !ctx.current?.website;
 
-  switch (sectionId) {
+  // AI Receptionist combines several legacy sub-sections into one step.
+  if (sectionId === "ai_receptionist") {
+    return (
+      <div className="space-y-8">
+        <SectionRenderer sectionId="ai_personality" ctx={ctx} />
+        <SectionRenderer sectionId="voice" ctx={ctx} />
+        <SectionRenderer sectionId="greeting" ctx={ctx} />
+        <SectionRenderer sectionId="after_hours" ctx={ctx} />
+        <SectionRenderer sectionId="call_forwarding" ctx={ctx} />
+        <SectionRenderer sectionId="voicemail" ctx={ctx} />
+        <SectionRenderer sectionId="sms_followup" ctx={ctx} />
+      </div>
+    );
+  }
+
+  if (sectionId === "integrations") {
+    return <IntegrationsSection ctx={ctx} />;
+  }
+
+  switch (sectionId as string) {
     case "business_profile":
       return (
         <div className="space-y-3">
