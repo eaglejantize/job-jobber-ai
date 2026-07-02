@@ -809,3 +809,90 @@ function TestCallSection({ ctx }: { ctx: UseConcierge }) {
     </div>
   );
 }
+
+function IntegrationsSection({ ctx }: { ctx: UseConcierge }) {
+  const [calendarId, setCalendarId] = useState<string>(
+    String((ctx.current as any)?.google_calendar_id ?? "primary"),
+  );
+  const [busy, setBusy] = useState(false);
+  const connectedAt = (ctx.current as any)?.google_calendar_connected_at;
+
+  async function connect() {
+    if (!ctx.clientId) return;
+    setBusy(true);
+    const { error } = await supabase
+      .from("callcapture_clients")
+      .update({
+        google_calendar_id: calendarId.trim() || "primary",
+        google_calendar_connected_at: new Date().toISOString(),
+      } as never)
+      .eq("id", ctx.clientId);
+    setBusy(false);
+    if (error) {
+      toast({ title: "Couldn't connect", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Google Calendar connected" });
+      await ctx.reload();
+    }
+  }
+
+  async function disconnect() {
+    if (!ctx.clientId) return;
+    await supabase
+      .from("callcapture_clients")
+      .update({ google_calendar_connected_at: null } as never)
+      .eq("id", ctx.clientId);
+    await ctx.reload();
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Connect the integrations you use. Skip any you don't — you can come back to
+        this step anytime.
+      </p>
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="font-semibold">Google Calendar</div>
+            <div className="text-xs text-muted-foreground">
+              Let the AI book real appointments on your calendar.
+            </div>
+          </div>
+          {connectedAt ? (
+            <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30">
+              Connected
+            </Badge>
+          ) : (
+            <Badge variant="outline">Not connected</Badge>
+          )}
+        </div>
+        <div className="grid sm:grid-cols-[1fr_auto] gap-2">
+          <div>
+            <Label className="text-xs">Calendar ID</Label>
+            <Input
+              value={calendarId}
+              onChange={(e) => setCalendarId(e.target.value)}
+              placeholder="primary or you@domain.com"
+            />
+          </div>
+          <div className="flex items-end">
+            {connectedAt ? (
+              <Button variant="outline" onClick={disconnect} type="button">
+                Disconnect
+              </Button>
+            ) : (
+              <Button onClick={connect} disabled={busy} type="button">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        More integrations (Outlook, QuickBooks, Housecall Pro, ServiceTitan, Zapier)
+        coming soon.
+      </div>
+    </div>
+  );
+}
