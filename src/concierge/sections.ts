@@ -1,26 +1,12 @@
 export type SectionId =
   | "business_profile"
-  | "industry"
-  | "google_business"
-  | "website_import"
   | "services"
   | "hours"
-  | "hours_routing"
-  | "call_forwarding"
-  | "voicemail"
-  | "service_area"
-  | "emergency"
-  | "scheduling"
-  | "fee"
-  | "ai_personality"
-  | "voice"
-  | "greeting"
-  | "after_hours"
-  | "sms_followup"
-  | "calendar"
-  | "faqs"
+  | "google_business"
+  | "website_import"
   | "knowledge"
-  | "policies"
+  | "ai_receptionist"
+  | "integrations"
   | "test_call"
   | "review";
 
@@ -38,21 +24,28 @@ export const SECTIONS: SectionDef[] = [
   {
     id: "business_profile",
     title: "Business Profile",
-    subtitle: "Confirm your business name, contact info, and address.",
-    fields: ["business_name", "business_phone", "business_email", "address", "website"],
+    subtitle: "Business name, industry, contact info, and address.",
+    fields: ["business_name", "business_phone", "business_email", "address", "website", "industry", "business_category_group"],
     aiSupported: false,
   },
   {
-    id: "industry",
-    title: "Industry",
-    subtitle: "Pick the category that best fits your business.",
-    fields: ["industry", "business_category_group"],
+    id: "services",
+    title: "Services",
+    subtitle: "List the main services callers can ask about.",
+    fields: ["services", "service_area"],
+    aiSupported: true,
+  },
+  {
+    id: "hours",
+    title: "Business Hours",
+    subtitle: "When you're open, and how calls route during and after hours.",
+    fields: ["business_hours_schedule", "business_hours_24_7", "phone_mode", "forward_first", "rings_before_answer"],
     aiSupported: false,
   },
   {
     id: "google_business",
     title: "Google Business Profile",
-    subtitle: "Import your business details from Google.",
+    subtitle: "Import your verified details from Google.",
     fields: ["google_place_id", "google_category", "google_rating"],
     aiSupported: false,
   },
@@ -64,130 +57,29 @@ export const SECTIONS: SectionDef[] = [
     aiSupported: false,
   },
   {
-    id: "services",
-    title: "Services Offered",
-    subtitle: "List the main services callers can ask about.",
-    fields: ["services"],
-    aiSupported: true,
-  },
-  {
-    id: "hours",
-    title: "Business Hours",
-    subtitle: "When are you open to take calls?",
-    fields: ["business_hours_schedule", "business_hours_24_7"],
-    aiSupported: false,
-  },
-  {
-    id: "hours_routing",
-    title: "Business Hours Routing",
-    subtitle: "How calls are handled during open hours.",
-    fields: ["phone_mode", "forward_first", "rings_before_answer"],
-    aiSupported: false,
-  },
-  {
-    id: "service_area",
-    title: "Service Area",
-    subtitle: "Where do you serve customers?",
-    fields: ["service_area"],
-    aiSupported: true,
-  },
-  {
-    id: "emergency",
-    title: "Emergency Service",
-    subtitle: "Do you offer after-hours emergency service, and on what terms?",
-    fields: ["emergency_services", "emergency_rules"],
-    aiSupported: true,
-  },
-  {
-    id: "scheduling",
-    title: "Scheduling Preferences",
-    subtitle: "Should the AI book appointments or just take messages?",
-    fields: ["scheduling_enabled", "scheduling_mode"],
-    aiSupported: false,
-  },
-  {
-    id: "fee",
-    title: "Service / Diagnostic Fee",
-    subtitle: "Optional. What do you charge to come out?",
-    fields: ["diagnostic_fee"],
-    aiSupported: false,
-  },
-  {
-    id: "ai_personality",
-    title: "AI Personality",
-    subtitle: "Pick a tone and persona for your AI receptionist.",
-    fields: ["tone", "ai_personality"],
-    aiSupported: false,
-  },
-  {
-    id: "voice",
-    title: "Voice Selection",
-    subtitle: "Choose the voice your callers will hear.",
-    fields: ["voice_id", "voice_label"],
-    aiSupported: false,
-  },
-  {
-    id: "greeting",
-    title: "AI Greeting",
-    subtitle: "The first thing callers hear.",
-    fields: ["greeting"],
-    aiSupported: true,
-  },
-  {
-    id: "after_hours",
-    title: "After-Hours Message",
-    subtitle: "What the AI says when you're closed.",
-    fields: ["after_hours_message"],
-    aiSupported: true,
-  },
-  {
-    id: "call_forwarding",
-    title: "Call Forwarding",
-    subtitle: "Where transferred calls should land.",
-    fields: ["forward_phone"],
-    aiSupported: false,
-  },
-  {
-    id: "voicemail",
-    title: "Voicemail",
-    subtitle: "Capture a message when the call can't continue.",
-    fields: ["voicemail_enabled", "voicemail_fallback"],
-    aiSupported: false,
-  },
-  {
-    id: "sms_followup",
-    title: "SMS Follow-up",
-    subtitle: "Text sent to the caller after the call ends.",
-    fields: ["sms_followup_template"],
-    aiSupported: true,
-  },
-  {
-    id: "calendar",
-    title: "Calendar Connection",
-    subtitle: "Connect Google Calendar so the AI can book real appointments.",
-    fields: ["google_calendar_id"],
-    aiSupported: false,
-  },
-  {
-    id: "faqs",
-    title: "FAQs",
-    subtitle: "Questions callers ask, and the answers your AI should give.",
-    fields: ["faqs"],
-    aiSupported: true,
-  },
-  {
     id: "knowledge",
     title: "Knowledge Base",
-    subtitle: "Anything else your AI should know about your business.",
-    fields: ["knowledge_base"],
+    subtitle: "FAQs, policies, and anything else your AI should know.",
+    fields: ["knowledge_base", "faqs", "company_policies"],
     aiSupported: true,
   },
   {
-    id: "policies",
-    title: "Policies",
-    subtitle: "Cancellation, payment, guarantees — anything you want the AI to know.",
-    fields: ["company_policies"],
-    aiSupported: true,
+    id: "ai_receptionist",
+    title: "AI Receptionist",
+    subtitle: "Voice, personality, greeting, and how the AI handles calls.",
+    fields: [
+      "tone", "ai_personality", "voice_id", "voice_label", "greeting",
+      "after_hours_message", "forward_phone", "voicemail_enabled",
+      "voicemail_fallback", "sms_followup_template",
+    ],
+    aiSupported: false,
+  },
+  {
+    id: "integrations",
+    title: "Integrations",
+    subtitle: "Connect your calendar and other tools. Skip any you don't use.",
+    fields: ["google_calendar_id"],
+    aiSupported: false,
   },
   {
     id: "test_call",
@@ -198,8 +90,8 @@ export const SECTIONS: SectionDef[] = [
   },
   {
     id: "review",
-    title: "Review & Apply",
-    subtitle: "Compare what's currently saved to what the concierge is proposing.",
+    title: "Review & Activate",
+    subtitle: "Review your setup and activate your AI receptionist.",
     fields: [],
     aiSupported: false,
   },
