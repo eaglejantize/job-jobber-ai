@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import ThemeToggle from "@/components/ThemeToggle";
-import { SetupProgressPill } from "@/components/SetupProgressBadge";
 
 const links = [
   { to: "/home", label: "Home" },
@@ -66,7 +65,6 @@ export default function AppNav() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <SetupProgressPill />
           <ThemeToggle />
           <Button variant="outline" size="sm" onClick={signOut} className="rounded-xl border-border bg-background text-foreground hover:bg-secondary">
             <LogOut className="h-4 w-4" /> Sign out

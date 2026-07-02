@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, Save, SkipForward, RotateCcw, X, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Save, SkipForward, RotateCcw, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SECTIONS } from "./sections";
 import { useConcierge } from "./useConcierge";
@@ -10,16 +10,12 @@ import SectionRenderer from "./SectionRenderer";
 import ReviewAndApply from "./ReviewAndApply";
 import PostApply from "./PostApply";
 import { toast } from "@/hooks/use-toast";
-import { ProgressPanel } from "@/onboarding/ProgressTracker";
 
 export default function ConciergePage() {
   const navigate = useNavigate();
   const ctx = useConcierge();
   const [applied, setApplied] = useState(false);
-
-  useEffect(() => {
-    // hydrate step into local state after load
-  }, []);
+  const [applying, setApplying] = useState(false);
 
   if (ctx.loading) {
     return <div className="container py-20 text-muted-foreground">Loading…</div>;
@@ -40,11 +36,9 @@ export default function ConciergePage() {
   async function next() {
     await ctx.persist({ step: Math.min(SECTIONS.length - 1, ctx.step + 1) });
     ctx.setStep(Math.min(SECTIONS.length - 1, ctx.step + 1));
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function prev() {
     ctx.setStep(Math.max(0, ctx.step - 1));
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function skip() {
     ctx.skipSection(section.id);
@@ -53,29 +47,29 @@ export default function ConciergePage() {
   async function saveAndExit() {
     await ctx.persist();
     toast({ title: "Progress saved", description: "You can pick up where you left off." });
-    navigate("/settings");
+    navigate("/dashboard");
+  }
+  async function applyChanges() {
+    setApplying(true);
+    const { error } = await ctx.applyFields(section.fields);
+    setApplying(false);
+    if (error) {
+      toast({ title: "Couldn't save", description: (error as Error).message, variant: "destructive" });
+    } else {
+      toast({ title: "Changes applied" });
+    }
   }
   async function restart() {
-    if (!confirm("Restart the concierge? Your in-progress suggestions will be cleared.")) return;
+    if (!confirm("Restart setup? Your in-progress suggestions will be cleared.")) return;
     await ctx.reset();
-    toast({ title: "Concierge reset" });
-  }
-  function exitNoSave() {
-    if (!confirm("Exit without saving your in-progress suggestions?")) return;
-    navigate("/settings");
+    toast({ title: "Setup reset" });
   }
 
   return (
     <div className="container py-6 md:py-10 max-w-5xl">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <div className="flex items-center gap-2 text-primary">
-            <Sparkles className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-widest">
-              AI Setup Concierge
-            </span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
             {section.title}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">{section.subtitle}</p>
@@ -83,9 +77,6 @@ export default function ConciergePage() {
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={saveAndExit} type="button">
             <Save className="h-4 w-4" /> Save & continue later
-          </Button>
-          <Button variant="ghost" size="sm" onClick={exitNoSave} type="button">
-            <X className="h-4 w-4" /> Exit
           </Button>
         </div>
       </div>
@@ -104,7 +95,6 @@ export default function ConciergePage() {
 
       <div className="grid md:grid-cols-[220px_1fr] gap-6">
         <nav className="hidden md:block">
-          <ProgressPanel compact className="mb-4" />
           <ol className="space-y-1 text-sm">
             {SECTIONS.map((s, i) => {
               const active = i === ctx.step;
@@ -136,13 +126,21 @@ export default function ConciergePage() {
           )}
 
           {!isReview && (
-            <div className="flex justify-between mt-6 pt-4 border-t border-border">
+            <div className="flex flex-wrap justify-between gap-2 mt-6 pt-4 border-t border-border">
               <Button variant="ghost" onClick={prev} disabled={ctx.step === 0} type="button">
                 <ArrowLeft className="h-4 w-4" /> Back
               </Button>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={skip} type="button">
                   <SkipForward className="h-4 w-4" /> Skip
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={applyChanges}
+                  type="button"
+                  disabled={applying || section.fields.length === 0}
+                >
+                  <Check className="h-4 w-4" /> Apply changes
                 </Button>
                 <Button onClick={next} className="bg-cta hover:opacity-90" type="button">
                   Next <ArrowRight className="h-4 w-4" />

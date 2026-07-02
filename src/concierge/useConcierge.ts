@@ -109,6 +109,33 @@ export function useConcierge() {
     [clientId, pending],
   );
 
+  // Apply the given fields to the client row without discarding remaining
+  // pending suggestions. Used by the per-step "Apply Changes" button.
+  const applyFields = useCallback(
+    async (fieldsToApply: string[]) => {
+      if (!clientId) return { error: new Error("No client") };
+      const patch: Record<string, unknown> = {};
+      for (const f of fieldsToApply) {
+        if (f in pending) patch[f] = pending[f];
+      }
+      if (Object.keys(patch).length === 0) return { error: null };
+      const { error } = await supabase
+        .from("callcapture_clients")
+        .update(patch as never)
+        .eq("id", clientId);
+      if (!error) {
+        setPending((p) => {
+          const next = { ...p };
+          for (const f of fieldsToApply) delete next[f];
+          return next;
+        });
+        setCurrent((c) => ({ ...c, ...patch }));
+      }
+      return { error };
+    },
+    [clientId, pending],
+  );
+
   return {
     loading,
     clientId,
@@ -123,6 +150,7 @@ export function useConcierge() {
     reset,
     skipSection,
     apply,
+    applyFields,
     reload: load,
   };
 }

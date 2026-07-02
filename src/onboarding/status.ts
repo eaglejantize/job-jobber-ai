@@ -12,23 +12,13 @@ export type ItemStatus =
 
 export type ItemId =
   | "business_info"
-  | "industry"
+  | "services"
+  | "hours"
   | "google_business"
   | "website_import"
-  | "hours"
-  | "service_areas"
-  | "services"
-  | "faqs"
-  | "ai_personality"
-  | "voice"
-  | "greeting"
-  | "hours_routing"
-  | "after_hours"
-  | "call_forwarding"
-  | "voicemail"
-  | "sms_fallback"
-  | "calendar"
   | "knowledge_base"
+  | "ai_receptionist"
+  | "integrations"
   | "test_call";
 
 export type OnboardingItem = { status: ItemStatus; updated_at?: string };
@@ -39,58 +29,34 @@ export type OnboardingState = {
 };
 
 export const ITEM_LABELS: Record<ItemId, string> = {
-  business_info: "Business Information",
-  industry: "Industry",
+  business_info: "Business Profile",
+  services: "Services",
+  hours: "Business Hours",
   google_business: "Google Business Profile",
   website_import: "Website Import",
-  hours: "Business Hours",
-  service_areas: "Service Areas",
-  services: "Services",
-  faqs: "FAQs",
-  ai_personality: "AI Personality",
-  voice: "Voice Selection",
-  greeting: "Greeting",
-  hours_routing: "Business Hours Routing",
-  after_hours: "After-Hours Greeting",
-  call_forwarding: "Call Forwarding",
-  voicemail: "Voicemail",
-  sms_fallback: "SMS Fallback",
-  calendar: "Calendar Connection",
   knowledge_base: "Knowledge Base",
+  ai_receptionist: "AI Receptionist",
+  integrations: "Integrations",
   test_call: "Test Call",
 };
 
 export const ITEM_ORDER: ItemId[] = [
   "business_info",
-  "industry",
+  "services",
+  "hours",
   "google_business",
   "website_import",
-  "hours",
-  "service_areas",
-  "services",
-  "faqs",
-  "ai_personality",
-  "voice",
-  "greeting",
-  "hours_routing",
-  "after_hours",
-  "call_forwarding",
-  "voicemail",
-  "sms_fallback",
-  "calendar",
   "knowledge_base",
+  "ai_receptionist",
+  "integrations",
   "test_call",
 ];
 
-// Items that must be complete (or skipped where allowed) before the
-// "Activate my AI receptionist" button unlocks.
 export const REQUIRED_FOR_ACTIVATION: ItemId[] = [
   "business_info",
-  "hours",
   "services",
-  "voice",
-  "greeting",
-  "knowledge_base",
+  "hours",
+  "ai_receptionist",
   "test_call",
 ];
 
@@ -113,32 +79,20 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
   const faqs = (c?.faqs as Array<{ q?: string; a?: string }> | null) ?? [];
   const faqsOk = faqs.some((f) => f?.q && f?.a);
   const knowledgeOk = has("knowledge_base") || faqsOk || servicesOk;
-  const calendarOk = !!c?.google_calendar_connected_at || nonEmpty(c?.google_calendar_id);
-  const voicemailOk = c?.voicemail_enabled != null || c?.voicemail_fallback != null;
-  const routingOk = has("phone_mode") || c?.forward_first != null;
-  const personalityOk = has("ai_personality") || has("tone");
+  const integrationsOk = !!c?.google_calendar_connected_at;
+  const aiOk = (has("voice_id") || has("voice_label")) && has("greeting");
   const testCallOk = !!c?.test_call_passed_at || nonEmpty(c?.first_test_call_id);
   const gbpOk = has("google_place_id") || has("google_category");
 
   return {
     business_info: businessOk ? "complete" : has("business_name") ? "in_progress" : "not_started",
-    industry: has("industry") ? "complete" : "not_started",
+    services: servicesOk ? "complete" : "not_started",
+    hours: hoursOk ? "complete" : "not_started",
     google_business: gbpOk ? "complete" : "not_started",
     website_import: has("website") ? "complete" : "not_started",
-    hours: hoursOk ? "complete" : "not_started",
-    service_areas: nonEmpty(c?.service_area) || has("service_area_notes") ? "complete" : "not_started",
-    services: servicesOk ? "complete" : "not_started",
-    faqs: faqsOk ? "complete" : "not_started",
-    ai_personality: personalityOk ? "complete" : "not_started",
-    voice: has("voice_id") ? "complete" : "not_started",
-    greeting: has("greeting") ? "complete" : "not_started",
-    hours_routing: routingOk ? "complete" : "not_started",
-    after_hours: has("after_hours_message") ? "complete" : "not_started",
-    call_forwarding: has("forward_phone") ? "complete" : "not_started",
-    voicemail: voicemailOk ? "complete" : "not_started",
-    sms_fallback: has("sms_followup_template") ? "complete" : "not_started",
-    calendar: calendarOk ? "complete" : "not_started",
     knowledge_base: knowledgeOk ? "complete" : "not_started",
+    ai_receptionist: aiOk ? "complete" : "not_started",
+    integrations: integrationsOk ? "complete" : "not_started",
     test_call: testCallOk ? "complete" : "not_started",
   };
 }

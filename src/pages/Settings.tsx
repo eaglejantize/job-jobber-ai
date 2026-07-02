@@ -1,10 +1,10 @@
 import Layout from "@/components/Layout";
-import ControlCenter from "@/settings/ControlCenter";
+import ConciergePage from "@/concierge/ConciergePage";
 
 export default function Settings() {
   return (
     <Layout>
-      <ControlCenter />
+      <ConciergePage />
     </Layout>
   );
 }

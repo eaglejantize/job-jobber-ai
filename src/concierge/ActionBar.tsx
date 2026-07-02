@@ -3,8 +3,6 @@ import { Sparkles, Wand2, Briefcase, Heart, Tag, MapPin, Loader2 } from "lucide-
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import type { SectionId } from "./sections";
-
 type Action = "generate" | "improve" | "professional" | "warmer" | "industry" | "gbp";
 
 const BUTTONS: { id: Action; label: string; icon: any }[] = [
@@ -23,7 +21,7 @@ export default function ActionBar({
   disableGbp,
   notes,
 }: {
-  section: SectionId;
+  section: string;
   currentValue: unknown;
   onResult: (value: unknown, meta?: { needs_user_input?: boolean; notes?: string }) => void;
   disableGbp?: boolean;
