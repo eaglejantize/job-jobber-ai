@@ -41,15 +41,11 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
     return <div className="container py-20 text-sm text-muted-foreground">Loading…</div>;
   }
   if (state === "incomplete") {
-    // Never redirect if we're already on an onboarding route — would cause a
-    // blank-screen self-redirect loop.
-    if (
-      location.pathname === "/settings/concierge" ||
-      location.pathname.startsWith("/setup")
-    ) {
+    // The wizard IS the onboarding — never redirect while already on it.
+    if (location.pathname.startsWith("/settings")) {
       return <>{children}</>;
     }
-    return <Navigate to="/settings/concierge" replace />;
+    return <Navigate to="/settings" replace />;
   }
   return <>{children}</>;
 }
