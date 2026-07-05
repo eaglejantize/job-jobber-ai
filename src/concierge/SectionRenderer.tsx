@@ -56,6 +56,7 @@ export default function SectionRenderer({
         <SectionRenderer sectionId="call_forwarding" ctx={ctx} />
         <SectionRenderer sectionId="voicemail" ctx={ctx} />
         <SectionRenderer sectionId="sms_followup" ctx={ctx} />
+        <SectionRenderer sectionId="rings_before_ai" ctx={ctx} />
       </div>
     );
   }
