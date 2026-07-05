@@ -2,7 +2,6 @@ import Layout from "@/components/Layout";
 import DemoNumberCard from "@/components/DemoNumberCard";
 import SampleConversation from "@/components/SampleConversation";
 import SampleLeadCard from "@/components/SampleLeadCard";
-import RequestSetupBanner from "@/components/RequestSetupBanner";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
@@ -40,7 +39,6 @@ export default function Demo() {
         </div>
       </section>
 
-      <RequestSetupBanner />
     </Layout>
   );
 }

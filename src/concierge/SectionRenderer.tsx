@@ -230,6 +230,43 @@ export default function SectionRenderer({
       );
     }
 
+    case "rings_before_ai": {
+      const raw = getValue(ctx, "rings_before_answer");
+      const rings = raw === null || raw === undefined || raw === "" ? 3 : Number(raw);
+      const options: Array<[number, string]> = [
+        [0, "Answer immediately"],
+        [1, "1 ring"],
+        [2, "2 rings"],
+        [3, "3 rings"],
+        [4, "4 rings"],
+        [5, "5 rings"],
+      ];
+      return (
+        <div className="space-y-2">
+          <Label>
+            Rings before AI answers
+            {isPending(ctx, "rings_before_answer") && <Suggested />}
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            How many rings should occur before the AI answers?
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {options.map(([val, label]) => (
+              <Button
+                key={val}
+                type="button"
+                size="sm"
+                variant={rings === val ? "default" : "outline"}
+                onClick={() => set("rings_before_answer", val)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     case "voicemail": {
       const enabled = !!getValue(ctx, "voicemail_enabled");
       const fallback = !!getValue(ctx, "voicemail_fallback");

@@ -2,7 +2,6 @@ import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { Link } from "react-router-dom";
-import RequestSetupBanner from "@/components/RequestSetupBanner";
 
 const features = [
   "24/7 AI call answering",
@@ -51,7 +50,6 @@ export default function Pricing() {
         </div>
       </section>
 
-      <RequestSetupBanner />
     </Layout>
   );
 }
