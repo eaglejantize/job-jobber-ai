@@ -16,6 +16,11 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
 
   return (
     <div className="space-y-3">
+      {!showAssigned && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-foreground">
+          Choose one of the options below to connect a business phone number before continuing setup.
+        </div>
+      )}
       {showAssigned && (
         <div className="flex justify-end">
           <Button
