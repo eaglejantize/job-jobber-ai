@@ -9,7 +9,7 @@ const items = [
 
 export default function Problem() {
   return (
-    <section className="border-y border-border/60 bg-white">
+    <section className="border-y border-border/60 bg-background">
       <div className="container py-20 md:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">The problem</div>

@@ -29,7 +29,7 @@ export default function ActivityFeed() {
               <span className="text-muted-foreground">Updated continuously</span>
             </div>
           </div>
-          <div className="relative rounded-2xl border border-border bg-white p-5 shadow-elevated">
+          <div className="relative rounded-2xl border border-border bg-card p-5 shadow-elevated">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold text-navy">Live activity</div>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
@@ -40,7 +40,7 @@ export default function ActivityFeed() {
               {items.map(({ icon: Icon, text, meta, time }, i) => (
                 <li
                   key={text}
-                  className="flex items-center gap-3 rounded-xl border border-border/70 bg-white px-3 py-2.5 shadow-soft animate-slide-in-up"
+                  className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-soft animate-slide-in-up"
                   style={{ animationDelay: `${i * 120}ms` }}
                 >
                   <span className="grid h-9 w-9 flex-none place-items-center rounded-lg bg-brand-soft text-brand">

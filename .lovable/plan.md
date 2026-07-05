@@ -1,73 +1,54 @@
-# Home Dashboard Cleanup & Accuracy
+## The real problem
 
-Goal: Make `src/pages/Home.tsx` a faithful read-only view of the tenant's saved configuration in `callcapture_clients`, and remove legacy/duplicate UI. All values shown fall back to "Not configured" instead of hardcoded defaults.
+The landing page mixes **hardcoded surface colors** (`bg-white`, `bg-gradient-hero`, `bg-gradient-navy`) with **semantic text tokens** (`text-navy`, `text-ink`, `text-muted-foreground`). Those text tokens flip in dark mode:
 
-## 1. Fix data source for Home
+- `--navy` light: `215 55% 13%` (near-black) → dark mode: `210 20% 96%` (near-white)
+- `--slate-ink` light: `215 22% 32%` (dark gray) → dark mode: `215 16% 72%` (light gray)
 
-Today Home reads voice + rings from `callcapture_assistant_configs.notification_settings/call_rules`, which the concierge wizard never writes to. Switch Home to read from the tenant row in `callcapture_clients` (the concierge's source of truth):
+So the moment `.dark` is applied to `<html>` (via the theme toggle or system pref propagation elsewhere in the app), every section that still paints `bg-white` renders **near-white text on white** — headings, paragraphs, FAQ triggers, feature card titles, footer links all collapse. That's the low-contrast failure being reported. In pure light mode the palette is fine; the regression is theme-driven, not per-element.
 
-- `voice_id`, `voice_label`, `ai_personality` → AI Voice card
-- `business_phone` → Business Number card
-- `assigned_callcapture_number`, `number_status` → Vektuor Number card
-- `rings_before_answer` → Rings Before AI card
-- `greeting`, `business_hours_schedule`, `forward_phone`, `google_calendar_id`, `concierge_state`/`activated_at` → future cards & completion state
+## Fix strategy — one systemic change, no per-element patches
 
-If a field is null/empty, render "Not configured" (with a link to the relevant wizard step where useful) — never a hardcoded default like "Maya" or "3 rings".
+**Lock the marketing landing page to the light palette** and **stop hardcoding surface colors**. Text colors then always match the surface they sit on, in every browser theme state.
 
-## 2. AI Voice card (issue #1, #8)
+### 1. Scope the landing page to the light theme
 
-- Resolve label via `getVoiceByLabel(client.voice_label) ?? getVoiceById(client.voice_id)`.
-- Show `{label} · {persona}` from that record. If none saved → "Not configured" + link to AI Receptionist step.
-- Delete the `?? "Maya"` fallback and the read from `assistant_configs.notification_settings.voice`.
+In `src/pages/Index.tsx`, wrap the root in a `light` class and force color-scheme so the CSS variables always resolve to the light palette regardless of `<html class="dark">`:
 
-## 3. Business Phone vs Vektuor Number (issue #2)
+```tsx
+<div className="light min-h-screen bg-background font-sans [color-scheme:light]">
+```
 
-Replace the current "Business Phone" status tile + duplicate "Phone Number" in Call Setup with two clearly-labeled fields sourced independently:
+Add a `.light { … }` block in `src/index.css` that re-declares the same `:root` token values (so a `.dark` ancestor can't cascade into the landing). This is the single source of truth that guarantees `text-navy` = dark and `bg-background` = light on this page.
 
-- **Vektuor Number** = `assigned_callcapture_number` + `number_status` badge (unchanged logic, keep polling for provisioning states).
-- **Business Number** = `business_phone` from `callcapture_clients` only. Never fall back to the Vektuor number or `alert_phone`. If missing: show "Not configured" + a "Configure Business Number" button linking to `/settings/concierge` at the business_profile step.
+### 2. Replace hardcoded surfaces with semantic tokens
 
-Remove the top-row "Business Phone" tile (or repurpose it as "Business Number") so the number is displayed exactly once.
+Every landing component that uses `bg-white` swaps to `bg-background` or `bg-card`. Every text token stays semantic. Files touched (surface swaps only, no per-element color overrides):
 
-## 4. Rings Before AI (issue #3)
+- `Navbar.tsx` — already `bg-background/80`, keep
+- `Hero.tsx` — dashboard mockup chrome `bg-white` → `bg-card`, floating callout cards `bg-white` → `bg-card`
+- `SocialProof.tsx` — `bg-white` → `bg-background` (section) 
+- `Problem.tsx` — `bg-white` → `bg-background`; cards already `bg-card` 
+- `HowItWorks.tsx` — already uses `bg-card`, keep
+- `Features.tsx` — section `bg-white` → `bg-background`
+- `LiveDemo.tsx` — stays `bg-gradient-navy` with `text-white` (intentional dark section, already correct)
+- `ActivityFeed.tsx` — inner panel `bg-white` → `bg-card`, list items `bg-white` → `bg-card`
+- `Pricing.tsx` — already `bg-card`, keep
+- `FAQ.tsx` — section `bg-white` → `bg-background`; items already `bg-card`
+- `FinalCTA.tsx` — stays `bg-gradient-navy` with `text-white` (intentional)
+- `Footer.tsx` — `bg-white` → `bg-background`
 
-The wizard already lists `rings_before_answer` in the Hours section fields, but there is no UI for it and Home reads a different key. Fix both ends:
+Because Step 1 pins the palette, `bg-background` is always the light off-white and `bg-card` is always white — visual appearance in light mode is unchanged.
 
-- **Wizard**: in `src/concierge/SectionRenderer.tsx`, add a Rings-Before-AI control to the AI Receptionist step (move `rings_before_answer` out of `hours` and into `ai_receptionist` in `sections.ts` so it lives with related settings). Options: `0` (Answer immediately), `1`, `2`, `3`, `4`, `5`. Include short helper copy: "How many rings should occur before the AI answers?" Persist via `setField("rings_before_answer", n)`.
-- **Home**: read `client.rings_before_answer`. Display `"Answer immediately"` for `0`, `"{n} ring[s]"` otherwise, `"Not configured"` if null. Add a small "Edit" link that navigates to `/settings/concierge?step=ai_receptionist` (or the section id used by ConciergePage).
+### 3. Verification
 
-## 5. AI Backup card (issue #4)
+After the edits, run Playwright against `/` at 1280×1800:
+1. Default theme — screenshot hero, social proof, problem, how it works, features, live demo, activity feed, pricing, FAQ, final CTA, footer.
+2. Force `document.documentElement.classList.add('dark')` and re-screenshot the same sections. All text must remain readable because the landing is scoped to `.light`.
+3. Visually confirm every heading, paragraph, badge, CTA label, card title, FAQ trigger, and footer link is legible against its surface. Also spot-check the intentional dark sections (LiveDemo, FinalCTA) still show white text on navy.
 
-Since there's no configurable backing field yet, **hide the card entirely**. Remove `aiAnswerMissed` state and the "AI Backup" tile from Home. (We can reintroduce it under a clearer name — "Missed Call Protection" — once it is actually wired to a persisted field.)
+Only mark done after both theme states pass the visual review.
 
-## 6. Remove "Want us to set this up for you?" (issue #5)
+### Out of scope
 
-- Delete `<RequestSetupBanner />` usages in `src/pages/Home.tsx`, `src/pages/Demo.tsx`, `src/pages/Pricing.tsx`.
-- Delete the component file `src/components/RequestSetupBanner.tsx`.
-
-## 7. De-duplicate actions (issue #6, #7)
-
-Simplify the Quick Actions row to exactly three buttons:
-
-- **Test My AI** (`CallDemoButton`, primary)
-- **Edit Setup** → `/settings/concierge` (replaces both "Edit Settings" and the always-visible "Continue setup"). While onboarding is incomplete (`!client.activated_at`), the label becomes **Continue Setup**; once activated, it becomes **Edit Setup**.
-- **View Inbox** → `/leads`
-
-Remove the standalone "Update Agent" button and the extra "Edit Phone Setup" button in the Call Setup card header (users can edit via the single Setup button).
-
-## 8. Verification
-
-- Load Home as a fresh tenant with only business_profile completed → all AI/phone tiles show "Not configured" or wizard link, no "Maya", no "3 rings".
-- Complete concierge with voice=Anthony, rings=2 → Home shows "Anthony · <persona>" and "2 rings".
-- Set business_phone different from Vektuor number → tiles show two different numbers.
-- Confirm no `RequestSetupBanner` remains via `rg RequestSetupBanner`.
-
-## Files touched
-
-- `src/pages/Home.tsx` — rewire data source, restructure tiles, simplify actions, drop AI Backup, drop banner.
-- `src/concierge/sections.ts` — move `rings_before_answer` into `ai_receptionist` fields.
-- `src/concierge/SectionRenderer.tsx` — add Rings-Before-AI control in AI Receptionist step.
-- `src/pages/Demo.tsx`, `src/pages/Pricing.tsx` — remove banner import/usage.
-- Delete `src/components/RequestSetupBanner.tsx`.
-
-No database migrations required — `rings_before_answer` already exists on `callcapture_clients` and the wizard already persists it.
+No new colors, no per-element `text-*` overrides, no palette redesign. This is purely: (a) pin the landing to one palette, (b) route every surface through semantic tokens so foreground/background stay paired.

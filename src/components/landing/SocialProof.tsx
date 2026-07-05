@@ -1,6 +1,6 @@
 export default function SocialProof() {
   return (
-    <section className="border-y border-border/60 bg-white">
+    <section className="border-y border-border/60 bg-background">
       <div className="container py-16 md:py-20 text-center">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Who it's for</div>
         <h2 className="mt-3 text-balance text-2xl font-semibold tracking-tight text-navy md:text-3xl">
