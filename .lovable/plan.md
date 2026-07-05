@@ -1,34 +1,38 @@
-To go live so ChatGPT / Claude / Cursor can connect to your Vektuor MCP server, two things still need to happen on the backend. Both are one-shot actions — no code changes needed unless something fails.
+## Publish + verify MCP server end-to-end
 
-## Steps
+### 1. Pre-publish security check
+- `security--get_scan_results` — confirm no critical findings block publish. If stale/missing, run `security--run_security_scan` and wait.
 
-1. **Turn on the OAuth authorization server** (Lovable Cloud)
-   - Runs `supabase--configure_oauth_server` with no params.
-   - This enables OAuth 2.1 + Dynamic Client Registration on your Supabase Auth so external MCP clients can self-register, send users through consent at `/.lovable/oauth/consent` (already built), and receive user-scoped tokens.
-   - Idempotent — safe if it was partially configured before.
+### 2. Publish
+- `preview_ui--publish` — schedules the deploy to `vektuor.com` / `job-jobber-ai.lovable.app`. Wait ~60s for propagation.
 
-2. **Deploy the `mcp` Edge Function**
-   - Runs `supabase--deploy_edge_functions` for `mcp`.
-   - This pushes the auto-generated `supabase/functions/mcp/index.ts` (with the four tools: `list_recent_leads`, `get_lead`, `list_recent_calls`, `get_business_profile`) to the live endpoint:
-     `https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/mcp`
-   - Must be redeployed any time we add/edit a tool or change auth config.
+### 3. Verify OAuth consent page on production
+- `curl` (via `code--exec`) https://vektuor.com/.lovable/oauth/consent?authorization_id=debug
+- Expect 200 + the React shell (SPA). A blank/404 means the route isn't registered on the production build.
 
-3. **Verify the manifest**
-   - Runs `app_mcp_server--extract_mcp_manifest` to confirm `.lovable/mcp/manifest.json` is current and the server entry has no errors.
+### 4. Verify MCP endpoint reachability
+- `supabase--curl_edge_functions` GET `/mcp/.well-known/oauth-protected-resource` → should return JSON with `authorization_servers` pointing at `https://mzqazxtcwqumroqtmtjd.supabase.co/auth/v1`.
+- POST `/mcp` with an unauthenticated JSON-RPC `initialize` → expect 401 with `WWW-Authenticate: Bearer` (proves auth is enforced).
+- POST `/mcp` with an authenticated `tools/list` (using preview session token auto-injected by the tool) → expect the four tools listed.
 
-4. **Publish the app** (if not already published on this build)
-   - So the consent page at `/.lovable/oauth/consent` is reachable at your production origin (`vektuor.com`) for external clients redirecting users through login/consent.
+### 5. Verify OAuth discovery
+- `curl` https://mzqazxtcwqumroqtmtjd.supabase.co/auth/v1/.well-known/oauth-authorization-server → confirm `registration_endpoint` is present (DCR enabled) and `issuer` matches what mcp-js validates against.
 
-## After activation — how you connect a client
+### 6. Verify tenant-scoped data via RLS
+- `supabase--curl_edge_functions` POST `/mcp` `tools/call` for `list_recent_leads` with preview session → results should be scoped to the signed-in preview user's `client_id`. Confirm row count is plausible (0 for a fresh account is a pass; leaking another tenant's rows is a fail).
+- Same for `get_business_profile` — should return the preview user's profile only.
+- RLS is enforced by the `owns_client()` security-definer function + policies on `callcapture_clients` / `callcapture_leads` / `callcapture_calls`, plus every tool filters by `currentClientId(ctx)` derived from the OAuth token's `sub`. Verification just proves those layers are wired correctly.
 
-- **In ChatGPT / Claude / Cursor**: add a custom MCP server with URL
-  `https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/mcp`
-- The client will auto-discover OAuth, pop open a Vektuor login + consent screen, and then have access to the four read-only tools scoped to that user's account.
-- You can also surface this in-app later (Settings → Integrations panel with a copy-URL button) — say the word if you want that UI added.
+### 7. Verify ChatGPT/Claude end-to-end login+consent
+- **Not automatable from the sandbox** — completing a real OAuth handshake requires ChatGPT's or Claude's MCP client, an interactive browser, and a real Supabase user credential. Playwright can't sign the user in to a third-party AI product.
+- Instead: report the exact MCP URL to paste, the discovery URLs that prove the handshake will work, and one manual step for you (add the server in ChatGPT/Claude → click through Vektuor consent → confirm the four tools appear).
 
-## What I'm NOT changing
+### Report format
+For each check above: ✅/❌, one-line evidence (HTTP status, JSON snippet), and the fix if it fails.
 
-- No tool code, no schema, no UI changes in this step.
-- No new secrets required (Supabase URL + anon key are already wired).
+### What I'm NOT doing
+- No code changes.
+- No changes to publish visibility (leave whatever is currently set).
+- No fake automated "ChatGPT logged in successfully" claim — that step is manual.
 
-Approve and I'll run steps 1–3 (and 4 if you also want to publish now).
+Approve to run.
