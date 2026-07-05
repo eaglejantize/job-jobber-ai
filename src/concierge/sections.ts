@@ -2,6 +2,7 @@ export type SectionId =
   | "business_profile"
   | "services"
   | "hours"
+  | "phone_number"
   | "website_import"
   | "knowledge"
   | "ai_receptionist"
@@ -50,6 +51,13 @@ export const SECTIONS: SectionDef[] = [
     title: "Business Hours",
     subtitle: "When you're open, and how calls route during and after hours.",
     fields: ["business_hours_schedule", "business_hours_24_7", "phone_mode", "forward_first", "rings_before_answer"],
+    aiSupported: false,
+  },
+  {
+    id: "phone_number",
+    title: "Business Phone Number",
+    subtitle: "Claim a Vektuor number, bring your own, or forward your existing line.",
+    fields: ["assigned_callcapture_number", "number_status"],
     aiSupported: false,
   },
   {
@@ -134,4 +142,6 @@ export const FIELD_LABELS: Record<string, string> = {
   voicemail_fallback: "Voicemail fallback",
   google_calendar_id: "Google Calendar",
   knowledge_base: "Knowledge base",
+  assigned_callcapture_number: "Vektuor phone number",
+  number_status: "Number status",
 };

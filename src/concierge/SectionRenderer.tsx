@@ -14,6 +14,7 @@ import VoicePicker from "@/components/VoicePicker";
 import { TestCallButton } from "@/components/TestCallButton";
 import ActionBar from "./ActionBar";
 import type { UseConcierge } from "./useConcierge";
+import PhoneNumberSection from "./PhoneNumberSection";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -61,6 +62,10 @@ export default function SectionRenderer({
 
   if (sectionId === "integrations") {
     return <IntegrationsSection ctx={ctx} />;
+  }
+
+  if (sectionId === "phone_number") {
+    return <PhoneNumberSection ctx={ctx} />;
   }
 
   switch (sectionId as string) {
