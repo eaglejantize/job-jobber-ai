@@ -70,31 +70,15 @@ export function useConcierge() {
       const saved = (row as any).concierge_state as ConciergePersisted | null;
       if (saved && typeof saved === "object") {
         const normalized = normalizeConciergeState(saved);
-        const forcedPhoneStep = needsPhoneNumberStep(row as Record<string, any>);
-        const nextStep = forcedPhoneStep ? PHONE_NUMBER_STEP_INDEX : normalized.step;
-        const persisted = forcedPhoneStep ? { ...normalized, step: nextStep } : normalized;
         setPending(normalized.pending || {});
-        setStep(nextStep);
+        setStep(normalized.step);
         setSkipped(normalized.skipped || []);
-        if (!conciergeStatesEqual(saved, persisted)) {
+        if (!conciergeStatesEqual(saved, normalized)) {
           await supabase
             .from("callcapture_clients")
-            .update({ concierge_state: persisted } as never)
+            .update({ concierge_state: normalized } as never)
             .eq("id", (row as any).id);
         }
-      } else if (needsPhoneNumberStep(row as Record<string, any>)) {
-        const initial: ConciergePersisted = {
-          step: PHONE_NUMBER_STEP_INDEX,
-          pending: {},
-          skipped: [],
-          schema_version: CONCIERGE_STATE_SCHEMA_VERSION,
-          updated_at: new Date().toISOString(),
-        };
-        setStep(PHONE_NUMBER_STEP_INDEX);
-        await supabase
-          .from("callcapture_clients")
-          .update({ concierge_state: initial } as never)
-          .eq("id", (row as any).id);
       }
     }
     setLoading(false);
