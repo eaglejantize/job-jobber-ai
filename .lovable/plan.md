@@ -1,57 +1,46 @@
-# Restore the Business Phone step in onboarding
+## Findings
 
-## Diagnosis
+- `/settings` uses the unified `ConciergePage` for all authenticated users; I found no role/plan/feature-flag filtering around `SECTIONS`.
+- Published assets currently include `phone_number` and `Business Phone Number`, so production does not look obviously stale at the bundle level.
+- The likely remaining bug is persisted state: tenant/subscriber rows can keep old `concierge_state.step` and old `onboarding_state.items` from the 9-step flow. The current code clamps numeric step only, so an old step after Business Hours now points to Website Import instead of being remapped to the inserted phone step.
+- `onboarding_state.items` is derived from canonical `ITEM_ORDER` at runtime, but the saved object is never normalized back to the database, so old rows can remain missing `phone_number`.
+- The phone number UI itself is not hidden when `assigned_callcapture_number` is null; it renders the picker in that state.
 
-The Business Phone step was **removed during the onboarding consolidation**, not just unrouted.
+## Plan
 
-- Live wizard: `/settings` → `ConciergePage` → sections defined in `src/concierge/sections.ts`. That list has no phone step and nothing in `src/concierge/` renders `PhoneNumberPicker` or writes `assigned_callcapture_number`.
-- The working phone step still exists but is orphaned in the deprecated `src/setup/` module (`Step3PhoneNumber` in `src/setup/steps.tsx`, gated by `SetupContainer.tsx`). `/setup` now redirects to `/settings`, so it's unreachable.
-- `src/onboarding/status.ts` has no `phone_number` item, so activation doesn't require a number. Result: new tenants finish onboarding with `assigned_callcapture_number = null`.
+1. Add canonical onboarding normalization
+   - In `src/onboarding/status.ts`, add a normalizer that always returns all canonical `ITEM_ORDER` items.
+   - If saved `onboarding_state.items.phone_number` is missing, insert it as `not_started` unless `assigned_callcapture_number` makes it complete.
+   - Keep `phone_number` required for activation and ensure skipped phone setup does not satisfy activation.
 
-Fix by re-adding the step to the concierge flow and reusing the existing `PhoneNumberPicker` — no duplicate provisioning flow.
+2. Add concierge step migration/remapping
+   - In `src/concierge/useConcierge.ts`, normalize saved `concierge_state` when loading.
+   - Detect the old 9-step flow and remap stored steps at/after the insertion point so old tenants do not jump from Business Hours to Website Import.
+   - Clamp to the current 10-step canonical `SECTIONS` length.
+   - Persist the normalized `concierge_state` back to the tenant row only when it differs.
 
-## Changes
+3. Backfill existing tenants
+   - Add a database update that normalizes existing `callcapture_clients.onboarding_state` and `concierge_state` rows:
+     - add missing `phone_number` item as incomplete when no number exists;
+     - mark it complete when `assigned_callcapture_number` exists;
+     - remap old `concierge_state.step` values to the closest valid current step.
+   - Do not mark setup complete from this migration.
 
-### 1. New concierge section renderer
-Add `src/concierge/sections/PhoneNumberSection.tsx` that:
-- Reads `ctx.clientId` and current `assigned_callcapture_number` / `number_status`.
-- If a number is already assigned, shows it with a "Replace number" affordance.
-- Otherwise renders `<PhoneNumberPicker clientId={ctx.clientId} />` (existing component wired to `search-twilio-numbers` + `provision-twilio-number`).
-- On successful provision, updates ctx state so the step flips to "complete" and calls `onboarding.markStatus("phone_number", "complete")`.
+4. Verify with a brand-new non-admin subscriber tenant
+   - Use a non-admin/trial subscriber tenant in the backend (or create a disposable one if needed), sign in through the app, and open `/settings`.
+   - Confirm the wizard shows exactly 10 steps in this order:
+     1. Business Profile
+     2. Services
+     3. Business Hours
+     4. Business Phone Number
+     5. Website Import
+     6. Knowledge Base
+     7. AI Receptionist
+     8. Integrations
+     9. Test Call
+     10. Review & Activate
+   - Confirm `Business Phone Number` appears incomplete when `assigned_callcapture_number` is null.
+   - Confirm activation remains disabled until that step is complete.
 
-### 2. Register the section
-`src/concierge/sections.ts`:
-- Add `"phone_number"` to `SectionId` and insert a `SectionDef` between `hours` and `website_import` (natural place: after we know the business, before AI voice/greeting).
-  - `fields: ["assigned_callcapture_number", "number_status"]`, `aiSupported: false`.
-- Add labels for the two fields in `FIELD_LABELS`.
-
-`src/concierge/SectionRenderer.tsx`:
-- Add a case for `phone_number` that renders the new component.
-
-### 3. Onboarding status model
-`src/onboarding/status.ts`:
-- Add `"phone_number"` to `ItemId`, `ITEM_LABELS`, `ITEM_ORDER` (positioned to match section order).
-- In `derived()`: `phone_number = nonEmpty(c?.assigned_callcapture_number) ? "complete" : "not_started"`.
-- Add `"phone_number"` to `REQUIRED_FOR_ACTIVATION` (do NOT add to `SKIPPABLE_FOR_ACTIVATION` — a working number is mandatory).
-
-`src/concierge/ConciergePage.tsx`:
-- Add `phone_number: "phone_number"` to `SECTION_TO_ITEM`.
-
-### 4. Clean up dead code
-Delete the orphaned wizard so it can't drift again:
-- `src/setup/` directory (Step3PhoneNumber lives here; nothing else references these files except the redirect).
-- Confirm the `/setup` → `/settings` redirect in `App.tsx` stays; remove any remaining imports from `src/setup/` if grep finds them.
-
-(If any live code still imports from `src/setup/`, keep those files and only remove `steps.tsx`/`SetupContainer.tsx`/`SetupAccordion.tsx`.)
-
-## Verification
-
-- Manual: sign in as a fresh tenant → wizard shows Phone Number step; picking a number provisions it, `assigned_callcapture_number` is written, checklist item flips to complete, Activate stays blocked until then.
-- Existing tenants with a number already assigned: step derives as `complete` immediately, no regression.
-- `tsgo` for typecheck.
-
-## Out of scope
-
-- No changes to `provision-twilio-number` / `search-twilio-numbers` edge functions.
-- No changes to Home/Dashboard UI that reads `assigned_callcapture_number`.
-- No new billing gates.
+5. Production freshness check
+   - After implementation, publish if needed and confirm the published bundle contains the normalized 10-step flow.
