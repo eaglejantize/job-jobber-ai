@@ -146,6 +146,8 @@ export function deriveOnboardingState(
       items[id] = { status: "complete" };
     } else if (override?.status === "skipped" && canTreatSkippedAsSatisfied) {
       items[id] = override;
+    } else if (required && !canTreatSkippedAsSatisfied && override?.status === "complete") {
+      items[id] = { status: d[id] };
     } else if (override?.status === "needs_attention") {
       items[id] = override;
     } else if (override) {
