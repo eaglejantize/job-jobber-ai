@@ -25,7 +25,7 @@ const TOOLS: { name: string; description: string }[] = [
   { name: "get_business_profile", description: "Read your business profile, hours, greeting, and phone." },
 ];
 
-export default function AiIntegrationsTab() {
+export default function AiIntegrationsTab(_props: { ctx?: unknown }) {
   const [copied, setCopied] = useState(false);
 
   async function copyUrl() {
