@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { UseConcierge } from "./useConcierge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
   const [replacing, setReplacing] = useState(false);
@@ -49,9 +50,19 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
           if (!ctx.clientId) return;
           setRepairing(true);
           try {
-            await supabase.functions.invoke("repair-routing", {
+            const { data, error } = await supabase.functions.invoke("repair-routing", {
               body: { client_id: ctx.clientId },
             });
+            const d = (data ?? {}) as any;
+            if (error || d?.error) {
+              toast({
+                title: "Routing repair failed",
+                description: d?.error || error?.message || "Could not repair routing.",
+                variant: "destructive",
+              });
+            } else if (d?.status === "active") {
+              toast({ title: "Routing configured", description: "Your number is ready for inbound calls." });
+            }
           } finally {
             setRepairing(false);
             await ctx.reload();
