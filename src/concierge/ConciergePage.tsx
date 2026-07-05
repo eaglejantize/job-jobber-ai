@@ -11,7 +11,7 @@ import ReviewAndApply from "./ReviewAndApply";
 import PostApply from "./PostApply";
 import { toast } from "@/hooks/use-toast";
 import { useOnboardingState } from "@/onboarding/useOnboardingState";
-import type { ItemId } from "@/onboarding/status";
+import { REQUIRED_FOR_ACTIVATION, SKIPPABLE_FOR_ACTIVATION, type ItemId } from "@/onboarding/status";
 
 const SECTION_TO_ITEM: Record<string, ItemId> = {
   business_profile: "business_info",
@@ -58,7 +58,10 @@ export default function ConciergePage() {
   async function skip() {
     ctx.skipSection(section.id);
     const itemId = SECTION_TO_ITEM[section.id];
-    if (itemId) {
+    const canPersistSkip =
+      itemId &&
+      (!REQUIRED_FOR_ACTIVATION.includes(itemId) || SKIPPABLE_FOR_ACTIVATION.includes(itemId));
+    if (canPersistSkip) {
       await onboarding.markStatus(itemId, "skipped");
     }
     await next();
