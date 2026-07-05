@@ -9,7 +9,33 @@ export type ConciergePersisted = {
   pending: PendingMap;
   skipped: string[];
   updated_at?: string;
+  schema_version?: number;
 };
+
+const CONCIERGE_STATE_SCHEMA_VERSION = 2;
+const PHONE_NUMBER_STEP_INDEX = SECTIONS.findIndex((s) => s.id === "phone_number");
+
+function normalizeConciergeState(saved: ConciergePersisted): ConciergePersisted {
+  const rawStep = Number.isFinite(Number(saved.step)) ? Number(saved.step) : 0;
+  const oldFlow = saved.schema_version !== CONCIERGE_STATE_SCHEMA_VERSION;
+  const shiftedStep = oldFlow && rawStep >= PHONE_NUMBER_STEP_INDEX ? rawStep + 1 : rawStep;
+  const step = Math.min(SECTIONS.length - 1, Math.max(0, shiftedStep));
+
+  return {
+    step,
+    pending: saved.pending && typeof saved.pending === "object" ? saved.pending : {},
+    skipped: Array.isArray(saved.skipped)
+      ? saved.skipped.filter((id) => id !== "phone_number")
+      : [],
+    updated_at: saved.updated_at,
+    schema_version: CONCIERGE_STATE_SCHEMA_VERSION,
+  };
+}
+
+function conciergeStatesEqual(a: ConciergePersisted | null | undefined, b: ConciergePersisted) {
+  if (!a) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 export function useConcierge() {
   const [loading, setLoading] = useState(true);
@@ -39,9 +65,16 @@ export function useConcierge() {
       setCurrent(row as Record<string, any>);
       const saved = (row as any).concierge_state as ConciergePersisted | null;
       if (saved && typeof saved === "object") {
-        setPending(saved.pending || {});
-        setStep(Math.min(SECTIONS.length - 1, Math.max(0, saved.step || 0)));
-        setSkipped(saved.skipped || []);
+        const normalized = normalizeConciergeState(saved);
+        setPending(normalized.pending || {});
+        setStep(normalized.step);
+        setSkipped(normalized.skipped || []);
+        if (!conciergeStatesEqual(saved, normalized)) {
+          await supabase
+            .from("callcapture_clients")
+            .update({ concierge_state: normalized } as never)
+            .eq("id", (row as any).id);
+        }
       }
     }
     setLoading(false);
@@ -63,6 +96,7 @@ export function useConcierge() {
         pending,
         skipped,
         ...override,
+        schema_version: CONCIERGE_STATE_SCHEMA_VERSION,
         updated_at: new Date().toISOString(),
       };
       await supabase
