@@ -20,7 +20,22 @@ export type SectionDef = {
   aiSupported: boolean;
 };
 
-export const SECTIONS: SectionDef[] = [
+export const PHONE_NUMBER_SECTION: SectionDef = {
+  id: "phone_number",
+  title: "Business Phone Number",
+  subtitle: "Claim a Vektuor number, bring your own, or forward your existing line.",
+  fields: ["assigned_callcapture_number", "number_status"],
+  aiSupported: false,
+};
+
+export function ensurePhoneNumberSection(sections: SectionDef[]): SectionDef[] {
+  const withoutPhone = sections.filter((s) => s.id !== "phone_number");
+  const before = withoutPhone.slice(0, 3);
+  const after = withoutPhone.slice(3);
+  return [...before, PHONE_NUMBER_SECTION, ...after];
+}
+
+const BASE_SECTIONS: SectionDef[] = [
   {
     id: "business_profile",
     title: "Business Profile",
@@ -53,13 +68,7 @@ export const SECTIONS: SectionDef[] = [
     fields: ["business_hours_schedule", "business_hours_24_7", "phone_mode", "forward_first", "rings_before_answer"],
     aiSupported: false,
   },
-  {
-    id: "phone_number",
-    title: "Business Phone Number",
-    subtitle: "Claim a Vektuor number, bring your own, or forward your existing line.",
-    fields: ["assigned_callcapture_number", "number_status"],
-    aiSupported: false,
-  },
+  PHONE_NUMBER_SECTION,
   {
     id: "website_import",
     title: "Website Import",
@@ -107,6 +116,8 @@ export const SECTIONS: SectionDef[] = [
     aiSupported: false,
   },
 ];
+
+export const SECTIONS: SectionDef[] = ensurePhoneNumberSection(BASE_SECTIONS);
 
 export const FIELD_LABELS: Record<string, string> = {
   business_name: "Business name",
