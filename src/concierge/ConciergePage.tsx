@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, Save, SkipForward, RotateCcw, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SECTIONS } from "./sections";
+import { ensurePhoneNumberSection, SECTIONS } from "./sections";
 import { useConcierge } from "./useConcierge";
 import SectionRenderer from "./SectionRenderer";
 import ReviewAndApply from "./ReviewAndApply";
@@ -31,6 +31,7 @@ export default function ConciergePage() {
   const onboarding = useOnboardingState();
   const [applied, setApplied] = useState(false);
   const [applying, setApplying] = useState(false);
+  const sections = ensurePhoneNumberSection(SECTIONS);
 
   if (ctx.loading) {
     return <div className="container py-20 text-muted-foreground">Loading…</div>;
@@ -44,18 +45,38 @@ export default function ConciergePage() {
     );
   }
 
-  const section = SECTIONS[ctx.step];
+  const safeStep = Math.min(sections.length - 1, Math.max(0, ctx.step));
+  const section = sections[safeStep];
   const isReview = section.id === "review";
-  const pct = ((ctx.step + 1) / SECTIONS.length) * 100;
+  const pct = ((safeStep + 1) / sections.length) * 100;
+  const phoneMissing = !(ctx.current as any)?.assigned_callcapture_number;
+  const isPhoneStep = section.id === "phone_number";
+  const mustCompletePhone = isPhoneStep && phoneMissing;
 
   async function next() {
-    await ctx.persist({ step: Math.min(SECTIONS.length - 1, ctx.step + 1) });
-    ctx.setStep(Math.min(SECTIONS.length - 1, ctx.step + 1));
+    if (mustCompletePhone) {
+      toast({
+        title: "Choose a business phone number",
+        description: "Select a new number, link an existing number, forward your line, or use a test number before continuing.",
+        variant: "destructive",
+      });
+      return;
+    }
+    await ctx.persist({ step: Math.min(sections.length - 1, safeStep + 1) });
+    ctx.setStep(Math.min(sections.length - 1, safeStep + 1));
   }
   function prev() {
-    ctx.setStep(Math.max(0, ctx.step - 1));
+    ctx.setStep(Math.max(0, safeStep - 1));
   }
   async function skip() {
+    if (isPhoneStep) {
+      toast({
+        title: "Phone setup is required",
+        description: "Every subscriber needs a business phone number before setup can continue.",
+        variant: "destructive",
+      });
+      return;
+    }
     const itemId = SECTION_TO_ITEM[section.id];
     const canPersistSkip =
       itemId &&
@@ -106,7 +127,7 @@ export default function ConciergePage() {
       <div className="mb-6">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
           <span>
-            Step {ctx.step + 1} of {SECTIONS.length}
+            Step {safeStep + 1} of {sections.length}
           </span>
           <button onClick={restart} className="hover:text-foreground inline-flex items-center gap-1">
             <RotateCcw className="h-3 w-3" /> Restart
@@ -118,9 +139,9 @@ export default function ConciergePage() {
       <div className="grid md:grid-cols-[220px_1fr] gap-6">
         <nav className="hidden md:block">
           <ol className="space-y-1 text-sm">
-            {SECTIONS.map((s, i) => {
-              const active = i === ctx.step;
-              const done = i < ctx.step;
+            {sections.map((s, i) => {
+              const active = i === safeStep;
+              const done = i < safeStep;
               return (
                 <li key={s.id}>
                   <button
@@ -149,11 +170,11 @@ export default function ConciergePage() {
 
           {!isReview && (
             <div className="flex flex-wrap justify-between gap-2 mt-6 pt-4 border-t border-border">
-              <Button variant="ghost" onClick={prev} disabled={ctx.step === 0} type="button">
+              <Button variant="ghost" onClick={prev} disabled={safeStep === 0} type="button">
                 <ArrowLeft className="h-4 w-4" /> Back
               </Button>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={skip} type="button">
+                <Button variant="outline" onClick={skip} type="button" disabled={isPhoneStep}>
                   <SkipForward className="h-4 w-4" />
                   {section.id === "test_call" ? "Skip — I'll test later" : "Skip"}
                 </Button>
@@ -165,7 +186,7 @@ export default function ConciergePage() {
                 >
                   <Check className="h-4 w-4" /> Apply changes
                 </Button>
-                <Button onClick={next} className="bg-cta hover:opacity-90" type="button">
+                <Button onClick={next} disabled={mustCompletePhone} className="bg-cta hover:opacity-90" type="button">
                   Next <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
