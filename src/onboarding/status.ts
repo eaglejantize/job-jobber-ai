@@ -57,6 +57,11 @@ export const REQUIRED_FOR_ACTIVATION: ItemId[] = [
   "test_call",
 ];
 
+// Required items where a user-initiated skip counts as satisfied for
+// activation (e.g. test call — a customer may not be able to place one
+// from their desktop).
+export const SKIPPABLE_FOR_ACTIVATION: ItemId[] = ["test_call"];
+
 function nonEmpty(v: unknown): boolean {
   if (v == null) return false;
   if (typeof v === "string") return v.trim().length > 0;
@@ -136,7 +141,9 @@ export function isReadyToActivate(state: OnboardingState): {
 } {
   const missing = REQUIRED_FOR_ACTIVATION.filter((id) => {
     const s = state.items[id]?.status;
-    return s !== "complete";
+    if (s === "complete") return false;
+    if (s === "skipped" && SKIPPABLE_FOR_ACTIVATION.includes(id)) return false;
+    return true;
   });
   return { ready: missing.length === 0, missing };
 }
