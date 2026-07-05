@@ -4,11 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import type { UseConcierge } from "./useConcierge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
   const [replacing, setReplacing] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const assigned = (ctx.current as any)?.assigned_callcapture_number ?? null;
   const status = (ctx.current as any)?.number_status ?? null;
+  const webhookStatus = (ctx.current as any)?.webhook_status ?? null;
+  const routingError = (ctx.current as any)?.last_vapi_sync_status ?? null;
   const preferred = String((ctx.current as any)?.preferred_area_code ?? "");
   const [areaCode, setAreaCode] = useState(preferred);
 
@@ -39,6 +43,33 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
         onAreaCodeChange={setAreaCode}
         assignedNumber={showAssigned ? assigned : null}
         numberStatus={showAssigned ? status : null}
+        webhookStatus={showAssigned ? webhookStatus : null}
+        routingError={showAssigned ? routingError : null}
+        onRefresh={ctx.reload}
+        onRetryRepair={async () => {
+          if (!ctx.clientId) return;
+          setRepairing(true);
+          try {
+            const { data, error } = await supabase.functions.invoke("repair-routing", {
+              body: { client_id: ctx.clientId },
+            });
+            const d = (data ?? {}) as any;
+            if (error || d?.error) {
+              toast({
+                title: "Routing repair failed",
+                description: d?.error || error?.message || "Could not repair routing.",
+                variant: "destructive",
+              });
+            } else if (d?.status === "active") {
+              toast({ title: "Routing configured", description: "Your number is ready for inbound calls." });
+            }
+          } finally {
+            setRepairing(false);
+            await ctx.reload();
+            window.dispatchEvent(new CustomEvent("setup:reload"));
+          }
+        }}
+        retryingRepair={repairing}
         onProvisioned={async (phone, _sid, newStatus) => {
           if (ctx.clientId) {
             await supabase
@@ -51,6 +82,7 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
           }
           setReplacing(false);
           await ctx.reload();
+          window.dispatchEvent(new CustomEvent("setup:reload"));
         }}
       />
     </div>

@@ -56,6 +56,12 @@ export function useOnboardingState() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onReload = () => void load();
+    window.addEventListener("setup:reload", onReload);
+    return () => window.removeEventListener("setup:reload", onReload);
+  }, [load]);
+
   const markStatus = useCallback(
     async (id: ItemId, status: ItemStatus) => {
       if (!clientId) return;
@@ -74,11 +80,19 @@ export function useOnboardingState() {
   );
 
   const activate = useCallback(async () => {
-    if (!clientId) return;
-    const readiness = isReadyToActivate(state);
-    if (!readiness.ready) return;
+    if (!clientId) return false;
+    const { data: latest } = await supabase
+      .from("callcapture_clients")
+      .select("*")
+      .eq("id", clientId)
+      .maybeSingle();
+    const latestState = deriveOnboardingState(latest ?? client, state);
+    setClient((latest as Record<string, any> | null) ?? client);
+    setState(latestState);
+    const readiness = isReadyToActivate(latestState);
+    if (!readiness.ready) return false;
     const next: OnboardingState = {
-      ...state,
+      ...latestState,
       schema_version: ONBOARDING_STATE_SCHEMA_VERSION,
       activated_at: new Date().toISOString(),
     };
@@ -91,7 +105,8 @@ export function useOnboardingState() {
         onboarding_completed_at: new Date().toISOString(),
       } as never)
       .eq("id", clientId);
-  }, [clientId, state]);
+    return true;
+  }, [clientId, client, state]);
 
   return {
     loading,

@@ -26,18 +26,28 @@ export default function PhoneNumberPicker({
   onAreaCodeChange,
   assignedNumber,
   numberStatus,
+  webhookStatus,
+  routingError,
   onProvisioned,
   onEnsureClient,
   initializing,
+  onRefresh,
+  onRetryRepair,
+  retryingRepair,
 }: {
   clientId: string | null;
   preferredAreaCode: string;
   onAreaCodeChange: (v: string) => void;
   assignedNumber: string | null;
   numberStatus: string | null;
+  webhookStatus?: string | null;
+  routingError?: string | null;
   onProvisioned: (phone: string, sid: string, status: string) => void;
   onEnsureClient?: () => Promise<{ ok: boolean; clientId?: string; message?: string }>;
   initializing?: boolean;
+  onRefresh?: () => Promise<void> | void;
+  onRetryRepair?: () => Promise<void> | void;
+  retryingRepair?: boolean;
 }) {
   const [searching, setSearching] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
@@ -54,6 +64,25 @@ export default function PhoneNumberPicker({
   useEffect(() => {
     setError(null);
   }, [preferredAreaCode]);
+
+  useEffect(() => {
+    if (!assignedNumber || !onRefresh) return;
+    const pendingStatuses = new Set(["provisioning", "needs_configuration", "pending", "reserved"]);
+    if (!pendingStatuses.has(String(numberStatus ?? "")) && webhookStatus !== "pending") return;
+    let cancelled = false;
+    let attempts = 0;
+    const tick = async () => {
+      if (cancelled || attempts >= 12) return;
+      attempts += 1;
+      await onRefresh();
+      if (!cancelled && attempts < 12) window.setTimeout(tick, 5000);
+    };
+    const timer = window.setTimeout(tick, 5000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [assignedNumber, numberStatus, webhookStatus, onRefresh]);
 
   async function resolveClientId(): Promise<string | null> {
     if (clientId) return clientId;
@@ -209,30 +238,55 @@ export default function PhoneNumberPicker({
 
   // Already provisioned view
   if (assignedNumber) {
-    const isActive = numberStatus === "active";
+    const isActive = numberStatus === "active" && webhookStatus === "configured";
+    const isPending = numberStatus === "provisioning" || numberStatus === "needs_configuration" || webhookStatus === "pending";
     const labelMap: Record<string, string> = {
       active: "Active",
+      provisioning: "Configuring",
       needs_configuration: "Needs Configuration",
       pending_forwarding: "Pending Forwarding",
       test: "Test Number",
     };
+    const statusText = isActive
+      ? "Configured"
+      : labelMap[numberStatus ?? ""] ?? "Reserved";
+    const detail = isActive
+      ? "Inbound calls are routed to your AI receptionist."
+      : routingError || "Routing is still being configured. If this does not clear shortly, retry routing setup.";
     return (
       <div className="space-y-3">
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+        <div className={isActive ? "rounded-xl border border-primary/30 bg-primary/5 p-4" : "rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"}>
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
+            {isActive ? (
+              <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
+            ) : isPending ? (
+              <Loader2 className="h-5 w-5 text-amber-600 mt-0.5 animate-spin" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+            )}
             <div className="flex-1">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Your Vektuor number</p>
               <p className="text-xl font-semibold mt-1">{formatUS(assignedNumber)}</p>
               <div className="mt-2">
                 <Badge variant={isActive ? "default" : "secondary"}>
-                  {labelMap[numberStatus ?? ""] ?? "Reserved"}
+                  {statusText}
                 </Badge>
               </div>
+              <p className="text-xs text-muted-foreground mt-2 break-words">{detail}</p>
               {!isActive && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Number saved. Routing setup will be completed shortly.
-                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {onRefresh && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => onRefresh()}>
+                      <RefreshCw className="h-3 w-3" /> Refresh status
+                    </Button>
+                  )}
+                  {onRetryRepair && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => onRetryRepair()} disabled={retryingRepair}>
+                      {retryingRepair ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                      Retry routing
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </div>

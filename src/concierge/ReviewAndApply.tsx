@@ -73,11 +73,27 @@ export default function ReviewAndApply({
   }
 
   async function activate() {
+    if (!onboarding.readiness.ready) {
+      toast({
+        title: "Setup is not ready",
+        description: "Complete every required item before activating your AI receptionist.",
+        variant: "destructive",
+      });
+      return;
+    }
     // Apply any remaining pending changes first
     if (rows.length > 0) {
       await ctx.apply(rows.map((r) => r.key));
     }
-    await onboarding.activate();
+    const activated = await onboarding.activate();
+    if (!activated) {
+      toast({
+        title: "Setup is not ready",
+        description: "Phone routing must be configured before activation.",
+        variant: "destructive",
+      });
+      return;
+    }
     toast({ title: "AI receptionist activated" });
     onApplied();
   }
