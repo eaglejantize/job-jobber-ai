@@ -11,7 +11,7 @@ const features = [
 
 export default function Features() {
   return (
-    <section id="features" className="bg-white border-y border-border/60">
+    <section id="features" className="bg-background border-y border-border/60">
       <div className="container py-20 md:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Features</div>

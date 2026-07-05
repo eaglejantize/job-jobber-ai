@@ -5,7 +5,7 @@ import { PlayCircle, ArrowRight, Phone, MessageSquare, MapPin, CheckCircle2, Bel
 const DashboardMockup = () => (
   <div className="relative mx-auto w-full max-w-6xl">
     <div className="pointer-events-none absolute -inset-x-10 -top-10 h-[420px] bg-[radial-gradient(closest-side,hsl(217_91%_60%/0.18),transparent)]" />
-    <div className="relative rounded-3xl border border-border/70 bg-white shadow-elevated overflow-hidden animate-float">
+    <div className="relative rounded-3xl border border-border/70 bg-card shadow-elevated overflow-hidden animate-float">
       <div className="flex items-center justify-between border-b border-border/70 bg-secondary/60 px-4 py-3">
         <div className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[hsl(0_70%_70%)]" />
@@ -15,7 +15,7 @@ const DashboardMockup = () => (
         <div className="text-xs font-medium text-ink">vektuor.app / inbox</div>
         <div className="text-xs text-muted-foreground">Live</div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-border/70 bg-white px-4 py-2.5 text-xs">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-border/70 bg-card px-4 py-2.5 text-xs">
         <span className="inline-flex items-center gap-1.5 font-medium text-navy">
           <span className="h-1.5 w-1.5 rounded-full bg-success animate-soft-pulse" /> System live
         </span>
@@ -34,7 +34,7 @@ const DashboardMockup = () => (
               { name: "Linda Chen", sub: "Plumbing · Leak", time: "14m", badge: "Transferred" },
               { name: "Devon Park", sub: "Electrical · Panel", time: "11:42 PM", badge: "New" },
             ].map((c, i) => (
-              <li key={i} className={`rounded-lg px-3 py-2 ${c.active ? "bg-white border border-border shadow-soft" : "hover:bg-white/60"}`}>
+              <li key={i} className={`rounded-lg px-3 py-2 ${c.active ? "bg-card border border-border shadow-soft" : "hover:bg-card/60"}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className={`truncate font-medium ${c.active ? "text-navy" : "text-ink"}`}>{c.name}</span>
                   {c.active ? (
@@ -147,7 +147,7 @@ const DashboardMockup = () => (
         </aside>
       </div>
     </div>
-    <div className="pointer-events-none absolute -bottom-6 left-4 hidden w-72 rounded-2xl border border-border bg-white p-3 shadow-elevated md:block animate-fade-up [animation-delay:300ms]">
+    <div className="pointer-events-none absolute -bottom-6 left-4 hidden w-72 rounded-2xl border border-border bg-card p-3 shadow-elevated md:block animate-fade-up [animation-delay:300ms]">
       <div className="flex items-start gap-3">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-soft text-brand">
           <Activity className="h-4 w-4" />
@@ -158,7 +158,7 @@ const DashboardMockup = () => (
         </div>
       </div>
     </div>
-    <div className="pointer-events-none absolute -top-6 right-4 hidden w-72 rounded-2xl border border-border bg-white p-3 shadow-elevated md:block animate-fade-up [animation-delay:600ms]">
+    <div className="pointer-events-none absolute -top-6 right-4 hidden w-72 rounded-2xl border border-border bg-card p-3 shadow-elevated md:block animate-fade-up [animation-delay:600ms]">
       <div className="flex items-start gap-3">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-navy text-white">
           <Bell className="h-4 w-4" />

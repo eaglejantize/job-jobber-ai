@@ -3,7 +3,7 @@ import { PhoneCall } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="border-t border-border bg-white">
+    <footer className="border-t border-border bg-background">
       <div className="container py-14">
         <div className="grid gap-10 md:grid-cols-4">
           <div className="md:col-span-1">

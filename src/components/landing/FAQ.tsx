@@ -11,7 +11,7 @@ const faqs = [
 
 export default function FAQ() {
   return (
-    <section id="faq" className="bg-white border-y border-border/60">
+    <section id="faq" className="bg-background border-y border-border/60">
       <div className="container py-20 md:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">FAQ</div>
