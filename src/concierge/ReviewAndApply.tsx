@@ -6,7 +6,7 @@ import { toast } from "@/hooks/use-toast";
 import { FIELD_LABELS } from "./sections";
 import type { UseConcierge } from "./useConcierge";
 import { useOnboardingState } from "@/onboarding/useOnboardingState";
-import { ITEM_LABELS, REQUIRED_FOR_ACTIVATION } from "@/onboarding/status";
+import { ITEM_LABELS, REQUIRED_FOR_ACTIVATION, SKIPPABLE_FOR_ACTIVATION } from "@/onboarding/status";
 import { ProgressPanel } from "@/onboarding/ProgressTracker";
 
 function display(v: unknown): string {
@@ -137,7 +137,10 @@ export default function ReviewAndApply({
         </div>
         <ul className="text-sm space-y-1 mb-4">
           {REQUIRED_FOR_ACTIVATION.map((id) => {
-            const done = onboarding.state.items[id]?.status === "complete";
+            const status = onboarding.state.items[id]?.status;
+            const skipped =
+              status === "skipped" && SKIPPABLE_FOR_ACTIVATION.includes(id);
+            const done = status === "complete" || skipped;
             return (
               <li key={id} className="flex items-center gap-2">
                 {done ? (
@@ -145,7 +148,12 @@ export default function ReviewAndApply({
                 ) : (
                   <AlertCircle className="h-4 w-4 text-amber-500" />
                 )}
-                <span className={done ? "" : "text-muted-foreground"}>{ITEM_LABELS[id]}</span>
+                <span className={done ? "" : "text-muted-foreground"}>
+                  {ITEM_LABELS[id]}
+                  {skipped && (
+                    <span className="ml-2 text-xs text-muted-foreground">(skipped)</span>
+                  )}
+                </span>
               </li>
             );
           })}

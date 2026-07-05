@@ -10,10 +10,24 @@ import SectionRenderer from "./SectionRenderer";
 import ReviewAndApply from "./ReviewAndApply";
 import PostApply from "./PostApply";
 import { toast } from "@/hooks/use-toast";
+import { useOnboardingState } from "@/onboarding/useOnboardingState";
+import type { ItemId } from "@/onboarding/status";
+
+const SECTION_TO_ITEM: Record<string, ItemId> = {
+  business_profile: "business_info",
+  services: "services",
+  hours: "hours",
+  website_import: "website_import",
+  knowledge: "knowledge_base",
+  ai_receptionist: "ai_receptionist",
+  integrations: "integrations",
+  test_call: "test_call",
+};
 
 export default function ConciergePage() {
   const navigate = useNavigate();
   const ctx = useConcierge();
+  const onboarding = useOnboardingState();
   const [applied, setApplied] = useState(false);
   const [applying, setApplying] = useState(false);
 
@@ -42,6 +56,10 @@ export default function ConciergePage() {
   }
   async function skip() {
     ctx.skipSection(section.id);
+    const itemId = SECTION_TO_ITEM[section.id];
+    if (itemId) {
+      await onboarding.markStatus(itemId, "skipped");
+    }
     await next();
   }
   async function saveAndExit() {
@@ -132,7 +150,8 @@ export default function ConciergePage() {
               </Button>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={skip} type="button">
-                  <SkipForward className="h-4 w-4" /> Skip
+                  <SkipForward className="h-4 w-4" />
+                  {section.id === "test_call" ? "Skip — I'll test later" : "Skip"}
                 </Button>
                 <Button
                   variant="outline"
