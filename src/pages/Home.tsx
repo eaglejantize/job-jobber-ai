@@ -4,13 +4,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { Navigate, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight, Bot } from "lucide-react";
-import RequestSetupBanner from "@/components/RequestSetupBanner";
+import { Phone, Loader2, Settings as SettingsIcon, ArrowRight, Inbox } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { DEMO_NUMBER } from "@/lib/constants";
 import CallDemoButton from "@/components/CallDemoButton";
 import { Badge } from "@/components/ui/badge";
-import { getVoiceById, DEFAULT_VOICE_ID } from "@/lib/voices";
+import { getVoiceById, getVoiceByLabel } from "@/lib/voices";
 
 type Client = {
   id: string;
@@ -21,6 +19,12 @@ type Client = {
   business_name: string;
   assigned_callcapture_number?: string | null;
   number_status?: string | null;
+  business_phone?: string | null;
+  voice_id?: string | null;
+  voice_label?: string | null;
+  ai_personality?: string | null;
+  rings_before_answer?: number | null;
+  activated_at?: string | null;
 };
 
 type Lead = {
@@ -46,17 +50,11 @@ export default function Home() {
   const { user, loading } = useAuth();
   const [params, setParams] = useSearchParams();
   const [client, setClient] = useState<Client | null>(null);
-  const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [businessExists, setBusinessExists] = useState<boolean | null>(null);
   const [hasConfig, setHasConfig] = useState(false);
   const [configFetched, setConfigFetched] = useState(false);
-  const [voiceLabel, setVoiceLabel] = useState<string | null>(null);
-  const [voicePersona, setVoicePersona] = useState<string | null>(null);
-  const [ringsBeforeAi, setRingsBeforeAi] = useState<number>(3);
-  const [aiAnswerMissed, setAiAnswerMissed] = useState<boolean>(true);
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [polling, setPolling] = useState(false);
-  const [syncingAgent, setSyncingAgent] = useState(false);
   const toastedRef = useRef(false);
   const navigate = useNavigate();
 
@@ -76,7 +74,7 @@ export default function Home() {
 
     void supabase
       .from("callcapture_assistant_configs")
-      .select("id, generated_prompt, notification_settings, call_rules")
+      .select("id, generated_prompt")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -84,19 +82,6 @@ export default function Home() {
       .then(({ data }) => {
         setHasConfig(!!data?.generated_prompt);
         setConfigFetched(true);
-        const notif = (data?.notification_settings ?? {}) as Record<string, unknown>;
-        const v = (notif.voice ?? null) as { voice_label?: string; voice_persona?: string } | null;
-        if (v?.voice_label) {
-          setVoiceLabel(v.voice_label);
-          setVoicePersona(v.voice_persona ?? null);
-        } else {
-          const def = getVoiceById(DEFAULT_VOICE_ID);
-          setVoiceLabel(def.label);
-          setVoicePersona(def.persona);
-        }
-        const rules = (data?.call_rules ?? {}) as { ringsBeforeAi?: number; aiAnswerMissed?: boolean };
-        setRingsBeforeAi(rules.ringsBeforeAi ?? 3);
-        setAiAnswerMissed(rules.aiAnswerMissed !== false);
       });
 
     void supabase
@@ -107,7 +92,6 @@ export default function Home() {
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
-        setBusinessPhone(data?.phone ?? null);
         setBusinessExists(!!data?.id);
       });
 
@@ -124,7 +108,6 @@ export default function Home() {
           .limit(1)
           .maybeSingle();
         if (data?.id) {
-          setBusinessPhone(data.phone ?? null);
           setBusinessExists(true);
         } else {
           setTimeout(poll, 2000);
@@ -148,7 +131,7 @@ export default function Home() {
     const fetchClient = async () => {
       let { data } = await supabase
         .from("callcapture_clients")
-        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status")
+        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, ai_personality, rings_before_answer, activated_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -157,7 +140,7 @@ export default function Home() {
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
-          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status")
+          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, ai_personality, rings_before_answer, activated_at")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })
           .limit(1)
