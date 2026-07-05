@@ -75,10 +75,18 @@ export function useOnboardingState() {
 
   const activate = useCallback(async () => {
     if (!clientId) return;
-    const readiness = isReadyToActivate(state);
+    const { data: latest } = await supabase
+      .from("callcapture_clients")
+      .select("*")
+      .eq("id", clientId)
+      .maybeSingle();
+    const latestState = deriveOnboardingState(latest ?? client, state);
+    setClient((latest as Record<string, any> | null) ?? client);
+    setState(latestState);
+    const readiness = isReadyToActivate(latestState);
     if (!readiness.ready) return;
     const next: OnboardingState = {
-      ...state,
+      ...latestState,
       schema_version: ONBOARDING_STATE_SCHEMA_VERSION,
       activated_at: new Date().toISOString(),
     };
@@ -91,7 +99,7 @@ export function useOnboardingState() {
         onboarding_completed_at: new Date().toISOString(),
       } as never)
       .eq("id", clientId);
-  }, [clientId, state]);
+  }, [clientId, client, state]);
 
   return {
     loading,
