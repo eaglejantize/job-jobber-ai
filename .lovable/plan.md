@@ -1,25 +1,34 @@
-## Goal
-When a user clicks "Skip" on a skippable setup step (e.g. Test Call), that skip should count as step completion so activation isn't blocked. Right now Skip only stores the section id in the concierge's local `skipped[]` — it never marks the underlying onboarding item as skipped, and `isReadyToActivate` treats "skipped" as incomplete for required items like `test_call`. Result: a dummy account can't activate because it can't place a real test call.
+To go live so ChatGPT / Claude / Cursor can connect to your Vektuor MCP server, two things still need to happen on the backend. Both are one-shot actions — no code changes needed unless something fails.
 
-## Changes
+## Steps
 
-### 1. `src/onboarding/status.ts`
-- Add a `SKIPPABLE_FOR_ACTIVATION: ItemId[]` list containing the required items where a user-initiated skip should satisfy activation. Include `test_call` (primary case). Leave `business_info`, `services`, `hours`, `ai_receptionist` as non-skippable (real config required).
-- Update `isReadyToActivate` so an item counts as satisfied when its status is `complete` **or** (`skipped` **and** the id is in `SKIPPABLE_FOR_ACTIVATION`).
-- `progressSummary` already counts `skipped` — leave unchanged.
+1. **Turn on the OAuth authorization server** (Lovable Cloud)
+   - Runs `supabase--configure_oauth_server` with no params.
+   - This enables OAuth 2.1 + Dynamic Client Registration on your Supabase Auth so external MCP clients can self-register, send users through consent at `/.lovable/oauth/consent` (already built), and receive user-scoped tokens.
+   - Idempotent — safe if it was partially configured before.
 
-### 2. `src/concierge/ConciergePage.tsx`
-- Map `SectionId` → `ItemId` (`business_profile→business_info`, `knowledge→knowledge_base`, others 1:1; `review` has no mapping).
-- In `skip()`, after `ctx.skipSection(section.id)` and before advancing, also persist the onboarding item status: call the same update path used by `useOnboardingState.markStatus` so `callcapture_clients.onboarding_state.items[itemId] = { status: "skipped", updated_at: … }`. Easiest wiring: instantiate `useOnboardingState` in `ConciergePage` and call `onboarding.markStatus(itemId, "skipped")` inside `skip()`, then `await onboarding.reload()` so the Review checklist reflects it immediately.
-- Update the Skip button label/tooltip on `test_call` to make clear skipping is allowed ("Skip — I'll test later"). Cosmetic only.
+2. **Deploy the `mcp` Edge Function**
+   - Runs `supabase--deploy_edge_functions` for `mcp`.
+   - This pushes the auto-generated `supabase/functions/mcp/index.ts` (with the four tools: `list_recent_leads`, `get_lead`, `list_recent_calls`, `get_business_profile`) to the live endpoint:
+     `https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/mcp`
+   - Must be redeployed any time we add/edit a tool or change auth config.
 
-### 3. `src/concierge/ReviewAndApply.tsx`
-- Update the activation checklist row rendering so an item shows a green check when its status is `complete` **or** `skipped` (for skippable required items). Use the same `SKIPPABLE_FOR_ACTIVATION` list from `status.ts`. Add a small "Skipped" label next to the check for clarity.
-- No change to the activate button gating logic — it already reads `onboarding.readiness.ready`, which now returns true when `test_call` is skipped.
+3. **Verify the manifest**
+   - Runs `app_mcp_server--extract_mcp_manifest` to confirm `.lovable/mcp/manifest.json` is current and the server entry has no errors.
 
-### 4. No DB migration
-The `onboarding_state` JSON column already supports arbitrary item statuses; no schema changes needed. No edge-function changes.
+4. **Publish the app** (if not already published on this build)
+   - So the consent page at `/.lovable/oauth/consent` is reachable at your production origin (`vektuor.com`) for external clients redirecting users through login/consent.
 
-## Result
-- User clicks Skip on Test Call → onboarding item marked `skipped` → activation checklist shows Test Call as satisfied → "Activate My AI Receptionist" enables. Dummy accounts (and any customer without desktop calling) can complete setup.
-- Skipping the four truly-required items (business info, services, hours, AI receptionist) still blocks activation, so we don't let people launch an unconfigured receptionist.
+## After activation — how you connect a client
+
+- **In ChatGPT / Claude / Cursor**: add a custom MCP server with URL
+  `https://mzqazxtcwqumroqtmtjd.supabase.co/functions/v1/mcp`
+- The client will auto-discover OAuth, pop open a Vektuor login + consent screen, and then have access to the four read-only tools scoped to that user's account.
+- You can also surface this in-app later (Settings → Integrations panel with a copy-URL button) — say the word if you want that UI added.
+
+## What I'm NOT changing
+
+- No tool code, no schema, no UI changes in this step.
+- No new secrets required (Supabase URL + anon key are already wired).
+
+Approve and I'll run steps 1–3 (and 4 if you also want to publish now).
