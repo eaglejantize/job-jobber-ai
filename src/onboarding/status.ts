@@ -14,6 +14,7 @@ export type ItemId =
   | "business_info"
   | "services"
   | "hours"
+  | "phone_number"
   | "website_import"
   | "knowledge_base"
   | "ai_receptionist"
@@ -31,6 +32,7 @@ export const ITEM_LABELS: Record<ItemId, string> = {
   business_info: "Business Profile",
   services: "Services",
   hours: "Business Hours",
+  phone_number: "Business Phone Number",
   website_import: "Website Import",
   knowledge_base: "Knowledge Base",
   ai_receptionist: "AI Receptionist",
@@ -42,6 +44,7 @@ export const ITEM_ORDER: ItemId[] = [
   "business_info",
   "services",
   "hours",
+  "phone_number",
   "website_import",
   "knowledge_base",
   "ai_receptionist",
@@ -53,6 +56,7 @@ export const REQUIRED_FOR_ACTIVATION: ItemId[] = [
   "business_info",
   "services",
   "hours",
+  "phone_number",
   "ai_receptionist",
   "test_call",
 ];
@@ -85,6 +89,7 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
   const aiOk = (has("voice_id") || has("voice_label")) && has("greeting");
   const testCallOk = !!c?.test_call_passed_at || nonEmpty(c?.first_test_call_id);
   const gbpOk = has("google_place_id") || has("google_category");
+  const phoneNumberOk = has("assigned_callcapture_number");
 
   return {
     business_info:
@@ -95,6 +100,7 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
         : "not_started",
     services: servicesOk ? "complete" : "not_started",
     hours: hoursOk ? "complete" : "not_started",
+    phone_number: phoneNumberOk ? "complete" : "not_started",
     website_import: has("website") ? "complete" : "not_started",
     knowledge_base: knowledgeOk ? "complete" : "not_started",
     ai_receptionist: aiOk ? "complete" : "not_started",
