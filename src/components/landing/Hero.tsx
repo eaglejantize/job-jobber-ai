@@ -191,7 +191,7 @@ export default function Hero() {
             <Button asChild size="lg" className="bg-navy hover:bg-navy-deep text-white rounded-xl px-6 h-12 text-base">
               <Link to="/auth">Start Free Trial <ArrowRight className="ml-1.5 h-4 w-4" /></Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="rounded-xl px-6 h-12 text-base border-border bg-background text-foreground hover:bg-secondary">
+            <Button asChild size="lg" variant="outline" className="rounded-xl px-6 h-12 text-base border-border bg-white text-navy hover:bg-secondary">
               <a href="#pricing"><PlayCircle className="mr-1.5 h-5 w-5" /> See Pricing</a>
             </Button>
           </div>

@@ -1,39 +1,73 @@
-## Root cause
+# Home Dashboard Cleanup & Accuracy
 
-In `src/index.css`, the `.dark` theme overrides redefine the brand tokens:
+Goal: Make `src/pages/Home.tsx` a faithful read-only view of the tenant's saved configuration in `callcapture_clients`, and remove legacy/duplicate UI. All values shown fall back to "Not configured" instead of hardcoded defaults.
 
-```css
---navy: 210 20% 96%;      /* near-white */
---navy-deep: 0 0% 100%;   /* pure white */
-```
+## 1. Fix data source for Home
 
-Every marketing CTA hardcodes `bg-navy … text-white` (Hero "Start Free Trial", Navbar/SiteNav "Start Free Trial" & "Dashboard", landing `Pricing` "Start Free Trial", `FinalCTA` "Start Free Trial") or `bg-white text-navy` (Hero "See Pricing" outline, `LiveDemo` "Call the Demo", `FinalCTA` "Talk to us" pairing). When the site is in dark mode, those pairings resolve to white-on-white (or navy-on-navy for the outline), which is the unreadable state you're seeing.
+Today Home reads voice + rings from `callcapture_assistant_configs.notification_settings/call_rules`, which the concierge wizard never writes to. Switch Home to read from the tenant row in `callcapture_clients` (the concierge's source of truth):
 
-The brand identity treats navy as a dark color regardless of theme (light logo tile, dark navy CTA). The tokens should not have been inverted.
+- `voice_id`, `voice_label`, `ai_personality` → AI Voice card
+- `business_phone` → Business Number card
+- `assigned_callcapture_number`, `number_status` → Vektuor Number card
+- `rings_before_answer` → Rings Before AI card
+- `greeting`, `business_hours_schedule`, `forward_phone`, `google_calendar_id`, `concierge_state`/`activated_at` → future cards & completion state
 
-## Fix
+If a field is null/empty, render "Not configured" (with a link to the relevant wizard step where useful) — never a hardcoded default like "Maya" or "3 rings".
 
-Scope: pure CSS token change plus a couple of outline-button token swaps. No wording, size, spacing, or branding changes.
+## 2. AI Voice card (issue #1, #8)
 
-1. **`src/index.css` — `.dark` block:** stop inverting the brand navy tokens so `bg-navy` stays dark in dark mode.
-   - Remove the dark-mode overrides for `--navy`, `--navy-deep`, and `--brand-soft` (let them inherit the `:root` dark-navy values). Result: `bg-navy text-white` renders dark-navy background + white text in both themes. WCAG AA passes (navy `215 55% 13%` vs white ≈ 14:1).
-   - Leave `--slate-ink`/`--ink` overrides in place (those are body text tokens, correctly lightened for dark mode).
+- Resolve label via `getVoiceByLabel(client.voice_label) ?? getVoiceById(client.voice_id)`.
+- Show `{label} · {persona}` from that record. If none saved → "Not configured" + link to AI Receptionist step.
+- Delete the `?? "Maya"` fallback and the read from `assistant_configs.notification_settings.voice`.
 
-2. **Outline CTAs that hardcode `bg-white text-navy`:** switch to theme-aware tokens so they read correctly on a dark page background too. Only the class list changes; visual result in light mode is identical.
-   - `src/components/landing/Hero.tsx` "See Pricing" button: `bg-white text-navy hover:bg-secondary` → `bg-background text-foreground hover:bg-secondary`.
-   - `src/components/landing/LiveDemo.tsx` "Call the Demo" button (sits on the always-dark navy gradient section — keep `bg-white text-navy` because after step 1 `text-navy` is dark in both themes, so this remains dark-on-white ✅ no change needed).
-   - `src/components/landing/FinalCTA.tsx` "Start Free Trial" (`bg-white text-navy`) sits on the always-dark navy gradient card — same reasoning, no change needed after step 1.
+## 3. Business Phone vs Vektuor Number (issue #2)
 
-3. **Verify focus/hover/disabled states** on the affected buttons:
-   - Primary (`bg-navy hover:bg-navy-deep text-white`): hover state uses `--navy-deep` which will now be the darker navy in both themes → white text stays legible; focus ring uses `--ring` (brand blue) which already contrasts; disabled uses shadcn's `disabled:opacity-50` — still legible against navy.
-   - Outline "See Pricing": hover `bg-secondary` with `text-foreground` → AA in both themes.
+Replace the current "Business Phone" status tile + duplicate "Phone Number" in Call Setup with two clearly-labeled fields sourced independently:
 
-4. **Cross-check the rest of the marketing surface** for the same pattern (`bg-navy … text-white`, `text-white` on `bg-white`, `text-navy` on dark) in: `SiteNav.tsx`, `SiteFooter.tsx`, landing `Navbar.tsx`, `Pricing.tsx`, `FinalCTA.tsx`, `Footer.tsx`, `Problem.tsx`, `SocialProof.tsx`, `Features.tsx`, `HowItWorks.tsx`, `FAQ.tsx`, `ActivityFeed.tsx`, and the marketing pages `Pricing.tsx`, `Demo.tsx`, `Index.tsx`. After step 1, all `text-white` on `bg-navy`/`bg-gradient-navy`/`bg-gradient-brand`/`bg-brand` pairings become legible automatically. Any residual `text-navy` on a light card also becomes legible (dark navy text). No further class edits expected, but I'll grep and confirm during implementation and patch any straggler I find.
+- **Vektuor Number** = `assigned_callcapture_number` + `number_status` badge (unchanged logic, keep polling for provisioning states).
+- **Business Number** = `business_phone` from `callcapture_clients` only. Never fall back to the Vektuor number or `alert_phone`. If missing: show "Not configured" + a "Configure Business Number" button linking to `/settings/concierge` at the business_profile step.
 
-5. **Manual verification with Playwright:** load `/` in light mode and again with `.dark` on `<html>`, screenshot the hero, nav, pricing card, live-demo section, and final CTA at desktop + mobile widths, and confirm each CTA label is readable.
+Remove the top-row "Business Phone" tile (or repurpose it as "Business Number") so the number is displayed exactly once.
+
+## 4. Rings Before AI (issue #3)
+
+The wizard already lists `rings_before_answer` in the Hours section fields, but there is no UI for it and Home reads a different key. Fix both ends:
+
+- **Wizard**: in `src/concierge/SectionRenderer.tsx`, add a Rings-Before-AI control to the AI Receptionist step (move `rings_before_answer` out of `hours` and into `ai_receptionist` in `sections.ts` so it lives with related settings). Options: `0` (Answer immediately), `1`, `2`, `3`, `4`, `5`. Include short helper copy: "How many rings should occur before the AI answers?" Persist via `setField("rings_before_answer", n)`.
+- **Home**: read `client.rings_before_answer`. Display `"Answer immediately"` for `0`, `"{n} ring[s]"` otherwise, `"Not configured"` if null. Add a small "Edit" link that navigates to `/settings/concierge?step=ai_receptionist` (or the section id used by ConciergePage).
+
+## 5. AI Backup card (issue #4)
+
+Since there's no configurable backing field yet, **hide the card entirely**. Remove `aiAnswerMissed` state and the "AI Backup" tile from Home. (We can reintroduce it under a clearer name — "Missed Call Protection" — once it is actually wired to a persisted field.)
+
+## 6. Remove "Want us to set this up for you?" (issue #5)
+
+- Delete `<RequestSetupBanner />` usages in `src/pages/Home.tsx`, `src/pages/Demo.tsx`, `src/pages/Pricing.tsx`.
+- Delete the component file `src/components/RequestSetupBanner.tsx`.
+
+## 7. De-duplicate actions (issue #6, #7)
+
+Simplify the Quick Actions row to exactly three buttons:
+
+- **Test My AI** (`CallDemoButton`, primary)
+- **Edit Setup** → `/settings/concierge` (replaces both "Edit Settings" and the always-visible "Continue setup"). While onboarding is incomplete (`!client.activated_at`), the label becomes **Continue Setup**; once activated, it becomes **Edit Setup**.
+- **View Inbox** → `/leads`
+
+Remove the standalone "Update Agent" button and the extra "Edit Phone Setup" button in the Call Setup card header (users can edit via the single Setup button).
+
+## 8. Verification
+
+- Load Home as a fresh tenant with only business_profile completed → all AI/phone tiles show "Not configured" or wizard link, no "Maya", no "3 rings".
+- Complete concierge with voice=Anthony, rings=2 → Home shows "Anthony · <persona>" and "2 rings".
+- Set business_phone different from Vektuor number → tiles show two different numbers.
+- Confirm no `RequestSetupBanner` remains via `rg RequestSetupBanner`.
 
 ## Files touched
 
-- `src/index.css` (remove three lines in the `.dark` block)
-- `src/components/landing/Hero.tsx` (one className swap on the outline CTA)
-- Any straggler discovered during the grep pass in step 4 (expected: none)
+- `src/pages/Home.tsx` — rewire data source, restructure tiles, simplify actions, drop AI Backup, drop banner.
+- `src/concierge/sections.ts` — move `rings_before_answer` into `ai_receptionist` fields.
+- `src/concierge/SectionRenderer.tsx` — add Rings-Before-AI control in AI Receptionist step.
+- `src/pages/Demo.tsx`, `src/pages/Pricing.tsx` — remove banner import/usage.
+- Delete `src/components/RequestSetupBanner.tsx`.
+
+No database migrations required — `rings_before_answer` already exists on `callcapture_clients` and the wizard already persists it.

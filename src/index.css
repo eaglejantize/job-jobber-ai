@@ -91,7 +91,8 @@
     --brand-foreground: 0 0% 100%;
     --brand-soft: 217 60% 18%;
 
-    /* Keep brand navy dark in both themes so `bg-navy text-white` stays legible. */
+    --navy: 210 20% 96%;
+    --navy-deep: 0 0% 100%;
     --slate-ink: 215 16% 72%;
     --ink: 215 16% 72%;
 
