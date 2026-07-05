@@ -26,7 +26,10 @@ export type OnboardingItem = { status: ItemStatus; updated_at?: string };
 export type OnboardingState = {
   items: Partial<Record<ItemId, OnboardingItem>>;
   activated_at: string | null;
+  schema_version?: number;
 };
+
+export const ONBOARDING_STATE_SCHEMA_VERSION = 2;
 
 export const ITEM_LABELS: Record<ItemId, string> = {
   business_info: "Business Profile",
@@ -117,26 +120,51 @@ export function deriveOnboardingState(
   const d = derived(c ?? {});
   for (const id of ITEM_ORDER) {
     const override = saved?.items?.[id];
-    // User overrides for "skipped" and explicit "needs_attention" win.
-    // Derived "complete" wins over a stale "not_started" override.
-    if (override?.status === "skipped" || override?.status === "needs_attention") {
-      items[id] = override;
-    } else if (d[id] === "complete") {
+    const required = REQUIRED_FOR_ACTIVATION.includes(id);
+    const skippableRequired = SKIPPABLE_FOR_ACTIVATION.includes(id);
+    const canTreatSkippedAsSatisfied = !required || skippableRequired;
+
+    // User overrides for optional/skippable "skipped" and explicit
+    // "needs_attention" win. Required non-skippable items such as
+    // Business Phone Number may never stay skipped unless the underlying
+    // client fields make them complete.
+    // Derived "complete" wins over stale/incomplete overrides.
+    if (d[id] === "complete") {
       items[id] = { status: "complete" };
-    } else if (override) {
+    } else if (override?.status === "skipped" && canTreatSkippedAsSatisfied) {
       items[id] = override;
+    } else if (override?.status === "needs_attention") {
+      items[id] = override;
+    } else if (override) {
+      items[id] = { ...override, status: override.status === "skipped" ? d[id] : override.status };
     } else {
       items[id] = { status: d[id] };
     }
   }
-  return { items, activated_at: saved?.activated_at ?? null };
+
+  const candidate: OnboardingState = {
+    items,
+    activated_at: saved?.activated_at ?? null,
+    schema_version: ONBOARDING_STATE_SCHEMA_VERSION,
+  };
+
+  // Do not preserve an activated marker if a newly required non-skippable item
+  // is missing. This prevents old 9-step onboarding state from bypassing the
+  // restored Business Phone Number requirement.
+  if (!isReadyToActivate(candidate).ready) {
+    candidate.activated_at = null;
+  }
+
+  return candidate;
 }
 
 export function progressSummary(state: OnboardingState) {
   const total = ITEM_ORDER.length;
   const complete = ITEM_ORDER.filter((id) => {
     const s = state.items[id]?.status;
-    return s === "complete" || s === "skipped";
+    if (s === "complete") return true;
+    if (s !== "skipped") return false;
+    return !REQUIRED_FOR_ACTIVATION.includes(id) || SKIPPABLE_FOR_ACTIVATION.includes(id);
   }).length;
   return { complete, total, pct: Math.round((complete / total) * 100) };
 }
