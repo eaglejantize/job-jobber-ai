@@ -33,6 +33,10 @@ type ClientRow = {
   preferred_area_code: string | null;
   business_phone: string | null;
   assigned_callcapture_number: string | null;
+  number_status: string | null;
+  webhook_status: string | null;
+  vapi_phone_number_id: string | null;
+  vapi_assistant_id: string | null;
   business_hours_24_7: boolean;
   business_hours_schedule: Record<string, { open: string; close: string } | null> | null;
   timezone: string;
@@ -57,7 +61,7 @@ export default function PhoneSetupWizard({ clientId, onSaved }: { clientId: stri
     (async () => {
       const { data } = await supabase
         .from("callcapture_clients")
-        .select("id, phone_mode, preferred_area_code, business_phone, assigned_callcapture_number, business_hours_24_7, business_hours_schedule, timezone, rings_before_answer, forward_first, forward_phone, answer_after_hours, transfer_fallback, transfer_triggers, setup_status, payment_status")
+        .select("id, phone_mode, preferred_area_code, business_phone, assigned_callcapture_number, number_status, webhook_status, vapi_phone_number_id, vapi_assistant_id, business_hours_24_7, business_hours_schedule, timezone, rings_before_answer, forward_first, forward_phone, answer_after_hours, transfer_fallback, transfer_triggers, setup_status, payment_status")
         .eq("id", clientId).maybeSingle();
       if (data) setC(data as ClientRow);
       setLoading(false);
@@ -70,6 +74,16 @@ export default function PhoneSetupWizard({ clientId, onSaved }: { clientId: stri
 
   async function activate() {
     if (!c) return;
+    const phoneReady =
+      !!c.assigned_callcapture_number &&
+      c.number_status === "active" &&
+      c.webhook_status === "configured" &&
+      !!c.vapi_phone_number_id &&
+      !!c.vapi_assistant_id;
+    if (!phoneReady) {
+      toast.error("Phone routing must be configured before activation.");
+      return;
+    }
     setSaving(true);
     const { error } = await supabase.from("callcapture_clients").update({
       phone_mode: c.phone_mode,
@@ -85,7 +99,6 @@ export default function PhoneSetupWizard({ clientId, onSaved }: { clientId: stri
       transfer_fallback: c.transfer_fallback,
       transfer_triggers: c.transfer_triggers,
       setup_status: "Active",
-      payment_status: "active",
     }).eq("id", c.id);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
