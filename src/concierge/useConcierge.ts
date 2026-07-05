@@ -14,7 +14,6 @@ export type ConciergePersisted = {
 
 const CONCIERGE_STATE_SCHEMA_VERSION = 2;
 const PHONE_NUMBER_STEP_INDEX = SECTIONS.findIndex((s) => s.id === "phone_number");
-void PHONE_NUMBER_STEP_INDEX;
 
 function normalizeConciergeState(saved: ConciergePersisted): ConciergePersisted {
   const rawStep = Number.isFinite(Number(saved.step)) ? Number(saved.step) : 0;
