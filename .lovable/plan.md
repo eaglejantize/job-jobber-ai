@@ -1,84 +1,73 @@
-## Findings
+# Home Dashboard Cleanup & Accuracy
 
-The reported tenant shows the exact stuck state:
+Goal: Make `src/pages/Home.tsx` a faithful read-only view of the tenant's saved configuration in `callcapture_clients`, and remove legacy/duplicate UI. All values shown fall back to "Not configured" instead of hardcoded defaults.
 
-- Number was purchased and saved: `+17045047944`
-- `number_status = needs_configuration`
-- `webhook_status = pending`
-- `vapi_assistant_id = null`
-- `vapi_phone_number_id = null`
-- Activation was still marked complete
+## 1. Fix data source for Home
 
-Recent backend logs show the provisioning failure:
+Today Home reads voice + rings from `callcapture_assistant_configs.notification_settings/call_rules`, which the concierge wizard never writes to. Switch Home to read from the tenant row in `callcapture_clients` (the concierge's source of truth):
 
-```text
-assistant create failed (400): Couldn't Find 11labs Voice
-```
+- `voice_id`, `voice_label`, `ai_personality` → AI Voice card
+- `business_phone` → Business Number card
+- `assigned_callcapture_number`, `number_status` → Vektuor Number card
+- `rings_before_answer` → Rings Before AI card
+- `greeting`, `business_hours_schedule`, `forward_phone`, `google_calendar_id`, `concierge_state`/`activated_at` → future cards & completion state
 
-The fresh account selected `voice_id = noah`, but the current voice picker stores app placeholder IDs like `noah`, `maya`, etc. The provisioning backend sends those as ElevenLabs voice IDs, so provider assistant creation fails. Because onboarding currently treats “assigned phone number exists” as complete, the tenant can activate even though routing never finished.
+If a field is null/empty, render "Not configured" (with a link to the relevant wizard step where useful) — never a hardcoded default like "Maya" or "3 rings".
 
-## Plan
+## 2. AI Voice card (issue #1, #8)
 
-1. **Fix the root provisioning failure**
-   - Stop sending placeholder app voice IDs to the provider as ElevenLabs voice IDs.
-   - Add a safe voice resolver in phone provisioning/repair code:
-     - Use provider-native default voice when the stored voice is one of the app placeholder/persona IDs.
-     - Only send ElevenLabs voice payloads when the ID is a real external voice ID.
-   - Apply this to both `provision-twilio-number` and `repair-routing` so stuck tenants can be repaired with the same logic.
+- Resolve label via `getVoiceByLabel(client.voice_label) ?? getVoiceById(client.voice_id)`.
+- Show `{label} · {persona}` from that record. If none saved → "Not configured" + link to AI Receptionist step.
+- Delete the `?? "Maya"` fallback and the read from `assistant_configs.notification_settings.voice`.
 
-2. **Make phone provisioning atomic and observable**
-   - In `provision-twilio-number`, log each step with structured context:
-     - number selected
-     - Twilio purchase
-     - assistant create/update
-     - provider phone registration
-     - webhook/TwiML fallback update
-     - database save
-     - final activation
-   - Store user-visible provisioning failures on the tenant row using existing fields where possible (`last_vapi_sync_status`, `last_vapi_sync_at`, `webhook_status`, `number_status`).
-   - Also write step diagnostics into the existing `callcapture_webhook_events` table using steps like `phone_purchase`, `assistant_upsert`, `provider_register`, `webhook_configured`, `phone_ready`, `phone_failed`.
+## 3. Business Phone vs Vektuor Number (issue #2)
 
-3. **Add automatic retries for transient provider failures**
-   - Add a small retry helper with exponential backoff for provider calls that can transiently fail.
-   - Retry network failures, timeouts, and 429/5xx responses.
-   - Do not retry permanent 400 validation errors like invalid voice IDs; show the actual error and mark provisioning failed.
+Replace the current "Business Phone" status tile + duplicate "Phone Number" in Call Setup with two clearly-labeled fields sourced independently:
 
-4. **Remove indefinite “Needs Configuration” UI**
-   - Update `PhoneNumberPicker` so pending/error states show actual routing details instead of the generic “Routing setup will be completed shortly.”
-   - Add automatic refresh/polling while the number status is provisioning/pending/needs configuration.
-   - Show clear success when `number_status = active` and `webhook_status = configured`.
-   - Show a retry/repair action when provisioning failed or is stuck.
+- **Vektuor Number** = `assigned_callcapture_number` + `number_status` badge (unchanged logic, keep polling for provisioning states).
+- **Business Number** = `business_phone` from `callcapture_clients` only. Never fall back to the Vektuor number or `alert_phone`. If missing: show "Not configured" + a "Configure Business Number" button linking to `/settings/concierge` at the business_profile step.
 
-5. **Synchronize activation gating with real phone readiness**
-   - Change onboarding status derivation so phone setup is not complete merely because `assigned_callcapture_number` exists.
-   - For newly provisioned numbers, require:
-     - assigned number exists
-     - `number_status = active`
-     - `webhook_status = configured`
-     - provider phone ID exists
-     - assistant ID exists
-   - Prevent activation until those are true.
-   - If a stale account has `activated_at`/`onboarding_completed_at` but phone provisioning is incomplete, normalize it back to incomplete so the gate catches it.
+Remove the top-row "Business Phone" tile (or repurpose it as "Business Number") so the number is displayed exactly once.
 
-6. **Repair the known stuck tenant safely**
-   - After code changes, run the repair path for the tenant with `(704) 504-7944`.
-   - Confirm it either becomes active/configured or stores a real actionable error.
-   - Do not leave it in generic pending state.
+## 4. Rings Before AI (issue #3)
 
-7. **Review fresh-account onboarding end to end**
-   - Verify a fresh tenant starts at step 1.
-   - Confirm the sequence remains visible and consistent:
-     - Welcome/setup entry
-     - Business information
-     - Business hours
-     - Phone number selection
-     - Google Business import
-     - Website import
-     - AI voice setup
-     - Activation
-   - Confirm no step can be skipped/hidden in a way that bypasses required phone provisioning.
+The wizard already lists `rings_before_answer` in the Hours section fields, but there is no UI for it and Home reads a different key. Fix both ends:
 
-8. **Reduce future regressions by consolidating source of truth**
-   - Keep `deriveOnboardingState` as the authority for activation readiness.
-   - Ensure `ConciergePage`, `OnboardingGate`, progress UI, and activation checklist all rely on that same derived readiness.
-   - Remove or neutralize old/orphaned phone setup activation logic that can mark tenants active without real provisioning.
+- **Wizard**: in `src/concierge/SectionRenderer.tsx`, add a Rings-Before-AI control to the AI Receptionist step (move `rings_before_answer` out of `hours` and into `ai_receptionist` in `sections.ts` so it lives with related settings). Options: `0` (Answer immediately), `1`, `2`, `3`, `4`, `5`. Include short helper copy: "How many rings should occur before the AI answers?" Persist via `setField("rings_before_answer", n)`.
+- **Home**: read `client.rings_before_answer`. Display `"Answer immediately"` for `0`, `"{n} ring[s]"` otherwise, `"Not configured"` if null. Add a small "Edit" link that navigates to `/settings/concierge?step=ai_receptionist` (or the section id used by ConciergePage).
+
+## 5. AI Backup card (issue #4)
+
+Since there's no configurable backing field yet, **hide the card entirely**. Remove `aiAnswerMissed` state and the "AI Backup" tile from Home. (We can reintroduce it under a clearer name — "Missed Call Protection" — once it is actually wired to a persisted field.)
+
+## 6. Remove "Want us to set this up for you?" (issue #5)
+
+- Delete `<RequestSetupBanner />` usages in `src/pages/Home.tsx`, `src/pages/Demo.tsx`, `src/pages/Pricing.tsx`.
+- Delete the component file `src/components/RequestSetupBanner.tsx`.
+
+## 7. De-duplicate actions (issue #6, #7)
+
+Simplify the Quick Actions row to exactly three buttons:
+
+- **Test My AI** (`CallDemoButton`, primary)
+- **Edit Setup** → `/settings/concierge` (replaces both "Edit Settings" and the always-visible "Continue setup"). While onboarding is incomplete (`!client.activated_at`), the label becomes **Continue Setup**; once activated, it becomes **Edit Setup**.
+- **View Inbox** → `/leads`
+
+Remove the standalone "Update Agent" button and the extra "Edit Phone Setup" button in the Call Setup card header (users can edit via the single Setup button).
+
+## 8. Verification
+
+- Load Home as a fresh tenant with only business_profile completed → all AI/phone tiles show "Not configured" or wizard link, no "Maya", no "3 rings".
+- Complete concierge with voice=Anthony, rings=2 → Home shows "Anthony · <persona>" and "2 rings".
+- Set business_phone different from Vektuor number → tiles show two different numbers.
+- Confirm no `RequestSetupBanner` remains via `rg RequestSetupBanner`.
+
+## Files touched
+
+- `src/pages/Home.tsx` — rewire data source, restructure tiles, simplify actions, drop AI Backup, drop banner.
+- `src/concierge/sections.ts` — move `rings_before_answer` into `ai_receptionist` fields.
+- `src/concierge/SectionRenderer.tsx` — add Rings-Before-AI control in AI Receptionist step.
+- `src/pages/Demo.tsx`, `src/pages/Pricing.tsx` — remove banner import/usage.
+- Delete `src/components/RequestSetupBanner.tsx`.
+
+No database migrations required — `rings_before_answer` already exists on `callcapture_clients` and the wizard already persists it.
