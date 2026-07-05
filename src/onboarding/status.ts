@@ -79,6 +79,15 @@ function nonEmpty(v: unknown): boolean {
 
 type Client = Record<string, any>;
 
+function isPhoneReady(c: Client): boolean {
+  if (!nonEmpty(c?.assigned_callcapture_number)) return false;
+  if (c?.number_status !== "active") return false;
+  if (c?.webhook_status !== "configured") return false;
+  if (!nonEmpty(c?.vapi_phone_number_id)) return false;
+  if (!nonEmpty(c?.vapi_assistant_id)) return false;
+  return true;
+}
+
 function derived(c: Client): Record<ItemId, ItemStatus> {
   const has = (k: string) => nonEmpty(c?.[k]);
   const businessOk = has("business_name") && has("business_phone");
@@ -92,7 +101,7 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
   const aiOk = (has("voice_id") || has("voice_label")) && has("greeting");
   const testCallOk = !!c?.test_call_passed_at || nonEmpty(c?.first_test_call_id);
   const gbpOk = has("google_place_id") || has("google_category");
-  const phoneNumberOk = has("assigned_callcapture_number");
+  const phoneNumberOk = isPhoneReady(c);
 
   return {
     business_info:
@@ -103,7 +112,11 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
         : "not_started",
     services: servicesOk ? "complete" : "not_started",
     hours: hoursOk ? "complete" : "not_started",
-    phone_number: phoneNumberOk ? "complete" : "not_started",
+    phone_number: phoneNumberOk
+      ? "complete"
+      : has("assigned_callcapture_number")
+      ? "needs_attention"
+      : "not_started",
     website_import: has("website") ? "complete" : "not_started",
     knowledge_base: knowledgeOk ? "complete" : "not_started",
     ai_receptionist: aiOk ? "complete" : "not_started",
