@@ -56,6 +56,12 @@ export function useOnboardingState() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onReload = () => void load();
+    window.addEventListener("setup:reload", onReload);
+    return () => window.removeEventListener("setup:reload", onReload);
+  }, [load]);
+
   const markStatus = useCallback(
     async (id: ItemId, status: ItemStatus) => {
       if (!clientId) return;

@@ -66,6 +66,7 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
           } finally {
             setRepairing(false);
             await ctx.reload();
+            window.dispatchEvent(new CustomEvent("setup:reload"));
           }
         }}
         retryingRepair={repairing}
@@ -81,6 +82,7 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
           }
           setReplacing(false);
           await ctx.reload();
+          window.dispatchEvent(new CustomEvent("setup:reload"));
         }}
       />
     </div>
