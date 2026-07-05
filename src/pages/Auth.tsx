@@ -19,9 +19,12 @@ export default function Auth() {
   const [mode, setMode] = useState<"signin" | "forgot">("signin");
   const [resetSentTo, setResetSentTo] = useState<string | null>(null);
 
+  const nextParam = params.get("next");
+  const nextTarget = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard";
+
   useEffect(() => {
-    if (user) navigate("/dashboard", { replace: true });
-  }, [user, navigate]);
+    if (user) navigate(nextTarget, { replace: true });
+  }, [user, navigate, nextTarget]);
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -37,7 +40,7 @@ export default function Auth() {
       toast({ title: "Couldn't sign in", description: error.message, variant: "destructive" });
       return;
     }
-    navigate("/dashboard");
+    navigate(nextTarget);
   }
 
   async function handleForgot(e: React.FormEvent) {

@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
 function FullPageLoader() {
@@ -20,7 +20,12 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 export function RedirectIfAuthed({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const [params] = useSearchParams();
   if (loading) return <FullPageLoader />;
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) {
+    const next = params.get("next");
+    const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    return <Navigate to={safe} replace />;
+  }
   return <>{children}</>;
 }
