@@ -17,6 +17,7 @@ const SECTION_TO_ITEM: Record<string, ItemId> = {
   business_profile: "business_info",
   services: "services",
   hours: "hours",
+  phone_number: "phone_number",
   website_import: "website_import",
   knowledge: "knowledge_base",
   ai_receptionist: "ai_receptionist",
