@@ -48,7 +48,7 @@ export default function SiteNav() {
         <div className="hidden md:flex items-center gap-3">
           <ThemeToggle />
           {user ? (
-            <Button onClick={() => navigate("/dashboard")} className="bg-navy hover:bg-navy-deep text-white rounded-xl">
+            <Button onClick={() => navigate("/dashboard")} className="rounded-xl">
               Dashboard
             </Button>
           ) : (
@@ -59,7 +59,7 @@ export default function SiteNav() {
               >
                 Sign in
               </Link>
-              <Button onClick={() => navigate("/auth")} className="bg-navy hover:bg-navy-deep text-white rounded-xl">
+              <Button onClick={() => navigate("/auth")} className="rounded-xl">
                 Start Free Trial
               </Button>
             </>
@@ -99,7 +99,7 @@ export default function SiteNav() {
             {user ? (
               <Button
                 onClick={() => { setOpen(false); navigate("/dashboard"); }}
-                className="bg-navy hover:bg-navy-deep text-white rounded-xl mt-2"
+                className="rounded-xl mt-2"
               >
                 Dashboard
               </Button>
@@ -114,7 +114,7 @@ export default function SiteNav() {
                 </NavLink>
                 <Button
                   onClick={() => { setOpen(false); navigate("/auth"); }}
-                  className="bg-navy hover:bg-navy-deep text-white rounded-xl mt-2"
+                  className="rounded-xl mt-2"
                 >
                   Start Free Trial
                 </Button>
