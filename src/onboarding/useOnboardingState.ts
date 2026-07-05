@@ -5,9 +5,15 @@ import {
   ItemId,
   ItemStatus,
   OnboardingState,
+  ONBOARDING_STATE_SCHEMA_VERSION,
   progressSummary,
   isReadyToActivate,
 } from "./status";
+
+function statesEqual(a: OnboardingState | null | undefined, b: OnboardingState) {
+  if (!a) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 export function useOnboardingState() {
   const [loading, setLoading] = useState(true);
@@ -33,7 +39,15 @@ export function useOnboardingState() {
     if (row) {
       setClientId((row as any).id);
       setClient(row);
-      setState(deriveOnboardingState(row, (row as any).onboarding_state ?? null));
+      const saved = ((row as any).onboarding_state ?? null) as OnboardingState | null;
+      const normalized = deriveOnboardingState(row, saved);
+      setState(normalized);
+      if (!statesEqual(saved, normalized)) {
+        await supabase
+          .from("callcapture_clients")
+          .update({ onboarding_state: normalized } as never)
+          .eq("id", (row as any).id);
+      }
     }
     setLoading(false);
   }, []);
@@ -47,6 +61,7 @@ export function useOnboardingState() {
       if (!clientId) return;
       const next: OnboardingState = {
         ...state,
+        schema_version: ONBOARDING_STATE_SCHEMA_VERSION,
         items: { ...state.items, [id]: { status, updated_at: new Date().toISOString() } },
       };
       setState(next);
@@ -60,7 +75,13 @@ export function useOnboardingState() {
 
   const activate = useCallback(async () => {
     if (!clientId) return;
-    const next: OnboardingState = { ...state, activated_at: new Date().toISOString() };
+    const readiness = isReadyToActivate(state);
+    if (!readiness.ready) return;
+    const next: OnboardingState = {
+      ...state,
+      schema_version: ONBOARDING_STATE_SCHEMA_VERSION,
+      activated_at: new Date().toISOString(),
+    };
     setState(next);
     await supabase
       .from("callcapture_clients")
