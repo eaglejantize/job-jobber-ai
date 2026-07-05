@@ -4,13 +4,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { Navigate, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Phone, Loader2, Settings as SettingsIcon, PhoneCall, ArrowRight, Bot } from "lucide-react";
-import RequestSetupBanner from "@/components/RequestSetupBanner";
+import { Phone, Loader2, Settings as SettingsIcon, ArrowRight, Inbox } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { DEMO_NUMBER } from "@/lib/constants";
 import CallDemoButton from "@/components/CallDemoButton";
 import { Badge } from "@/components/ui/badge";
-import { getVoiceById, DEFAULT_VOICE_ID } from "@/lib/voices";
+import { getVoiceById, getVoiceByLabel } from "@/lib/voices";
 
 type Client = {
   id: string;
@@ -21,6 +19,12 @@ type Client = {
   business_name: string;
   assigned_callcapture_number?: string | null;
   number_status?: string | null;
+  business_phone?: string | null;
+  voice_id?: string | null;
+  voice_label?: string | null;
+  ai_personality?: string | null;
+  rings_before_answer?: number | null;
+  activated_at?: string | null;
 };
 
 type Lead = {
@@ -46,17 +50,11 @@ export default function Home() {
   const { user, loading } = useAuth();
   const [params, setParams] = useSearchParams();
   const [client, setClient] = useState<Client | null>(null);
-  const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [businessExists, setBusinessExists] = useState<boolean | null>(null);
   const [hasConfig, setHasConfig] = useState(false);
   const [configFetched, setConfigFetched] = useState(false);
-  const [voiceLabel, setVoiceLabel] = useState<string | null>(null);
-  const [voicePersona, setVoicePersona] = useState<string | null>(null);
-  const [ringsBeforeAi, setRingsBeforeAi] = useState<number>(3);
-  const [aiAnswerMissed, setAiAnswerMissed] = useState<boolean>(true);
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [polling, setPolling] = useState(false);
-  const [syncingAgent, setSyncingAgent] = useState(false);
   const toastedRef = useRef(false);
   const navigate = useNavigate();
 
@@ -76,7 +74,7 @@ export default function Home() {
 
     void supabase
       .from("callcapture_assistant_configs")
-      .select("id, generated_prompt, notification_settings, call_rules")
+      .select("id, generated_prompt")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -84,19 +82,6 @@ export default function Home() {
       .then(({ data }) => {
         setHasConfig(!!data?.generated_prompt);
         setConfigFetched(true);
-        const notif = (data?.notification_settings ?? {}) as Record<string, unknown>;
-        const v = (notif.voice ?? null) as { voice_label?: string; voice_persona?: string } | null;
-        if (v?.voice_label) {
-          setVoiceLabel(v.voice_label);
-          setVoicePersona(v.voice_persona ?? null);
-        } else {
-          const def = getVoiceById(DEFAULT_VOICE_ID);
-          setVoiceLabel(def.label);
-          setVoicePersona(def.persona);
-        }
-        const rules = (data?.call_rules ?? {}) as { ringsBeforeAi?: number; aiAnswerMissed?: boolean };
-        setRingsBeforeAi(rules.ringsBeforeAi ?? 3);
-        setAiAnswerMissed(rules.aiAnswerMissed !== false);
       });
 
     void supabase
@@ -107,7 +92,6 @@ export default function Home() {
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
-        setBusinessPhone(data?.phone ?? null);
         setBusinessExists(!!data?.id);
       });
 
@@ -124,7 +108,6 @@ export default function Home() {
           .limit(1)
           .maybeSingle();
         if (data?.id) {
-          setBusinessPhone(data.phone ?? null);
           setBusinessExists(true);
         } else {
           setTimeout(poll, 2000);
@@ -148,7 +131,7 @@ export default function Home() {
     const fetchClient = async () => {
       let { data } = await supabase
         .from("callcapture_clients")
-        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status")
+        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, ai_personality, rings_before_answer")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -157,7 +140,7 @@ export default function Home() {
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
-          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status")
+          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, ai_personality, rings_before_answer")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -257,7 +240,7 @@ export default function Home() {
 
   const assignedNumber = client?.assigned_callcapture_number ?? null;
   const numberStatus = client?.number_status ?? null;
-  const phoneToShow = assignedNumber || businessPhone || client?.alert_phone || null;
+  const businessNumber = client?.business_phone ?? null;
   const numberStatusLabel =
     numberStatus === "active" ? "Active" :
     numberStatus === "needs_configuration" ? "Needs Configuration" :
@@ -266,6 +249,23 @@ export default function Home() {
     numberStatus === "active" ? "bg-primary/15 text-primary" :
     numberStatus === "needs_configuration" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" :
     "bg-muted text-muted-foreground";
+
+  const voice =
+    getVoiceByLabel(client?.voice_label ?? undefined) ??
+    (client?.voice_id ? getVoiceById(client.voice_id) : undefined);
+  const voiceDisplayLabel = client?.ai_personality?.trim() || voice?.label || null;
+  const voicePersonaLabel = voice?.persona ?? null;
+
+  const rings = client?.rings_before_answer;
+  const ringsLabel =
+    rings === null || rings === undefined
+      ? null
+      : rings === 0
+      ? "Answer immediately"
+      : `${rings} ${rings === 1 ? "ring" : "rings"}`;
+
+  const setupComplete = status === "Live" || status === "Ready";
+  const setupPath = "/settings/concierge";
 
   return (
     <Layout>
@@ -290,15 +290,35 @@ export default function Home() {
               )}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">Business Phone</p>
-              <p className="mt-2 font-medium">{phoneToShow ?? <span className="text-muted-foreground">—</span>}</p>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Business Number</p>
+              {businessNumber ? (
+                <p className="mt-2 font-medium">{businessNumber}</p>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">Not configured</p>
+                  <Link to={setupPath} className="text-xs text-primary hover:underline">
+                    Configure Business Number
+                  </Link>
+                </div>
+              )}
             </div>
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">AI Voice</p>
-              <p className="mt-2 font-medium">
-                {voiceLabel ?? "Maya"}
-                {voicePersona && <span className="text-muted-foreground font-normal"> · {voicePersona}</span>}
-              </p>
+              {voiceDisplayLabel ? (
+                <p className="mt-2 font-medium">
+                  {voiceDisplayLabel}
+                  {voicePersonaLabel && (
+                    <span className="text-muted-foreground font-normal"> · {voicePersonaLabel}</span>
+                  )}
+                </p>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">Not configured</p>
+                  <Link to={setupPath} className="text-xs text-primary hover:underline">
+                    Choose a voice
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -308,39 +328,23 @@ export default function Home() {
           <p className="text-xs uppercase tracking-widest text-muted-foreground mb-4">Quick Actions</p>
           <div className="flex flex-wrap gap-3">
             <CallDemoButton className="bg-cta hover:opacity-90 shadow-glow">
-              Test My Agent{"\u00a0"}
+              Test My AI{"\u00a0"}
             </CallDemoButton>
-            <Button
-              variant="outline"
-              disabled={!client?.id || syncingAgent}
-              onClick={async () => {
-                if (!client?.id) return;
-                setSyncingAgent(true);
-                const { data, error } = await supabase.functions.invoke("update-vapi-agent", { body: { client_id: client.id } });
-                setSyncingAgent(false);
-                if (error || !(data as { ok?: boolean })?.ok) {
-                  const msg = error?.message || (data as { error?: string })?.error || "Unknown error";
-                  toast({ title: "Failed to update agent", description: msg, variant: "destructive" });
-                } else {
-                  toast({ title: "Agent updated" });
-                }
-              }}
-            >
-              {syncingAgent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-              Update Agent
-            </Button>
             <Button asChild variant="outline">
-              <Link to="/settings">
-                <SettingsIcon className="h-4 w-4" /> Edit Settings
+              <Link to={status === "Payment Pending" ? "/start" : setupPath}>
+                <SettingsIcon className="h-4 w-4" />
+                {status === "Payment Pending"
+                  ? "Complete payment"
+                  : setupComplete
+                  ? "Edit Setup"
+                  : "Continue Setup"}
               </Link>
             </Button>
-            {(status !== "Live" && status !== "Ready") && (
-              <Button asChild variant="outline">
-                <Link to={status === "Payment Pending" ? "/start" : "/setup"}>
-                  {status === "Payment Pending" ? "Complete payment" : "Continue setup"}
-                </Link>
-              </Button>
-            )}
+            <Button asChild variant="outline">
+              <Link to="/leads">
+                <Inbox className="h-4 w-4" /> View Inbox
+              </Link>
+            </Button>
           </div>
         </div>
 
@@ -348,34 +352,51 @@ export default function Home() {
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card-soft mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Call Setup</h2>
-            <div className="flex gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link to="/settings">Edit Phone Setup</Link>
-              </Button>
-            </div>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Vektuor Number</p>
-              <p className="mt-2 font-medium">{assignedNumber ?? <span className="text-muted-foreground">—</span>}</p>
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold mt-2 ${numberStatusColor}`}>
-                {numberStatusLabel}
-              </span>
+              {assignedNumber ? (
+                <>
+                  <p className="mt-2 font-medium">{assignedNumber}</p>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold mt-2 ${numberStatusColor}`}>
+                    {numberStatusLabel}
+                  </span>
+                </>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">Not configured</p>
+                  <Link to={setupPath} className="text-xs text-primary hover:underline">
+                    Claim a number
+                  </Link>
+                </div>
+              )}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">Phone Number</p>
-              <p className="mt-2 font-medium">{phoneToShow ?? <span className="text-muted-foreground">—</span>}</p>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Business Number</p>
+              {businessNumber ? (
+                <p className="mt-2 font-medium">{businessNumber}</p>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">Not configured</p>
+                  <Link to={setupPath} className="text-xs text-primary hover:underline">
+                    Configure Business Number
+                  </Link>
+                </div>
+              )}
             </div>
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Rings before AI</p>
-              <p className="mt-2 font-medium">{ringsBeforeAi} {ringsBeforeAi === 1 ? "ring" : "rings"}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">AI Backup</p>
-              <p className="mt-2 font-medium inline-flex items-center gap-1.5">
-                <Bot className="h-4 w-4 text-primary" />
-                {aiAnswerMissed ? "ON" : "OFF"}
-              </p>
+              {ringsLabel ? (
+                <p className="mt-2 font-medium">{ringsLabel}</p>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm text-muted-foreground">Not configured</p>
+                  <Link to={setupPath} className="text-xs text-primary hover:underline">
+                    Set rings
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -417,8 +438,6 @@ export default function Home() {
             </ul>
           )}
         </div>
-
-        <RequestSetupBanner variant="compact" />
       </section>
     </Layout>
   );

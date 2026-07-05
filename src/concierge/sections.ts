@@ -65,7 +65,7 @@ const BASE_SECTIONS: SectionDef[] = [
     id: "hours",
     title: "Business Hours",
     subtitle: "When you're open, and how calls route during and after hours.",
-    fields: ["business_hours_schedule", "business_hours_24_7", "phone_mode", "forward_first", "rings_before_answer"],
+    fields: ["business_hours_schedule", "business_hours_24_7", "phone_mode", "forward_first"],
     aiSupported: false,
   },
   PHONE_NUMBER_SECTION,
@@ -90,7 +90,7 @@ const BASE_SECTIONS: SectionDef[] = [
     fields: [
       "tone", "ai_personality", "voice_id", "voice_label", "greeting",
       "after_hours_message", "forward_phone", "voicemail_enabled",
-      "voicemail_fallback", "sms_followup_template",
+      "voicemail_fallback", "sms_followup_template", "rings_before_answer",
     ],
     aiSupported: false,
   },
