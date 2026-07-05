@@ -94,7 +94,15 @@ export default function ReviewAndApply({
       });
       return;
     }
-    await onboarding.activate();
+    const activated = await onboarding.activate();
+    if (!activated) {
+      toast({
+        title: "Setup is not ready",
+        description: "Phone routing must be configured before activation.",
+        variant: "destructive",
+      });
+      return;
+    }
     toast({ title: "AI receptionist activated" });
     onApplied();
   }
