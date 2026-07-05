@@ -56,12 +56,12 @@ export default function ConciergePage() {
     ctx.setStep(Math.max(0, ctx.step - 1));
   }
   async function skip() {
-    ctx.skipSection(section.id);
     const itemId = SECTION_TO_ITEM[section.id];
     const canPersistSkip =
       itemId &&
       (!REQUIRED_FOR_ACTIVATION.includes(itemId) || SKIPPABLE_FOR_ACTIVATION.includes(itemId));
     if (canPersistSkip) {
+      ctx.skipSection(section.id);
       await onboarding.markStatus(itemId, "skipped");
     }
     await next();
