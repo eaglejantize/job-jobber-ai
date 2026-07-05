@@ -1,33 +1,35 @@
-## Plan
+## Goal
 
-1. Force one canonical setup config for every account type
-   - Make `/settings` always render the same canonical 10-step `SECTIONS` list for subscribers and admins.
-   - Add a guard/assertion in the wizard so if `phone_number` is missing from the loaded section list, it is inserted at step 4 before rendering.
-   - Do not create a duplicate phone flow; use the existing `PhoneNumberPicker` / `PhoneNumberSection`.
+New subscribers should land on **Step 1 (Business Profile)** when they open setup — not jump straight to Step 4 (Business Phone Number). Step 4 stays present and still cannot be skipped, but users get to walk the wizard from the beginning.
 
-2. Fix subscriber state loading
-   - Normalize each subscriber’s saved `concierge_state` on load so old 9-step saved state cannot produce a 9-step subscriber wizard.
-   - If the saved state predates the phone-number step, remap old step indexes so the flow becomes:
-     `Business Hours -> Business Phone Number -> Website Import`.
-   - Remove any stale `skipped` state for `phone_number`.
+## Changes
 
-3. Fix onboarding checklist state
-   - Normalize `onboarding_state.items` so every subscriber has `phone_number` in the checklist.
-   - Set `phone_number` to incomplete when `assigned_callcapture_number` is null.
-   - Set it complete only when a number is assigned.
-   - Prevent setup completion/activation if a subscriber has no `assigned_callcapture_number`.
+### `src/concierge/useConcierge.ts`
+- Remove the `needsPhoneNumberStep(row)` forced-routing logic in `load()`.
+- When a subscriber has no saved `concierge_state`, do **not** write an initial state pinned to `PHONE_NUMBER_STEP_INDEX`. Let step default to `0`.
+- Keep `normalizeConciergeState` (schema migration + old-step shifting) so returning users still land on the correct saved step.
+- Keep `PHONE_NUMBER_STEP_INDEX` constant only if still referenced elsewhere; otherwise drop it.
 
-4. Backfill existing subscriber accounts
-   - Update existing non-admin subscriber rows that still have old 9-step state.
-   - Ensure those rows get `phone_number` inserted as incomplete unless they already have a number.
-   - Clear completion markers from non-admin subscribers that were marked complete without a phone number.
+### `src/concierge/ConciergePage.tsx`
+- No change to the guard behavior on the phone step itself:
+  - Next button stays disabled when on Step 4 without an assigned number.
+  - Skip button stays disabled on Step 4.
+  - Sidebar nav still allows visiting Step 4 directly.
+- No visual/layout changes.
 
-5. Verify specifically as a non-admin subscriber
-   - Create or use a brand-new non-admin subscriber account with no assigned number.
-   - Sign in as that subscriber and open `/settings`.
-   - Confirm the left step list shows all 10 steps, including `4. Business Phone Number`.
-   - Confirm the actual phone setup UI appears: new number / existing number / forward / test number.
-   - Confirm the subscriber cannot activate without selecting/linking a number.
+### Database backfill (one-shot)
+- For existing non-admin subscriber rows whose `concierge_state.step = 3` was written by the previous forced-step logic **and** who have not otherwise progressed (`pending` empty, `skipped` empty), reset `concierge_state.step` to `0` so they also start at Step 1 next time they open setup.
+- Do not touch rows where the user has legitimately advanced past Step 1.
 
-6. Publish after verification
-   - Publish the verified fix so production subscribers receive the same phone setup step as the admin preview.
+## What stays the same
+
+- Step 4 (Business Phone Number) remains in the canonical 10-step flow via `ensurePhoneNumberSection`.
+- Activation is still blocked until a phone number is assigned.
+- `onboarding_state.items.phone_number` normalization is unchanged.
+
+## Verification
+
+1. Create a fresh non-admin subscriber account.
+2. Open `/settings` → confirm it opens on **Step 1: Business Profile**.
+3. Click through to Step 4 → confirm the phone picker renders and Next/Skip are disabled until a number is chosen.
+4. Confirm activation still blocked without a number.
