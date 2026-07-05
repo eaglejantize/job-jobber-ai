@@ -281,7 +281,7 @@ Deno.serve(async (req) => {
       vapi_assistant_id: assistantId,
       vapi_phone_number_id: vapiPhoneNumberId,
       number_status: routing_status,
-      webhook_status: routing_status === "active" ? "configured" : "pending",
+      webhook_status: routing_status === "active" ? "configured" : routing_error ? "failed" : "pending",
       webhook_urls: { voice_url: voiceUrl, sms_url: smsUrl },
       last_vapi_sync_at: now(),
       last_vapi_sync_status: routing_status === "active" ? "Phone number configured and ready." : routing_error,
