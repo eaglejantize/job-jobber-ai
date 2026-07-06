@@ -22,6 +22,8 @@ type Client = {
   business_phone?: string | null;
   voice_id?: string | null;
   voice_label?: string | null;
+  voice_sync_status?: "synced" | "failed" | "pending" | null;
+  voice_last_sync_error?: string | null;
   ai_personality?: string | null;
   rings_before_answer?: number | null;
   activated_at?: string | null;
@@ -131,7 +133,7 @@ export default function Home() {
     const fetchClient = async () => {
       let { data } = await supabase
         .from("callcapture_clients")
-        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, ai_personality, rings_before_answer")
+        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -140,7 +142,7 @@ export default function Home() {
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
-          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, ai_personality, rings_before_answer")
+          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -253,6 +255,7 @@ export default function Home() {
   const voice =
     getVoiceByLabel(client?.voice_label ?? undefined) ??
     (client?.voice_id ? getVoiceById(client.voice_id) : undefined);
+  const voiceNeedsAttention = client?.voice_sync_status === "failed" || !!client?.voice_last_sync_error;
   const voiceDisplayLabel = client?.ai_personality?.trim() || voice?.label || null;
   const voicePersonaLabel = voice?.persona ?? null;
 
@@ -305,12 +308,17 @@ export default function Home() {
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">AI Voice</p>
               {voiceDisplayLabel ? (
-                <p className="mt-2 font-medium">
-                  {voiceDisplayLabel}
-                  {voicePersonaLabel && (
-                    <span className="text-muted-foreground font-normal"> · {voicePersonaLabel}</span>
+                <>
+                  <p className="mt-2 font-medium">
+                    {voiceDisplayLabel}
+                    {voicePersonaLabel && (
+                      <span className="text-muted-foreground font-normal"> · {voicePersonaLabel}</span>
+                    )}
+                  </p>
+                  {voiceNeedsAttention && (
+                    <p className="mt-1 text-xs text-destructive">Voice setup needs attention</p>
                   )}
-                </p>
+                </>
               ) : (
                 <div className="mt-2">
                   <p className="text-sm text-muted-foreground">Not configured</p>

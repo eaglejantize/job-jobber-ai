@@ -9,18 +9,9 @@ import { Loader2, Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { questionsForIndustry, UNIVERSAL_QUESTIONS } from "@/lib/intakeQuestions";
 import { industryLabel } from "@/lib/industries";
-import { VOICES as STATIC_VOICES } from "@/lib/voices";
+import VoicePicker from "@/components/VoicePicker";
 import { TestCallButton } from "@/components/TestCallButton";
 import ServanaHqSettings from "@/components/settings/ServanaHqSettings";
-
-type Voice = { id: string; name: string; provider: string; description: string };
-
-const STATIC_VOICE_LIST: Voice[] = STATIC_VOICES.map((v) => ({
-  id: v.id,
-  name: v.label,
-  provider: v.persona,
-  description: v.description,
-}));
 
 const TONES = ["Friendly", "Professional", "Direct", "Cheerful", "Calm"];
 
@@ -33,6 +24,11 @@ type ClientRow = {
   human_pause: boolean;
   voice_id: string | null;
   voice_label: string | null;
+  selected_voice_catalog_id: string | null;
+  voice_provider: string | null;
+  voice_provider_voice_id: string | null;
+  voice_sync_status: "synced" | "failed" | "pending" | null;
+  voice_last_sync_error: string | null;
   intake_questions: string[] | null;
   tone: string;
 };
@@ -42,14 +38,13 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
   const [saving, setSaving] = useState(false);
   const [c, setC] = useState<ClientRow | null>(null);
   const [genLoading, setGenLoading] = useState(false);
-  const voices = STATIC_VOICE_LIST;
   const [options, setOptions] = useState<string[]>([]);
   const [customQ, setCustomQ] = useState("");
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("callcapture_clients")
-        .select("id, business_name, industry, greeting, include_business_name, human_pause, voice_id, voice_label, intake_questions, tone")
+        .select("id, business_name, industry, greeting, include_business_name, human_pause, voice_id, voice_label, selected_voice_catalog_id, voice_provider, voice_provider_voice_id, voice_sync_status, voice_last_sync_error, intake_questions, tone")
         .eq("id", clientId).maybeSingle();
       if (data) {
         const row = data as ClientRow;
@@ -89,6 +84,11 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
       human_pause: c.human_pause,
       voice_id: c.voice_id,
       voice_label: c.voice_label,
+      selected_voice_catalog_id: c.selected_voice_catalog_id,
+      voice_provider: c.voice_provider,
+      voice_provider_voice_id: c.voice_provider_voice_id,
+      voice_sync_status: "pending",
+      voice_last_sync_error: null,
       intake_questions: c.intake_questions as never,
       tone: c.tone,
     }).eq("id", c.id);
@@ -158,28 +158,23 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
       <section className="space-y-3">
         <h3 className="text-base font-semibold">Voice</h3>
         <p className="text-xs text-muted-foreground">Pick the voice your AI receptionist uses on calls.</p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {voices.map((v) => {
-            const active = c.voice_id === v.id;
-            return (
-              <div key={v.id} className={`rounded-lg border p-3 ${active ? "border-emerald-500 bg-emerald-500/5" : "border-border"}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">{v.name}</p>
-                    <p className="text-xs text-muted-foreground">{v.provider}{v.description ? ` · ${v.description}` : ""}</p>
-                  </div>
-                  <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground shrink-0">
-                    Preview coming soon
-                  </span>
-                </div>
-                <Button type="button" size="sm" variant={active ? "default" : "outline"} className="w-full mt-3"
-                  onClick={() => { update("voice_id", v.id); update("voice_label", v.name); }}>
-                  {active ? "Selected" : "Use this voice"}
-                </Button>
-              </div>
-            );
-          })}
-        </div>
+        <VoicePicker
+          value={String(c.selected_voice_catalog_id ?? c.voice_id ?? "")}
+          onChange={(v) => {
+            update("selected_voice_catalog_id", v.selected_voice_catalog_id);
+            update("voice_provider", v.voice_provider);
+            update("voice_provider_voice_id", v.voice_provider_voice_id);
+            update("voice_id", v.voice_id);
+            update("voice_label", v.voice_label);
+            update("voice_sync_status", "pending");
+            update("voice_last_sync_error", null);
+          }}
+        />
+        {(c.voice_sync_status !== "synced" || !!c.voice_last_sync_error) && (
+          <p className="text-xs text-destructive">
+            Voice setup needs attention{c.voice_last_sync_error ? `: ${c.voice_last_sync_error}` : ""}
+          </p>
+        )}
       </section>
 
       {/* Intake Questions */}

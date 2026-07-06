@@ -149,15 +149,20 @@ export default function SectionRenderer({
     }
 
     case "voice": {
-      const voiceId = String(getValue(ctx, "voice_id") ?? "");
+      const voiceId = String(getValue(ctx, "selected_voice_catalog_id") ?? getValue(ctx, "voice_id") ?? "");
       return (
         <div className="space-y-3">
           <Label>Voice{isPending(ctx, "voice_id") && <Suggested />}</Label>
           <VoicePicker
             value={voiceId}
             onChange={(v) => {
-              set("voice_id", v.id);
-              set("voice_label", v.label);
+              set("selected_voice_catalog_id", v.selected_voice_catalog_id);
+              set("voice_provider", v.voice_provider);
+              set("voice_provider_voice_id", v.voice_provider_voice_id);
+              set("voice_id", v.voice_id);
+              set("voice_label", v.voice_label);
+              set("voice_sync_status", "pending");
+              set("voice_last_sync_error", null);
             }}
           />
         </div>

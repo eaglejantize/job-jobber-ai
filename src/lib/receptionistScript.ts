@@ -1,5 +1,6 @@
 // Single source of truth for the Vektuor AI receptionist.
 // Used by both the Setup wizard prompt generator and the homepage display.
+import { resolveIndustryWorkflow } from "@/lib/industryDefinition";
 
 export const RECEPTIONIST_GOALS = [
   "Greet the caller professionally",
@@ -297,8 +298,8 @@ Every word you say is {{businessName}}'s brand. The spa owner may be listening. 
 }
 
 export function buildReceptionistSystemPrompt(businessName?: string, industry?: string): string {
-  const ind = (industry || "").toLowerCase();
-  if (ind.includes("med spa") || ind.includes("medspa") || ind.includes("med-spa")) {
+  const workflow = resolveIndustryWorkflow(industry);
+  if (workflow.aiPrompts.systemPromptTemplate === "med_spa") {
     return buildMedSpaPrompt(businessName);
   }
   return buildHomeServicesPrompt(businessName);

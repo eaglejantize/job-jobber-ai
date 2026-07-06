@@ -1,4 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { logVoiceSync } from '../_shared/voice-sync-log.ts'
+import { resolveVoiceForClient } from '../_shared/voice-resolution.ts'
+import { buildIndustryDefaultGreeting } from '../_shared/industry-definition.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -196,13 +199,12 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: `No Vapi assistant attached to ${client.assigned_callcapture_number || client.business_phone}` }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    const resolvedVoice = await resolveVoiceForClient(admin, client)
+
     const systemPrompt = buildPrompt(client)
     let firstMessage = (client.greeting as string | null) ?? ''
-    if (!firstMessage && client.industry === 'med_spa') {
-      firstMessage = `Thank you for calling ${client.business_name}, your personal concierge is here. How may I assist you today?`
-    }
     if (!firstMessage) {
-      firstMessage = `Thanks for calling ${client.business_name}, how can I help you today?`
+      firstMessage = buildIndustryDefaultGreeting(client.industry as string | null, client.business_name as string | null)
     }
 
     // Attach calendar tools so the assistant can offer real availability and book.
@@ -263,6 +265,10 @@ Deno.serve(async (req) => {
           messages: [{ role: 'system', content: systemPrompt }],
           tools,
         },
+        voice: {
+          provider: resolvedVoice.provider,
+          voiceId: resolvedVoice.providerVoiceId,
+        },
         server: { url: webhookUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
         serverMessages: ['status-update', 'transcript', 'end-of-call-report', 'conversation-update', 'tool-calls'],
         metadata: { client_id: clientId, user_id: userId },
@@ -273,14 +279,56 @@ Deno.serve(async (req) => {
       await admin.from('callcapture_clients').update({
         last_vapi_sync_at: new Date().toISOString(),
         last_vapi_sync_status: `error: ${patchRes.status} ${text.slice(0, 200)}`,
+        voice_provider: resolvedVoice.provider,
+        voice_provider_voice_id: resolvedVoice.providerVoiceId,
+        voice_provider_agent_id: assistantId,
+        voice_sync_status: 'failed',
+        voice_last_sync_at: new Date().toISOString(),
+        voice_last_sync_error: `Vapi update failed: ${patchRes.status}`,
+        voice_phone_number_snapshot: client.assigned_callcapture_number ?? client.business_phone ?? null,
       } as never).eq('id', clientId)
+      await logVoiceSync(admin, {
+        clientId,
+        voiceCatalogId: resolvedVoice.selectedVoiceCatalogId,
+        action: 'update-vapi-agent',
+        status: 'failed',
+        voiceProvider: resolvedVoice.provider,
+        providerVoiceId: resolvedVoice.providerVoiceId,
+        providerAgentId: assistantId,
+        phoneNumberSnapshot: client.assigned_callcapture_number ?? client.business_phone ?? null,
+        errorMessage: `Vapi update failed: ${patchRes.status}`,
+        detail: { mismatch: resolvedVoice.mismatch, mismatchReason: resolvedVoice.mismatchReason },
+      })
       return new Response(JSON.stringify({ ok: false, error: `Vapi update failed: ${patchRes.status} ${text}`, assistant_id: assistantId }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
+
+    const syncStatus = resolvedVoice.mismatch ? 'failed' : 'synced'
+    const syncError = resolvedVoice.mismatch ? resolvedVoice.mismatchReason : null
 
     await admin.from('callcapture_clients').update({
       last_vapi_sync_at: new Date().toISOString(),
       last_vapi_sync_status: 'ok',
+      voice_provider: resolvedVoice.provider,
+      voice_provider_voice_id: resolvedVoice.providerVoiceId,
+      voice_provider_agent_id: assistantId,
+      voice_sync_status: syncStatus,
+      voice_last_sync_at: new Date().toISOString(),
+      voice_last_sync_error: syncError,
+      voice_phone_number_snapshot: client.assigned_callcapture_number ?? client.business_phone ?? null,
     } as never).eq('id', clientId)
+
+    await logVoiceSync(admin, {
+      clientId,
+      voiceCatalogId: resolvedVoice.selectedVoiceCatalogId,
+      action: 'update-vapi-agent',
+      status: syncStatus,
+      voiceProvider: resolvedVoice.provider,
+      providerVoiceId: resolvedVoice.providerVoiceId,
+      providerAgentId: assistantId,
+      phoneNumberSnapshot: client.assigned_callcapture_number ?? client.business_phone ?? null,
+      errorMessage: syncError,
+      detail: { mismatch: resolvedVoice.mismatch, mismatchReason: resolvedVoice.mismatchReason },
+    })
 
     return new Response(JSON.stringify({ ok: true, assistant_id: assistantId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e) {

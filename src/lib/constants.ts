@@ -3,23 +3,14 @@ export const DEMO_NUMBER_TEL = "+19048927004";
 export const DEMO_NUMBER_AVAILABLE = true;
 
 import { INDUSTRIES as INDUSTRY_OPTIONS } from "./industries";
+import { resolveIndustryQuestions } from "./industryDefinition";
 // Settings page uses string labels; derive from the canonical list.
 export const INDUSTRIES = INDUSTRY_OPTIONS.map((i) => i.label);
 
 export const TONES = ["Friendly", "Professional", "Direct", "Warm"] as const;
 export type Tone = typeof TONES[number];
 
-export const DEFAULT_INTAKE_QUESTIONS = [
-  "Caller name",
-  "Phone number",
-  "Address",
-  "Service needed",
-  "Appliance / equipment type",
-  "Model number",
-  "Urgency",
-  "Preferred appointment window",
-  "Warranty or repeat customer",
-];
+export const DEFAULT_INTAKE_QUESTIONS = resolveIndustryQuestions("other");
 
 export const TRANSFER_TRIGGERS = [
   "Emergency",

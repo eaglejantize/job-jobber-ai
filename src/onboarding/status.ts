@@ -93,6 +93,8 @@ type Client = Record<string, unknown> & {
   google_calendar_connected_at?: string | null;
   voice_id?: string | null;
   voice_label?: string | null;
+  voice_sync_status?: string | null;
+  voice_last_sync_error?: string | null;
   greeting?: string | null;
   test_call_passed_at?: string | null;
   first_test_call_id?: string | null;
@@ -120,7 +122,9 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
   const faqsOk = faqs.some((f) => f?.q && f?.a);
   const knowledgeOk = has("knowledge_base") || faqsOk || servicesOk;
   const integrationsOk = !!c?.google_calendar_connected_at;
-  const aiOk = (has("voice_id") || has("voice_label")) && has("greeting");
+  const hasVoice = has("voice_id") || has("voice_label");
+  const voiceNeedsAttention = c?.voice_sync_status === "failed" || nonEmpty(c?.voice_last_sync_error);
+  const aiOk = hasVoice && has("greeting") && !voiceNeedsAttention;
   const testCallOk = !!c?.test_call_passed_at || nonEmpty(c?.first_test_call_id);
   const gbpOk = has("google_place_id") || has("google_category");
   const phoneNumberOk = isPhoneReady(c);
@@ -141,7 +145,7 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
       : "not_started",
     website_import: has("website") ? "complete" : "not_started",
     knowledge_base: knowledgeOk ? "complete" : "not_started",
-    ai_receptionist: aiOk ? "complete" : "not_started",
+    ai_receptionist: aiOk ? "complete" : has("greeting") && hasVoice && voiceNeedsAttention ? "needs_attention" : "not_started",
     integrations: integrationsOk ? "complete" : "not_started",
     test_call: testCallOk ? "complete" : "not_started",
   };

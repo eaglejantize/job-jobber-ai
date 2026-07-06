@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolveVoiceForClient, type ResolvedVoice } from "../_shared/voice-resolution.ts";
+import { logVoiceSync } from "../_shared/voice-sync-log.ts";
+import { buildIndustryDefaultGreeting } from "../_shared/industry-definition.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,24 +9,6 @@ const corsHeaders = {
 };
 const VAPI_URL = "https://api.vapi.ai";
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/twilio";
-const APP_VOICE_IDS = new Set([
-  "maya",
-  "jasmine",
-  "claire",
-  "marcus",
-  "leo",
-  "ava",
-  "noah",
-  "luna",
-  "placeholder-maya",
-  "placeholder-jasmine",
-  "placeholder-claire",
-  "placeholder-marcus",
-  "placeholder-leo",
-  "placeholder-ava",
-  "placeholder-noah",
-]);
-
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function normalizePhone(input: string | null | undefined): string {
@@ -62,14 +47,6 @@ async function parseBody(response: Response) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
-function voicePayload(client: Record<string, unknown>) {
-  const saved = String(client.voice_id ?? "").trim();
-  if (!saved || APP_VOICE_IDS.has(saved) || saved.startsWith("placeholder-")) {
-    return { provider: "vapi", voiceId: "Elliot" };
-  }
-  return { provider: "11labs", voiceId: saved };
-}
-
 function buildSystemPrompt(c: Record<string, unknown>): string {
   const businessName = c.business_name ?? "the business";
   const industry = c.industry ?? "service business";
@@ -92,9 +69,7 @@ function buildSystemPrompt(c: Record<string, unknown>): string {
 }
 function buildGreeting(c: Record<string, unknown>): string {
   if (c.greeting) return c.greeting;
-  const name = c.business_name ?? "our office";
-  if (c.industry === "med_spa") return `Thank you for calling ${name}, your personal concierge is here. How may I assist you today?`;
-  return `Thanks for calling ${name}. How can I help you today?`;
+  return buildIndustryDefaultGreeting(c.industry as string | null, c.business_name as string | null);
 }
 async function vapiFetch(apiKey: string, path: string, init: RequestInit = {}) {
   const r = await retryFetch("vapi", `${VAPI_URL}${path}`, {
@@ -115,12 +90,12 @@ async function findVapiPhoneNumber(apiKey: string, phoneNumber: string) {
   }) ?? null;
 }
 
-async function upsertAssistant(client: Record<string, unknown>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
+async function upsertAssistant(client: Record<string, unknown>, resolvedVoice: ResolvedVoice, apiKey: string, webhookUrl: string, webhookSecret?: string) {
   const payload = {
     name: `Vektuor — ${client.business_name ?? "Tenant"}`.slice(0, 40),
     firstMessage: buildGreeting(client),
     model: { provider: "openai", model: "gpt-4o-mini", messages: [{ role: "system", content: buildSystemPrompt(client) }] },
-    voice: voicePayload(client),
+    voice: { provider: resolvedVoice.provider, voiceId: resolvedVoice.providerVoiceId },
     server: { url: webhookUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
     serverMessages: ["status-update", "transcript", "end-of-call-report", "conversation-update", "tool-calls"],
     metadata: { client_id: client.id, user_id: client.user_id },
@@ -177,7 +152,8 @@ Deno.serve(async (req) => {
       await admin.from("callcapture_webhook_events").insert({ client_id: clientId, step, status, detail }).then(() => undefined, () => undefined);
     };
 
-    const a = await upsertAssistant(client, VAPI_API_KEY, webhookUrl, webhookSecret || undefined);
+    const resolvedVoice = await resolveVoiceForClient(admin, client as Record<string, unknown>);
+    const a = await upsertAssistant(client, resolvedVoice, VAPI_API_KEY, webhookUrl, webhookSecret || undefined);
     if (a.error || !a.id) {
       await logStep("assistant_upsert", "error", { error: a.error ?? "assistant failed", voice_id: client.voice_id ?? null });
       await admin.from("callcapture_clients").update({
@@ -189,7 +165,7 @@ Deno.serve(async (req) => {
       return json({ error: a.error ?? "assistant failed" }, 502);
     }
     const assistantId = a.id;
-    await logStep("assistant_upsert", "ok", { assistant_id: assistantId, voice: voicePayload(client) });
+    await logStep("assistant_upsert", "ok", { assistant_id: assistantId, voice: { provider: resolvedVoice.provider, voiceId: resolvedVoice.providerVoiceId } });
 
     // Update or register Vapi phone number
     let vapiPhoneNumberId = client.vapi_phone_number_id as string | null;
@@ -285,11 +261,31 @@ Deno.serve(async (req) => {
       webhook_urls: { voice_url: voiceUrl, sms_url: smsUrl },
       last_vapi_sync_at: now(),
       last_vapi_sync_status: routing_status === "active" ? "Phone number configured and ready." : routing_error,
+      voice_provider: resolvedVoice.provider,
+      voice_provider_voice_id: resolvedVoice.providerVoiceId,
+      voice_provider_agent_id: assistantId,
+      voice_sync_status: resolvedVoice.mismatch || routing_status !== "active" ? "failed" : "synced",
+      voice_last_sync_at: now(),
+      voice_last_sync_error: resolvedVoice.mismatch ? resolvedVoice.mismatchReason : routing_status === "active" ? null : routing_error,
+      voice_phone_number_snapshot: client.assigned_callcapture_number ?? client.business_phone ?? null,
     }).eq("id", clientId);
     await logStep(routing_status === "active" ? "phone_ready" : "phone_failed", routing_status === "active" ? "ok" : "error", {
       assistant_id: assistantId,
       vapi_phone_number_id: vapiPhoneNumberId,
       routing_error,
+    });
+
+    await logVoiceSync(admin, {
+      clientId,
+      voiceCatalogId: resolvedVoice.selectedVoiceCatalogId,
+      action: "repair-routing",
+      status: resolvedVoice.mismatch || routing_status !== "active" ? "failed" : "synced",
+      voiceProvider: resolvedVoice.provider,
+      providerVoiceId: resolvedVoice.providerVoiceId,
+      providerAgentId: assistantId,
+      phoneNumberSnapshot: client.assigned_callcapture_number ?? client.business_phone ?? null,
+      errorMessage: resolvedVoice.mismatch ? resolvedVoice.mismatchReason : routing_status === "active" ? null : routing_error,
+      detail: { routing_status, vapi_phone_number_id: vapiPhoneNumberId },
     });
 
     return json({ ok: true, assistant_id: assistantId, vapi_phone_number_id: vapiPhoneNumberId, status: routing_status, routing_error });

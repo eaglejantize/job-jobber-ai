@@ -16,6 +16,7 @@ import { UseControlCenterData } from "../useControlCenterData";
 export default function AiReceptionistTab({ ctx }: { ctx: UseControlCenterData }) {
   const { data, update, save, saving, clientId } = ctx;
   const [rewriting, setRewriting] = useState(false);
+  const [verifyingVoice, setVerifyingVoice] = useState(false);
 
   async function rewriteGreeting() {
     setRewriting(true);
@@ -44,6 +45,11 @@ export default function AiReceptionistTab({ ctx }: { ctx: UseControlCenterData }
       after_hours_message: data.after_hours_message,
       voice_id: data.voice_id,
       voice_label: data.voice_label,
+      selected_voice_catalog_id: data.selected_voice_catalog_id,
+      voice_provider: data.voice_provider,
+      voice_provider_voice_id: data.voice_provider_voice_id,
+      voice_sync_status: "pending",
+      voice_last_sync_error: null,
       voice_speed: data.voice_speed,
       tone: data.tone,
       language: data.language,
@@ -57,10 +63,37 @@ export default function AiReceptionistTab({ ctx }: { ctx: UseControlCenterData }
       scheduling_enabled: data.scheduling_enabled,
       scheduling_mode: data.scheduling_mode,
       diagnostic_fee: data.diagnostic_fee,
-    });
+    } as never);
     if (error) toast({ title: "Save failed", description: (error as Error).message, variant: "destructive" });
     else toast({ title: "AI receptionist saved" });
   }
+
+  async function verifyVoiceSync() {
+    if (!clientId) return;
+    setVerifyingVoice(true);
+    try {
+      const { data: verifyData, error } = await supabase.functions.invoke("verify-voice-sync", {
+        body: { client_id: clientId },
+      });
+      if (error) throw error;
+      const result = (verifyData ?? {}) as { status?: "synced" | "failed" | "pending"; error?: string };
+      update({
+        voice_sync_status: result.status ?? "pending",
+        voice_last_sync_error: result.error ?? null,
+      });
+      if (result.status === "synced") {
+        toast({ title: "Voice sync verified", description: "Preview and live provider voice are aligned." });
+      } else {
+        toast({ title: "Voice setup needs attention", description: result.error ?? "Voice sync is not verified.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Voice verification failed", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setVerifyingVoice(false);
+    }
+  }
+
+  const voiceNeedsAttention = data.voice_sync_status !== "synced" || !!data.voice_last_sync_error;
 
   return (
     <div className="space-y-8">
@@ -82,7 +115,32 @@ export default function AiReceptionistTab({ ctx }: { ctx: UseControlCenterData }
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Voice & Style</h2>
-        <VoicePicker value={data.voice_id || ""} onChange={(v) => update({ voice_id: v.id, voice_label: v.label })} />
+        <VoicePicker
+          value={String(data.selected_voice_catalog_id ?? data.voice_id ?? "")}
+          onChange={(v) =>
+            update({
+              selected_voice_catalog_id: v.selected_voice_catalog_id,
+              voice_provider: v.voice_provider,
+              voice_provider_voice_id: v.voice_provider_voice_id,
+              voice_id: v.voice_id,
+              voice_label: v.voice_label,
+              voice_sync_status: "pending",
+              voice_last_sync_error: null,
+            })
+          }
+        />
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
+          <p className="text-xs text-muted-foreground">
+            Sync status: <span className={voiceNeedsAttention ? "text-destructive font-medium" : "text-emerald-600 font-medium"}>{String(data.voice_sync_status ?? "pending")}</span>
+            {data.voice_last_sync_error ? ` · ${String(data.voice_last_sync_error)}` : ""}
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={verifyVoiceSync} disabled={verifyingVoice || !clientId}>
+            {verifyingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify voice sync"}
+          </Button>
+          {voiceNeedsAttention && (
+            <span className="text-xs text-destructive">Voice setup needs attention</span>
+          )}
+        </div>
         <div className="grid md:grid-cols-3 gap-4 pt-2">
           <div className="space-y-2">
             <Label>Language</Label>

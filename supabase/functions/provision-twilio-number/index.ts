@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolveVoiceForClient, type ResolvedVoice } from "../_shared/voice-resolution.ts";
+import { logVoiceSync } from "../_shared/voice-sync-log.ts";
+import { buildIndustryDefaultGreeting } from "../_shared/industry-definition.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,24 +11,6 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/twilio";
 const VAPI_URL = "https://api.vapi.ai";
-const APP_VOICE_IDS = new Set([
-  "maya",
-  "jasmine",
-  "claire",
-  "marcus",
-  "leo",
-  "ava",
-  "noah",
-  "luna",
-  "placeholder-maya",
-  "placeholder-jasmine",
-  "placeholder-claire",
-  "placeholder-marcus",
-  "placeholder-leo",
-  "placeholder-ava",
-  "placeholder-noah",
-]);
-
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function normalizePhone(input: string | null | undefined): string {
@@ -75,14 +60,6 @@ async function parseBody(response: Response) {
   }
 }
 
-function voicePayload(client: Record<string, unknown>) {
-  const saved = String(client.voice_id ?? "").trim();
-  if (!saved || APP_VOICE_IDS.has(saved) || saved.startsWith("placeholder-")) {
-    return { provider: "vapi", voiceId: "Elliot" };
-  }
-  return { provider: "11labs", voiceId: saved };
-}
-
 function buildSystemPrompt(c: Record<string, unknown>): string {
   const businessName = c.business_name ?? "the business";
   const industry = c.industry ?? "service business";
@@ -113,9 +90,7 @@ function buildSystemPrompt(c: Record<string, unknown>): string {
 }
 function buildGreeting(c: Record<string, unknown>): string {
   if (c.greeting) return c.greeting;
-  const name = c.business_name ?? "our office";
-  if (c.industry === "med_spa") return `Thank you for calling ${name}, your personal concierge is here. How may I assist you today?`;
-  return `Thanks for calling ${name}. How can I help you today?`;
+  return buildIndustryDefaultGreeting(c.industry as string | null, c.business_name as string | null);
 }
 async function vapiFetch(apiKey: string, path: string, init: RequestInit = {}) {
   const r = await retryFetch("vapi", `${VAPI_URL}${path}`, {
@@ -136,7 +111,7 @@ async function findVapiPhoneNumber(apiKey: string, phoneNumber: string) {
   }) ?? null;
 }
 
-async function upsertAssistant(client: Record<string, unknown>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
+async function upsertAssistant(client: Record<string, unknown>, resolvedVoice: ResolvedVoice, apiKey: string, webhookUrl: string, webhookSecret?: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const toolsUrl = `${supabaseUrl}/functions/v1/vapi-tools`;
   const tools = [
@@ -189,7 +164,7 @@ async function upsertAssistant(client: Record<string, unknown>, apiKey: string, 
       messages: [{ role: "system", content: buildSystemPrompt(client) }],
       tools,
     },
-    voice: voicePayload(client),
+    voice: { provider: resolvedVoice.provider, voiceId: resolvedVoice.providerVoiceId },
     server: { url: webhookUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) },
     serverMessages: ["status-update", "transcript", "end-of-call-report", "conversation-update", "tool-calls"],
     metadata: { client_id: client.id, user_id: client.user_id },
@@ -264,6 +239,7 @@ Deno.serve(async (req) => {
     const { data: fullClient } = await admin.from("callcapture_clients").select("*").eq("id", clientId).maybeSingle();
     if (!fullClient) return json({ error_code: "not_found", error: "Client not found" }, 404);
     await logStep("tenant_verified", "ok", { business_name: (fullClient as { business_name?: string | null } | null)?.business_name ?? null });
+    const resolvedVoice = await resolveVoiceForClient(admin, fullClient as Record<string, unknown>);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
@@ -337,13 +313,13 @@ Deno.serve(async (req) => {
     // 2) Create/update a PER-TENANT Vapi assistant with webhook configured.
     let assistantId: string | null = null;
     let assistantError: string | null = null;
-    const a = await upsertAssistant(fullClient as Record<string, unknown>, VAPI_API_KEY, webhookUrl, WEBHOOK_SECRET || undefined);
+    const a = await upsertAssistant(fullClient as Record<string, unknown>, resolvedVoice, VAPI_API_KEY, webhookUrl, WEBHOOK_SECRET || undefined);
     assistantId = a.id || null;
     assistantError = a.error;
     if (assistantError) {
       await logStep("assistant_upsert", "error", { error: assistantError, voice_id: (fullClient as { voice_id?: string | null } | null)?.voice_id ?? null });
     } else {
-      await logStep("assistant_upsert", "ok", { assistant_id: assistantId, voice: voicePayload(fullClient as Record<string, unknown>) });
+      await logStep("assistant_upsert", "ok", { assistant_id: assistantId, voice: { provider: resolvedVoice.provider, voiceId: resolvedVoice.providerVoiceId } });
     }
 
     // 3) Register the Twilio number with Vapi (BYO Twilio) so Vapi answers inbound calls.
@@ -471,6 +447,13 @@ Deno.serve(async (req) => {
         webhook_urls: { voice_url: voiceUrl, sms_url: smsUrl },
         last_vapi_sync_at: now(),
         last_vapi_sync_status: routing_status === "active" ? "Phone number configured and ready." : routing_error,
+        voice_provider: resolvedVoice.provider,
+        voice_provider_voice_id: resolvedVoice.providerVoiceId,
+        voice_provider_agent_id: assistantId,
+        voice_sync_status: resolvedVoice.mismatch || routing_status !== "active" ? "failed" : "synced",
+        voice_last_sync_at: now(),
+        voice_last_sync_error: resolvedVoice.mismatch ? resolvedVoice.mismatchReason : routing_status === "active" ? null : routing_error,
+        voice_phone_number_snapshot: phoneNumber,
       })
       .eq("id", clientId);
     if (updErr) {
@@ -486,6 +469,18 @@ Deno.serve(async (req) => {
       vapi_phone_number_id: vapiPhoneNumberId,
       twilio_phone_number_sid: sid,
       routing_error,
+    });
+    await logVoiceSync(admin, {
+      clientId,
+      voiceCatalogId: resolvedVoice.selectedVoiceCatalogId,
+      action: "provision-twilio-number",
+      status: resolvedVoice.mismatch || routing_status !== "active" ? "failed" : "synced",
+      voiceProvider: resolvedVoice.provider,
+      providerVoiceId: resolvedVoice.providerVoiceId,
+      providerAgentId: assistantId,
+      phoneNumberSnapshot: phoneNumber,
+      errorMessage: resolvedVoice.mismatch ? resolvedVoice.mismatchReason : routing_status === "active" ? null : routing_error,
+      detail: { routing_status, vapi_phone_number_id: vapiPhoneNumberId },
     });
 
     return json({

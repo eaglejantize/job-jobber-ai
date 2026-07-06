@@ -1,29 +1,11 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { z } from "npm:zod";
+import {
+  getIndustryLookupLabels,
+  industryValueFromLookupLabel,
+} from "../_shared/industry-definition.ts";
 
-const INDUSTRY_LABELS = [
-  "HVAC","Plumbing","Electrical / Electrician","Appliance Repair","Auto Repair",
-  "General Contractor","Roofing","Landscaping / Lawn Care","Cleaning Services",
-  "Pest Control","Pool & Spa Service","Garage Door Service","Locksmith",
-  "Moving & Hauling","Med Spa / Aesthetics","Dental Office","Salon / Barber",
-  "Fitness / Personal Training","Law Firm","Accounting / Bookkeeping",
-  "Real Estate","Property Management","Auto Dealership","Other",
-];
-
-const LABEL_TO_VALUE: Record<string, string> = {
-  "HVAC":"hvac","Plumbing":"plumbing","Electrical / Electrician":"electrical",
-  "Appliance Repair":"appliance_repair","Auto Repair":"auto_repair",
-  "General Contractor":"general_contractor","Roofing":"roofing",
-  "Landscaping / Lawn Care":"landscaping","Cleaning Services":"cleaning",
-  "Pest Control":"pest_control","Pool & Spa Service":"pool_spa",
-  "Garage Door Service":"garage_door","Locksmith":"locksmith",
-  "Moving & Hauling":"moving","Med Spa / Aesthetics":"med_spa",
-  "Dental Office":"dental","Salon / Barber":"salon",
-  "Fitness / Personal Training":"fitness","Law Firm":"law_firm",
-  "Accounting / Bookkeeping":"accounting","Real Estate":"real_estate",
-  "Property Management":"property_mgmt","Auto Dealership":"auto_dealership",
-  "Other":"other",
-};
+const INDUSTRY_LABELS = getIndustryLookupLabels();
 
 const SearchSchema = z.object({
   mode: z.literal("search").optional(),
@@ -91,7 +73,7 @@ ${opts.industry ? `Known industry: ${opts.industry}` : ""}`;
   const label = INDUSTRY_LABELS.includes(parsed.industry) ? parsed.industry : "Other";
   return {
     industry_label: label,
-    industry_value: LABEL_TO_VALUE[label] ?? "other",
+    industry_value: industryValueFromLookupLabel(label),
     greeting: String(parsed.greeting ?? "").slice(0, 280),
     intakeQuestions: Array.isArray(parsed.intakeQuestions)
       ? parsed.intakeQuestions.filter((s: unknown) => typeof s === "string").slice(0, 7)

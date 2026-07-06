@@ -656,6 +656,99 @@ function SettingsTab() {
   return (
     <div className="max-w-2xl space-y-6">
       <BypassBillingCard />
+      <VoiceCatalogManagerCard />
+    </div>
+  );
+}
+
+type VoiceCatalogRow = {
+  id: string;
+  customer_category: string;
+  label: string;
+  provider: string;
+  provider_voice_id: string;
+  verified_active: boolean;
+  is_active: boolean;
+  sort_order: number;
+  provider_preview_url?: string | null;
+};
+
+function VoiceCatalogManagerCard() {
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<VoiceCatalogRow[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke("admin-voice-catalog-sync", {
+      body: { action: "list" },
+    });
+    if (error) {
+      toast({ title: "Failed to load voice catalog", description: error.message, variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+    setRows(((data as { voices?: VoiceCatalogRow[] })?.voices ?? []).sort((a, b) => a.sort_order - b.sort_order));
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function verifyRow(row: VoiceCatalogRow) {
+    setBusyId(row.id);
+    const { data, error } = await supabase.functions.invoke("admin-voice-catalog-sync", {
+      body: { action: "verify", voice_catalog_id: row.id },
+    });
+    setBusyId(null);
+    if (error) {
+      toast({ title: "Verification failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    const verified = !!(data as { verified_active?: boolean })?.verified_active;
+    toast({ title: verified ? "Voice verified" : "Voice not found at provider" });
+    void load();
+  }
+
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-xl p-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Voice Catalog Manager</h2>
+          <p className="mt-1 text-sm text-slate-400">Curated voice catalog with provider verification status.</p>
+        </div>
+        <button onClick={() => void load()} className="px-3 py-1.5 text-xs rounded-md border border-slate-700 bg-slate-900 hover:bg-slate-700 text-slate-200">
+          Refresh
+        </button>
+      </div>
+      <div className="mt-4 space-y-2">
+        {loading ? (
+          <div className="text-sm text-slate-400"><Loader2 className="inline h-4 w-4 animate-spin mr-2" />Loading voices...</div>
+        ) : rows.length === 0 ? (
+          <div className="text-sm text-slate-400">No curated voices found.</div>
+        ) : rows.map((row) => (
+          <div key={row.id} className="rounded-lg border border-slate-700 bg-slate-900/50 p-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm text-white font-medium">{row.label}</div>
+              <div className="text-xs text-slate-400 truncate">{row.customer_category} · {row.provider}:{row.provider_voice_id}</div>
+              <div className="text-xs mt-1">
+                <span className={row.verified_active ? "text-emerald-400" : "text-amber-400"}>
+                  {row.verified_active ? "verified" : "unverified"}
+                </span>
+                {row.is_active ? " · active" : " · inactive"}
+              </div>
+            </div>
+            <button
+              onClick={() => void verifyRow(row)}
+              disabled={busyId === row.id}
+              className="px-3 py-1.5 text-xs rounded-md border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-60"
+            >
+              {busyId === row.id ? "Verifying..." : "Verify"}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
