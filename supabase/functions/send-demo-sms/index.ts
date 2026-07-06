@@ -23,6 +23,10 @@ const PayloadSchema = z.object({
   timing: z.string().trim().max(300).optional(),
   referral: z.string().trim().max(300).optional(),
   summary: z.string().trim().max(2000).optional(),
+  transcript: z.string().trim().max(20000).optional(),
+  business_id: z.string().uuid().optional(),
+  client_id: z.string().uuid().optional(),
+  dedupe_key: z.string().trim().max(200).optional(),
 });
 
 function pick<T>(...vals: (T | undefined | null)[]): T | undefined {
@@ -36,8 +40,40 @@ function isToolCall(body: any): boolean {
   return !!(body?.toolCallId || body?.tool_call_id);
 }
 
+function normalizePhone(p?: string) {
+  if (!p) return p;
+  return p.replace(/[^\d+]/g, "");
+}
+
+function extractIds(body: any) {
+  const m = body?.message ?? {};
+  const sd =
+    m?.analysis?.structuredData ??
+    m?.artifact?.structuredData ??
+    body?.analysis?.structuredData ??
+    body?.structuredData ??
+    {};
+  return {
+    business_id: pick<string>(
+      sd.business_id,
+      body?.business_id,
+      body?.metadata?.business_id,
+      body?.call?.metadata?.business_id,
+      m?.metadata?.business_id,
+    ),
+    client_id: pick<string>(
+      sd.client_id,
+      body?.client_id,
+      body?.metadata?.client_id,
+      body?.call?.metadata?.client_id,
+      m?.metadata?.client_id,
+    ),
+  };
+}
+
 function extractFromToolCall(body: any) {
   const p = body?.parameters ?? body;
+  const ids = extractIds(body);
   return {
     name: pick<string>(p.name),
     phone: pick<string>(p.phone),
@@ -50,6 +86,15 @@ function extractFromToolCall(body: any) {
     timing: pick<string>(p.timing),
     referral: pick<string>(p.referral),
     summary: pick<string>(p.summary),
+    transcript: pick<string>(body?.transcript),
+    business_id: ids.business_id,
+    client_id: ids.client_id,
+    dedupe_key: pick<string>(
+      body?.toolCallId,
+      body?.tool_call_id,
+      p?.toolCallId,
+      p?.tool_call_id,
+    ),
   };
 }
 
@@ -61,6 +106,16 @@ function extractFromVapi(body: any) {
     body?.analysis?.structuredData ??
     body?.structuredData ??
     {};
+  const ids = extractIds(body);
+
+  const callId = pick<string>(
+    body?.call?.id,
+    m?.call?.id,
+    body?.callId,
+    body?.call_id,
+    body?.vapiCallId,
+    body?.vapi_call_id,
+  );
 
   return {
     name: pick<string>(sd.name, body?.name, m?.customer?.name),
@@ -81,16 +136,21 @@ function extractFromVapi(body: any) {
     ),
     urgency: pick<boolean | string>(sd.urgency, body?.urgency),
     type: pick<string>(sd.type, body?.type),
-    address: pick<string>(
-      sd.address,
-      body?.address,
-      m?.customer?.address,
-    ),
+    address: pick<string>(sd.address, body?.address, m?.customer?.address),
     treatment: pick<string>(sd.treatment, body?.treatment),
-    new_or_returning: pick<string>(sd.newOrReturning, sd.new_or_returning, body?.newOrReturning, body?.new_or_returning),
+    new_or_returning: pick<string>(
+      sd.newOrReturning,
+      sd.new_or_returning,
+      body?.newOrReturning,
+      body?.new_or_returning,
+    ),
     timing: pick<string>(sd.timing, body?.timing),
     referral: pick<string>(sd.referral, body?.referral),
     summary: pick<string>(sd.summary, m?.analysis?.summary, body?.summary),
+    transcript: pick<string>(m?.artifact?.transcript, body?.transcript),
+    business_id: ids.business_id,
+    client_id: ids.client_id,
+    dedupe_key: callId,
   };
 }
 
@@ -135,6 +195,10 @@ serve(async (req) => {
 
     const raw = await req.json().catch(() => ({}));
     const extracted = isToolCall(raw) ? extractFromToolCall(raw) : extractFromVapi(raw);
+
+    // Normalize phone before validation
+    extracted.phone = normalizePhone(extracted.phone);
+
     const parsed = PayloadSchema.safeParse(extracted);
 
     if (!parsed.success) {
@@ -151,7 +215,24 @@ serve(async (req) => {
       );
     }
 
-    const { name, phone, issue, urgency, type, address, treatment, new_or_returning, timing, referral, summary } = parsed.data;
+    const {
+      name,
+      phone,
+      issue,
+      urgency,
+      type,
+      address,
+      treatment,
+      new_or_returning,
+      timing,
+      referral,
+      summary,
+      transcript,
+      business_id,
+      client_id,
+      dedupe_key,
+    } = parsed.data;
+
     const urgent = isUrgent(urgency);
 
     const lines = [
@@ -167,7 +248,8 @@ serve(async (req) => {
     if (urgent) lines.push("⚠️ URGENT");
     if (issue) lines.push(`Issue: ${issue}`);
     if (summary) lines.push(`Summary: ${summary}`);
-    const body = lines.join("\n").slice(0, 1500);
+
+    const smsBody = lines.join("\n").slice(0, 1500);
 
     const twilioRes = await fetch(`${GATEWAY_URL}/Messages.json`, {
       method: "POST",
@@ -176,14 +258,14 @@ serve(async (req) => {
         "X-Connection-Api-Key": TWILIO_API_KEY,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({ To: TO, From: FROM, Body: body }),
+      body: new URLSearchParams({ To: TO, From: FROM, Body: smsBody }),
     });
 
-    const data = await twilioRes.json();
+    const twilioData = await twilioRes.json();
     if (!twilioRes.ok) {
-      console.error("Twilio error", twilioRes.status, data);
+      console.error("Twilio error", twilioRes.status, twilioData);
       return new Response(
-        JSON.stringify({ success: false, status: twilioRes.status, error: data }),
+        JSON.stringify({ success: false, status: twilioRes.status, error: twilioData }),
         {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -191,52 +273,91 @@ serve(async (req) => {
       );
     }
 
-    // Persist lead (best-effort — never fail the webhook if DB insert fails)
+    // Persist lead (best-effort — never fail webhook if DB insert fails)
     let leadId: string | undefined;
     let dbSaved = false;
+    let deduped = false;
+
     try {
       const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
       const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
       if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
           auth: { persistSession: false },
         });
-        console.log("lead insert attempt", {
-          phone,
-          hasIssue: !!issue,
-          hasSummary: !!summary,
-          isToolCall: isToolCall(raw),
-        });
-        const { data: inserted, error: insertError } = await supabase
-          .from("callcapture_leads")
-          .insert({
-            name,
-            phone,
-            issue: issue ?? null,
-            type: type ?? null,
-            urgency: urgency === undefined || urgency === null ? null : String(urgency),
-            address: address ?? null,
-            treatment: treatment ?? null,
-            new_or_returning: new_or_returning ?? null,
-            timing: timing ?? null,
-            referral: referral ?? null,
-            summary: summary ?? null,
-            raw_payload: raw,
-          })
-          .select("id")
-          .single();
-        if (insertError) {
-          const dbError = {
-            message: insertError.message,
-            code: (insertError as any).code,
-            details: (insertError as any).details,
-            hint: (insertError as any).hint,
+
+        // Basic idempotency: if dedupe key exists, try to find a recently inserted matching lead first
+        if (dedupe_key) {
+          const { data: existing } = await supabase
+            .from("callcapture_leads")
+            .select("id, raw_payload")
+            .gte("created_at", new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString())
+            .limit(100);
+
+          const match = (existing ?? []).find((r: any) => {
+            const rp = r?.raw_payload ?? {};
+            return (
+              rp?.toolCallId === dedupe_key ||
+              rp?.tool_call_id === dedupe_key ||
+              rp?.callId === dedupe_key ||
+              rp?.call_id === dedupe_key ||
+              rp?.vapiCallId === dedupe_key ||
+              rp?.vapi_call_id === dedupe_key
+            );
+          });
+
+          if (match?.id) {
+            leadId = match.id;
+            dbSaved = true;
+            deduped = true;
+          }
+        }
+
+        if (!dbSaved) {
+          const intakeAnswers = {
+            new_or_returning,
+            timing,
+            referral,
+            treatment,
+            issue,
           };
-          console.error("lead insert failed", JSON.stringify(dbError));
-        } else {
-          leadId = inserted?.id;
-          dbSaved = true;
-          console.log("lead inserted", { id: leadId, phone });
+
+          const { data: inserted, error: insertError } = await supabase
+            .from("callcapture_leads")
+            .insert({
+              name,
+              phone,
+              issue: issue ?? null,
+              type: type ?? null,
+              urgency: urgency === undefined || urgency === null ? null : String(urgency),
+              address: address ?? null,
+              treatment: treatment ?? null,
+              new_or_returning: new_or_returning ?? null,
+              timing: timing ?? null,
+              referral: referral ?? null,
+              summary: summary ?? null,
+              transcript: transcript ?? null,
+              business_id: business_id ?? null,
+              client_id: client_id ?? null,
+              intake_answers: intakeAnswers,
+              raw_payload: raw,
+              status: "New",
+            })
+            .select("id")
+            .single();
+
+          if (insertError) {
+            console.error("lead insert failed", {
+              message: insertError.message,
+              code: (insertError as any).code,
+              details: (insertError as any).details,
+              hint: (insertError as any).hint,
+            });
+          } else {
+            leadId = inserted?.id;
+            dbSaved = true;
+          }
         }
       } else {
         console.error("lead insert skipped: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing");
@@ -247,7 +368,14 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, sid: data.sid, urgent, leadId, dbSaved }),
+      JSON.stringify({
+        success: true,
+        sid: twilioData.sid,
+        urgent,
+        leadId,
+        dbSaved,
+        deduped,
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
