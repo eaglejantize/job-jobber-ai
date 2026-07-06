@@ -24,9 +24,9 @@ export default function CommandBar({ isRunning, onRunCommand }: CommandBarProps)
       <Input
         value={commandText}
         onChange={(event) => setCommandText(event.target.value)}
-        placeholder="Try: next work order or summarize current job"
+        placeholder="Try: draft on-the-way SMS or add job note: customer has side gate code"
         disabled={isRunning}
-        aria-label="Field Copilot command input"
+        aria-label="Business Assistant command input"
       />
       <Button type="submit" disabled={isRunning || commandText.trim().length === 0}>
         {isRunning ? "Running..." : "Run"}

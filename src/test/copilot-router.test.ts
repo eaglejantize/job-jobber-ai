@@ -47,6 +47,18 @@ function allowAllRows(): AllowedActionRow[] {
       client_id: null,
       is_enabled: true,
     },
+    {
+      action_key: "draft_on_the_way_sms",
+      role: "authenticated",
+      client_id: null,
+      is_enabled: true,
+    },
+    {
+      action_key: "add_job_note",
+      role: "authenticated",
+      client_id: null,
+      is_enabled: true,
+    },
   ];
 }
 
@@ -144,6 +156,124 @@ describe("copilot command router", () => {
       context,
       fetchAllowedActions: async () => allowAllRows(),
       writeExecutionAudit,
+    });
+
+    expect(writeExecutionAudit).toHaveBeenCalledTimes(2);
+    expect(writeExecutionAudit.mock.calls[0][0].status).toBe("blocked");
+    expect(writeExecutionAudit.mock.calls[1][0].status).toBe("success");
+  });
+
+  it("returns a draft on-the-way sms for current job", async () => {
+    const context = resolveCopilotContext({
+      calls: makeCalls(),
+      currentCallId: "call-1",
+    });
+
+    const result = await routeCommand({
+      commandText: "draft on the way sms with 25 min eta",
+      userId: "user-1",
+      clientId: "client-1",
+      context,
+      fetchAllowedActions: async () => allowAllRows(),
+      writeExecutionAudit: async () => ({ id: "audit-sms-1", error: null }),
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.intentKey).toBe("draft_on_the_way_sms");
+    expect(result.details).toContain("25 minutes");
+  });
+
+  it("requires confirmation token before executing add job note", async () => {
+    const context = resolveCopilotContext({
+      calls: makeCalls(),
+      currentCallId: "call-1",
+    });
+
+    const persistJobNote = vi.fn(async () => ({ success: true, error: null }));
+    const first = await routeCommand({
+      commandText: "add job note: customer requested shoe covers",
+      userId: "user-1",
+      clientId: "client-1",
+      context,
+      fetchAllowedActions: async () => allowAllRows(),
+      writeExecutionAudit: async () => ({ id: "audit-mutate-1", error: null }),
+      mutationAdapters: { persistJobNote },
+    });
+
+    expect(first.status).toBe("blocked");
+    expect(first.requiresConfirmation).toBe(true);
+    expect(first.confirmationToken).toBeTruthy();
+    expect(persistJobNote).toHaveBeenCalledTimes(0);
+
+    const second = await routeCommand({
+      commandText: "add job note: customer requested shoe covers",
+      userId: "user-1",
+      clientId: "client-1",
+      context,
+      confirmationToken: first.confirmationToken,
+      fetchAllowedActions: async () => allowAllRows(),
+      writeExecutionAudit: async () => ({ id: "audit-mutate-2", error: null }),
+      mutationAdapters: { persistJobNote },
+    });
+
+    expect(second.status).toBe("success");
+    expect(second.intentKey).toBe("add_job_note");
+    expect(persistJobNote).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks add job note when confirmation token is invalid", async () => {
+    const context = resolveCopilotContext({
+      calls: makeCalls(),
+      currentCallId: "call-1",
+    });
+
+    const persistJobNote = vi.fn(async () => ({ success: true, error: null }));
+    const result = await routeCommand({
+      commandText: "add job note: use side entrance",
+      userId: "user-1",
+      clientId: "client-1",
+      context,
+      confirmationToken: "invalid-token",
+      fetchAllowedActions: async () => allowAllRows(),
+      writeExecutionAudit: async () => ({ id: "audit-mutate-invalid", error: null }),
+      mutationAdapters: { persistJobNote },
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.policyReason).toContain("invalid or expired");
+    expect(persistJobNote).toHaveBeenCalledTimes(0);
+  });
+
+  it("audits both confirmation request and confirmed mutate execution", async () => {
+    const writeExecutionAudit = vi.fn(async (_record: CopilotAuditRecord) => ({
+      id: "audit-mutate-series",
+      error: null,
+    }));
+    const persistJobNote = vi.fn(async () => ({ success: true, error: null }));
+    const context = resolveCopilotContext({
+      calls: makeCalls(),
+      currentCallId: "call-1",
+    });
+
+    const first = await routeCommand({
+      commandText: "add job note: customer has a gate code",
+      userId: "user-1",
+      clientId: "client-1",
+      context,
+      fetchAllowedActions: async () => allowAllRows(),
+      writeExecutionAudit,
+      mutationAdapters: { persistJobNote },
+    });
+
+    await routeCommand({
+      commandText: "add job note: customer has a gate code",
+      userId: "user-1",
+      clientId: "client-1",
+      context,
+      confirmationToken: first.confirmationToken,
+      fetchAllowedActions: async () => allowAllRows(),
+      writeExecutionAudit,
+      mutationAdapters: { persistJobNote },
     });
 
     expect(writeExecutionAudit).toHaveBeenCalledTimes(2);

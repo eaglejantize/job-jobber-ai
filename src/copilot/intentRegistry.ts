@@ -29,6 +29,32 @@ const INTENT_DEFINITIONS: CopilotIntentDefinition[] = [
       /\b(current|this)\s+(job|work\s*order|call)\b/i,
     ],
   },
+  {
+    intentKey: "draft_on_the_way_sms",
+    actionKey: "draft_on_the_way_sms",
+    executionKind: "read",
+    description: "Draft an on-the-way SMS for the current job.",
+    examples: ["draft on the way sms", "prepare arrival text", "draft eta message"],
+    requiredContext: ["currentCall"],
+    matchers: [
+      /\bdraft\b/i,
+      /\bon\s*the\s*way\b/i,
+      /\b(arrival|eta)\s+(sms|text|message)\b/i,
+    ],
+  },
+  {
+    intentKey: "add_job_note",
+    actionKey: "add_job_note",
+    executionKind: "mutate",
+    description: "Add a job note to the current work order.",
+    examples: ["add job note customer has gate code", "note: bring ladder"],
+    requiredContext: ["currentCall"],
+    matchers: [
+      /\badd\s+(a\s+)?job\s+note\b/i,
+      /\badd\s+note\b/i,
+      /\bnote\s*[:-]/i,
+    ],
+  },
 ];
 
 export function getIntentRegistry(): CopilotIntentDefinition[] {

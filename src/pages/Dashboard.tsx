@@ -10,6 +10,16 @@ import ActiveCallPanel from "@/components/dashboard/ActiveCallPanel";
 import IntakePanel from "@/components/dashboard/IntakePanel";
 import CommandBar from "@/components/CommandBar";
 import CommandResultPanel from "@/components/CommandResultPanel";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { resolveCopilotContext } from "@/copilot/contextResolver";
 import { routeCommand } from "@/copilot/commandRouter";
 import type { AllowedActionRow, RouteCommandResult } from "@/copilot/types";
@@ -24,6 +34,8 @@ export default function Dashboard() {
   const [clientFetched, setClientFetched] = useState(false);
   const [isCommandRunning, setIsCommandRunning] = useState(false);
   const [commandResult, setCommandResult] = useState<RouteCommandResult | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ commandText: string; token: string } | null>(null);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const seenLeadsRef = useRef<Set<string>>(new Set());
   const fieldCopilotEnabled = String(import.meta.env.VITE_ENABLE_FIELD_COPILOT ?? "").toLowerCase() === "true";
 
@@ -96,7 +108,7 @@ export default function Dashboard() {
 
   const systemLive = clientFetched && clientId !== null;
 
-  async function runCommand(commandText: string) {
+  async function runCommand(commandText: string, confirmationToken?: string) {
     if (!user) return;
 
     setIsCommandRunning(true);
@@ -106,11 +118,54 @@ export default function Dashboard() {
         currentCallId: selectedId,
       });
 
+      const persistJobNote = async (input: { callId: string; noteText: string; userId: string }) => {
+        const { data: callRow, error: selectError } = await supabase
+          .from("callcapture_calls")
+          .select("metadata")
+          .eq("id", input.callId)
+          .maybeSingle();
+
+        if (selectError) {
+          return { success: false, error: selectError.message };
+        }
+
+        const metadata = (callRow as { metadata?: Record<string, unknown> | null } | null)?.metadata ?? {};
+        const existingNotes = Array.isArray(metadata.assistant_job_notes) ? metadata.assistant_job_notes : [];
+        const updatedMetadata = {
+          ...metadata,
+          assistant_job_notes: [
+            ...existingNotes,
+            {
+              text: input.noteText,
+              author_user_id: input.userId,
+              created_at: new Date().toISOString(),
+            },
+          ],
+        };
+
+        let query = supabase
+          .from("callcapture_calls")
+          .update({ metadata: updatedMetadata })
+          .eq("id", input.callId);
+
+        if (clientId) {
+          query = query.eq("client_id", clientId);
+        }
+
+        const { error: updateError } = await query;
+        if (updateError) {
+          return { success: false, error: updateError.message };
+        }
+
+        return { success: true, error: null };
+      };
+
       const result = await routeCommand({
         commandText,
         userId: user.id,
         clientId,
         context,
+        confirmationToken: confirmationToken ?? null,
         fetchAllowedActions: async (actionKey, tenantClientId) => {
           let query = supabase
             .from("allowed_actions")
@@ -150,7 +205,18 @@ export default function Dashboard() {
             error: error?.message ?? null,
           };
         },
+        mutationAdapters: {
+          persistJobNote,
+        },
       });
+
+      if (result.requiresConfirmation && result.confirmationToken) {
+        setPendingConfirmation({
+          commandText,
+          token: result.confirmationToken,
+        });
+        setConfirmationOpen(true);
+      }
 
       if (result.status === "success" && result.navigationTargetCallId) {
         setParams((existing) => {
@@ -166,9 +232,31 @@ export default function Dashboard() {
     }
   }
 
+  async function confirmPendingCommand() {
+    if (!pendingConfirmation) return;
+    setConfirmationOpen(false);
+    await runCommand(pendingConfirmation.commandText, pendingConfirmation.token);
+    setPendingConfirmation(null);
+  }
+
   return (
     <Layout>
     <div className="vektuor-ops">
+      <AlertDialog open={confirmationOpen} onOpenChange={setConfirmationOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm action</AlertDialogTitle>
+            <AlertDialogDescription>
+              This command changes job data. Confirm to continue and record the action in the audit log.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingConfirmation(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmPendingCommand()}>Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <DashboardHeader today={stats.today} leads={stats.leads} active={stats.active} systemLive={systemLive} />
 
       <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-4 md:py-6">

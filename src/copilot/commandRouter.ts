@@ -5,15 +5,75 @@ import { evaluateActionPolicy } from "@/copilot/policyEngine";
 import type {
   CopilotExecutionStatus,
   CopilotIntentKey,
+  CopilotActionKey,
   RouteCommandInput,
   RouteCommandResult,
 } from "@/copilot/types";
+
+const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
+
+type PendingConfirmation = {
+  commandText: string;
+  userId: string;
+  clientId: string | null;
+  intentKey: CopilotIntentKey;
+  actionKey: CopilotActionKey;
+  expiresAt: number;
+};
+
+const pendingConfirmations = new Map<string, PendingConfirmation>();
+
+function makeConfirmationToken(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function createConfirmationToken(input: {
+  commandText: string;
+  userId: string;
+  clientId: string | null;
+  intentKey: CopilotIntentKey;
+  actionKey: CopilotActionKey;
+}): string {
+  const token = makeConfirmationToken();
+  pendingConfirmations.set(token, {
+    commandText: input.commandText,
+    userId: input.userId,
+    clientId: input.clientId,
+    intentKey: input.intentKey,
+    actionKey: input.actionKey,
+    expiresAt: Date.now() + CONFIRMATION_TTL_MS,
+  });
+  return token;
+}
+
+function consumeConfirmationToken(input: {
+  token: string;
+  commandText: string;
+  userId: string;
+  clientId: string | null;
+  intentKey: CopilotIntentKey;
+  actionKey: CopilotActionKey;
+}): boolean {
+  const pending = pendingConfirmations.get(input.token);
+  if (!pending) return false;
+  pendingConfirmations.delete(input.token);
+
+  if (pending.expiresAt < Date.now()) return false;
+  if (pending.commandText !== input.commandText) return false;
+  if (pending.userId !== input.userId) return false;
+  if (pending.clientId !== input.clientId) return false;
+  if (pending.intentKey !== input.intentKey) return false;
+  if (pending.actionKey !== input.actionKey) return false;
+
+  return true;
+}
 
 function toContextSnapshot(input: RouteCommandInput): Record<string, unknown> {
   return {
     callCount: input.context.calls.length,
     currentCallId: input.context.currentCallId,
     currentCallStatus: input.context.currentCall?.status ?? null,
+    confirmationTokenProvided: Boolean(input.confirmationToken),
   };
 }
 
@@ -99,27 +159,69 @@ export async function routeCommand(
     };
   }
 
-  // PR1 explicitly blocks mutating actions until strict audit guarantees are in place.
+  // PR2 mutate policy: execution requires a valid confirmation token.
   if (intent.executionKind === "mutate") {
-    const reason = "Mutating actions are disabled in PR1 until strict audit enforcement ships.";
-    const audit = await writeAuditIfAvailable(input, {
-      status: "blocked",
+    if (!input.confirmationToken) {
+      const token = createConfirmationToken({
+        commandText,
+        userId: input.userId,
+        clientId: input.clientId,
+        intentKey: intent.intentKey,
+        actionKey: intent.actionKey,
+      });
+      const reason = "Confirmation token required for mutating action.";
+      const audit = await writeAuditIfAvailable(input, {
+        status: "blocked",
+        intentKey: intent.intentKey,
+        actionKey: intent.actionKey,
+        policyReason: reason,
+        resultSummary: null,
+        errorMessage: null,
+      });
+
+      return {
+        status: "blocked",
+        message: "Command requires confirmation before execution.",
+        intentKey: intent.intentKey,
+        actionKey: intent.actionKey,
+        policyReason: reason,
+        requiresConfirmation: true,
+        confirmationToken: token,
+        auditLogId: audit.auditLogId,
+        auditLogError: audit.auditLogError,
+      };
+    }
+
+    const tokenValid = consumeConfirmationToken({
+      token: input.confirmationToken,
+      commandText,
+      userId: input.userId,
+      clientId: input.clientId,
       intentKey: intent.intentKey,
       actionKey: intent.actionKey,
-      policyReason: reason,
-      resultSummary: null,
-      errorMessage: null,
     });
 
-    return {
-      status: "blocked",
-      message: "Command blocked by PR1 safety policy.",
-      intentKey: intent.intentKey,
-      actionKey: intent.actionKey,
-      policyReason: reason,
-      auditLogId: audit.auditLogId,
-      auditLogError: audit.auditLogError,
-    };
+    if (!tokenValid) {
+      const reason = "Confirmation token is invalid or expired.";
+      const audit = await writeAuditIfAvailable(input, {
+        status: "blocked",
+        intentKey: intent.intentKey,
+        actionKey: intent.actionKey,
+        policyReason: reason,
+        resultSummary: null,
+        errorMessage: null,
+      });
+
+      return {
+        status: "blocked",
+        message: "Confirmation failed. Please run the command again.",
+        intentKey: intent.intentKey,
+        actionKey: intent.actionKey,
+        policyReason: reason,
+        auditLogId: audit.auditLogId,
+        auditLogError: audit.auditLogError,
+      };
+    }
   }
 
   const policy = await evaluateActionPolicy({
@@ -174,7 +276,12 @@ export async function routeCommand(
 
   try {
     const actionHandler = getActionHandler(intent.actionKey);
-    const actionResult = await actionHandler({ context: input.context });
+    const actionResult = await actionHandler({
+      context: input.context,
+      commandText,
+      userId: input.userId,
+      mutationAdapters: input.mutationAdapters,
+    });
 
     const audit = await writeAuditIfAvailable(input, {
       status: "success",
@@ -194,6 +301,7 @@ export async function routeCommand(
       intentKey: intent.intentKey,
       actionKey: intent.actionKey,
       policyReason: policy.reason,
+      details: actionResult.details,
       navigationTargetCallId: actionResult.navigationTargetCallId,
       auditLogId: audit.auditLogId,
       auditLogError: audit.auditLogError,

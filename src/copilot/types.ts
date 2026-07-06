@@ -2,7 +2,9 @@ import type { CallRow } from "@/hooks/useDashboardData";
 
 export type CopilotIntentKey =
   | "navigate_to_next_work_order"
-  | "summarize_current_job";
+  | "summarize_current_job"
+  | "draft_on_the_way_sms"
+  | "add_job_note";
 
 export type CopilotActionKey = CopilotIntentKey;
 
@@ -47,6 +49,15 @@ export type FetchAllowedActions = (
 
 export type CopilotActionExecutionInput = {
   context: CopilotContext;
+  commandText: string;
+  userId: string;
+  mutationAdapters?: {
+    persistJobNote?: (input: {
+      callId: string;
+      noteText: string;
+      userId: string;
+    }) => Promise<{ success: boolean; error?: string | null }>;
+  };
 };
 
 export type CopilotActionExecutionResult = {
@@ -77,8 +88,10 @@ export type RouteCommandInput = {
   userId: string;
   clientId: string | null;
   context: CopilotContext;
+  confirmationToken?: string | null;
   fetchAllowedActions?: FetchAllowedActions;
   writeExecutionAudit?: WriteExecutionAudit;
+  mutationAdapters?: CopilotActionExecutionInput["mutationAdapters"];
 };
 
 export type RouteCommandResult = {
@@ -87,7 +100,10 @@ export type RouteCommandResult = {
   intentKey: CopilotIntentKey | null;
   actionKey: CopilotActionKey | null;
   policyReason: string | null;
+  details?: string;
   navigationTargetCallId?: string;
+  requiresConfirmation?: boolean;
+  confirmationToken?: string;
   auditLogId: string | null;
   auditLogError: string | null;
 };

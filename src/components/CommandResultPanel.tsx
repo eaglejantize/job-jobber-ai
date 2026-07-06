@@ -55,6 +55,12 @@ export default function CommandResultPanel({ isRunning, result }: CommandResultP
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <p>{result.message}</p>
+        {result.details ? (
+          <p className="rounded-md border bg-muted/40 p-2 text-muted-foreground">{result.details}</p>
+        ) : null}
+        {result.requiresConfirmation ? (
+          <p className="text-amber-700">Confirmation required before this command can execute.</p>
+        ) : null}
         {result.policyReason ? (
           <p className="text-muted-foreground">Policy: {result.policyReason}</p>
         ) : null}
