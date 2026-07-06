@@ -13,6 +13,7 @@ import {
   Trash2,
   Activity,
   Wrench,
+  Cog,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -37,6 +38,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import LeadCard, { type Lead } from "@/components/LeadCard";
 import { Switch } from "@/components/ui/switch";
+import IndustryConfigManager from "@/components/settings/IndustryConfigManager";
 
 type Client = {
   id: string;
@@ -72,13 +74,14 @@ type WebhookEventRow = {
   created_at: string;
 };
 
-type Tab = "overview" | "subscribers" | "diagnostics" | "create" | "settings";
+type Tab = "overview" | "subscribers" | "diagnostics" | "create" | "settings" | "industry-config";
 
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "subscribers", label: "Subscribers", icon: Users },
   { id: "diagnostics", label: "Diagnostics", icon: Activity },
   { id: "create", label: "Create Test Account", icon: UserPlus },
+  { id: "industry-config", label: "Industry Config", icon: Cog },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -195,6 +198,8 @@ export default function Admin() {
             <DiagnosticsTab />
           ) : tab === "create" ? (
             <CreateTestAccountTab onCreated={refresh} />
+          ) : tab === "industry-config" ? (
+            <IndustryConfigManager />
           ) : (
             <SettingsTab />
           )}

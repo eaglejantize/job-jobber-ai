@@ -146,3 +146,69 @@ export function buildIndustryDefaultGreeting(industry: string | null | undefined
   }
   return `Thanks for calling ${name}. How can I help you today?`;
 }
+
+// ============================================================================
+// VALIDATORS (Zod)
+// ============================================================================
+
+import { z } from "npm:zod@^3.25.76";
+
+const VALID_PROMPT_TEMPLATES = z.enum(["service_receptionist", "med_spa_concierge"]);
+
+export const IndustryWorkflowSchema = z.object({
+  key: z.string().min(1, "Workflow key required"),
+  name: z.string().min(1, "Workflow name required").max(200, "Name too long"),
+  default_services: z.array(z.string()).min(1, "At least one service required"),
+  intake_questions: z.array(z.string()).min(1, "At least one intake question required"),
+  ai_prompts: z.object({
+    system_prompt_template: VALID_PROMPT_TEMPLATES,
+  }),
+  terminology: z.array(z.string()),
+  workflows: z.array(z.string()),
+  templates: z.array(z.string()),
+  knowledge_base: z.array(z.string()),
+  automations: z.array(z.string()),
+});
+
+export const IndustryDefinitionCreateSchema = z.object({
+  key: z.string().min(1, "Key required").max(100, "Key too long").regex(/^[a-z0-9_]+$/, "Key must be lowercase alphanumeric with underscores"),
+  label: z.string().min(1, "Label required").max(200, "Label too long"),
+  aliases: z.array(z.string()).min(0),
+  industry_values: z.array(z.string()).min(0),
+  description: z.string().max(500, "Description too long").optional(),
+  is_active: z.boolean().default(true),
+  is_default: z.boolean().default(false),
+  sort_order: z.number().int().default(0),
+  metadata: z.record(z.unknown()).default({}),
+});
+
+export const IndustryDefinitionUpdateSchema = IndustryDefinitionCreateSchema.partial().required({
+  key: true,
+});
+
+export const IndustryWorkflowCreateSchema = z.object({
+  industry_definition_id: z.string().uuid("Invalid industry definition ID"),
+  workflow_key: z.string().min(1, "Workflow key required"),
+  workflow_name: z.string().min(1, "Workflow name required").max(200),
+  is_default: z.boolean().default(false),
+  is_active: z.boolean().default(true),
+  default_services: z.array(z.string()).min(1, "At least one service required"),
+  intake_questions: z.array(z.string()).min(1, "At least one intake question required"),
+  ai_prompts: z.object({
+    system_prompt_template: VALID_PROMPT_TEMPLATES,
+  }),
+  terminology: z.array(z.string()).default([]),
+  workflows: z.array(z.string()).default([]),
+  templates: z.array(z.string()).default([]),
+  knowledge_base: z.array(z.string()).default([]),
+  automations: z.array(z.string()).default([]),
+  metadata: z.record(z.unknown()).default({}),
+});
+
+export const IndustryWorkflowUpdateSchema = IndustryWorkflowCreateSchema.partial().required({
+  industry_definition_id: true,
+  workflow_key: true,
+});
+
+export type ValidatedIndustryDefinition = z.infer<typeof IndustryDefinitionCreateSchema>;
+export type ValidatedIndustryWorkflow = z.infer<typeof IndustryWorkflowCreateSchema>;
