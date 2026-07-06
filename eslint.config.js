@@ -23,4 +23,10 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: ["supabase/functions/mcp/index.ts"],
+    rules: {
+      "no-var": "off",
+    },
+  },
 );
