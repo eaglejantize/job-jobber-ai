@@ -15,12 +15,13 @@ import { TestCallButton } from "@/components/TestCallButton";
 import ActionBar from "./ActionBar";
 import type { UseConcierge } from "./useConcierge";
 import PhoneNumberSection from "./PhoneNumberSection";
+import type { ConciergeClientRow } from "./useConcierge";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function getValue(ctx: UseConcierge, key: string) {
-  if (key in ctx.pending) return (ctx.pending as any)[key];
-  return (ctx.current as any)?.[key];
+  if (key in ctx.pending) return ctx.pending[key];
+  return ctx.current?.[key];
 }
 
 function Suggested() {
@@ -286,7 +287,7 @@ export default function SectionRenderer({
 
     case "calendar": {
       const calId = String(getValue(ctx, "google_calendar_id") ?? "");
-      const connectedAt = (ctx.current as any)?.google_calendar_connected_at;
+      const connectedAt = ctx.current?.google_calendar_connected_at;
       return (
         <div className="space-y-3">
           {connectedAt ? (
@@ -735,9 +736,9 @@ export default function SectionRenderer({
 
 function GoogleBusinessSection({ ctx }: { ctx: UseConcierge }) {
   const [loading, setLoading] = useState(false);
-  const name = String((ctx.current as any)?.business_name ?? "");
-  const address = String((ctx.current as any)?.address ?? "");
-  const website = String((ctx.current as any)?.website ?? "");
+  const name = String(ctx.current?.business_name ?? "");
+  const address = String(ctx.current?.address ?? "");
+  const website = String(ctx.current?.website ?? "");
 
   async function importFromGoogle() {
     setLoading(true);
@@ -746,7 +747,7 @@ function GoogleBusinessSection({ ctx }: { ctx: UseConcierge }) {
         body: { name, address, website },
       });
       if (error) throw error;
-      const b = (data as any)?.business;
+      const b = (data as { business?: ConciergeClientRow } | null)?.business;
       if (b) {
         if (b.business_name) ctx.setField("business_name", b.business_name);
         if (b.address) ctx.setField("address", b.address);
@@ -782,7 +783,7 @@ function GoogleBusinessSection({ ctx }: { ctx: UseConcierge }) {
 
 function WebsiteImportSection({ ctx }: { ctx: UseConcierge }) {
   const [loading, setLoading] = useState(false);
-  const website = String(ctx.pending.website ?? (ctx.current as any)?.website ?? "");
+  const website = String(ctx.pending.website ?? ctx.current?.website ?? "");
 
   async function importFromWebsite() {
     if (!website) return;
@@ -792,7 +793,7 @@ function WebsiteImportSection({ ctx }: { ctx: UseConcierge }) {
         body: { website },
       });
       if (error) throw error;
-      const out = (data as any) ?? {};
+      const out = (data as Record<string, unknown>) ?? {};
       const map: Record<string, string> = {
         business_name: "business_name",
         industry: "industry",
@@ -833,7 +834,7 @@ function WebsiteImportSection({ ctx }: { ctx: UseConcierge }) {
 }
 
 function TestCallSection({ ctx }: { ctx: UseConcierge }) {
-  const passedAt = (ctx.current as any)?.test_call_passed_at;
+  const passedAt = ctx.current?.test_call_passed_at;
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
@@ -853,10 +854,10 @@ function TestCallSection({ ctx }: { ctx: UseConcierge }) {
 
 function IntegrationsSection({ ctx }: { ctx: UseConcierge }) {
   const [calendarId, setCalendarId] = useState<string>(
-    String((ctx.current as any)?.google_calendar_id ?? "primary"),
+    String(ctx.current?.google_calendar_id ?? "primary"),
   );
   const [busy, setBusy] = useState(false);
-  const connectedAt = (ctx.current as any)?.google_calendar_connected_at;
+  const connectedAt = ctx.current?.google_calendar_connected_at;
 
   async function connect() {
     if (!ctx.clientId) return;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import {
   deriveOnboardingState,
   ItemId,
@@ -10,6 +11,8 @@ import {
   isReadyToActivate,
 } from "./status";
 
+type ClientRow = Tables<"callcapture_clients">;
+
 function statesEqual(a: OnboardingState | null | undefined, b: OnboardingState) {
   if (!a) return false;
   return JSON.stringify(a) === JSON.stringify(b);
@@ -18,7 +21,7 @@ function statesEqual(a: OnboardingState | null | undefined, b: OnboardingState) 
 export function useOnboardingState() {
   const [loading, setLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
-  const [client, setClient] = useState<Record<string, any> | null>(null);
+  const [client, setClient] = useState<ClientRow | null>(null);
   const [state, setState] = useState<OnboardingState>({ items: {}, activated_at: null });
 
   const load = useCallback(async () => {
@@ -37,16 +40,16 @@ export function useOnboardingState() {
       .limit(1)
       .maybeSingle();
     if (row) {
-      setClientId((row as any).id);
+      setClientId(row.id);
       setClient(row);
-      const saved = ((row as any).onboarding_state ?? null) as OnboardingState | null;
+      const saved = (row.onboarding_state ?? null) as OnboardingState | null;
       const normalized = deriveOnboardingState(row, saved);
       setState(normalized);
       if (!statesEqual(saved, normalized)) {
         await supabase
           .from("callcapture_clients")
           .update({ onboarding_state: normalized } as never)
-          .eq("id", (row as any).id);
+          .eq("id", row.id);
       }
     }
     setLoading(false);
@@ -87,7 +90,7 @@ export function useOnboardingState() {
       .eq("id", clientId)
       .maybeSingle();
     const latestState = deriveOnboardingState(latest ?? client, state);
-    setClient((latest as Record<string, any> | null) ?? client);
+    setClient((latest as ClientRow | null) ?? client);
     setState(latestState);
     const readiness = isReadyToActivate(latestState);
     if (!readiness.ready) return false;

@@ -67,7 +67,7 @@ export interface BookEventInput {
 }
 
 export async function createEvent(auth: CalendarAuth, input: BookEventInput) {
-  const body: any = {
+  const body: Record<string, unknown> = {
     summary: input.summary,
     description: input.description,
     start: { dateTime: input.startIso, timeZone: input.timeZone },

@@ -42,7 +42,7 @@ export default function IntegrationsTab({ ctx }: { ctx: UseControlCenterData }) 
     const { error } = await save({
       google_calendar_id: calendarId.trim() || "primary",
       google_calendar_connected_at: new Date().toISOString(),
-    } as any);
+    });
     setConnectingCal(false);
     if (error) {
       toast({ title: "Calendar connect failed", description: (error as Error).message, variant: "destructive" });
@@ -56,7 +56,7 @@ export default function IntegrationsTab({ ctx }: { ctx: UseControlCenterData }) 
     const { error } = await save({
       google_calendar_connected_at: null,
       google_calendar_refresh_token: null,
-    } as any);
+    });
     if (error) toast({ title: "Disconnect failed", description: (error as Error).message, variant: "destructive" });
     else toast({ title: "Google Calendar disconnected" });
   }

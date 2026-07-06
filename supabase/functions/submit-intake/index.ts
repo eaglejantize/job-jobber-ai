@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
     const raw = await req.json().catch(() => ({}));
     // Vapi tool calls wrap arguments in message.toolCalls[].function.arguments.
     // Accept either flat body or the Vapi tool-call envelope.
-    let body: any = raw;
+    let body: Record<string, unknown> = raw as Record<string, unknown>;
     const toolCall =
       raw?.message?.toolCalls?.[0] ??
       raw?.message?.toolCallList?.[0] ??
@@ -58,13 +58,13 @@ Deno.serve(async (req) => {
       .select("id, business_phone, alert_phone, is_super_admin");
     if (clientsErr) console.log("[submit-intake] clients lookup error:", clientsErr.message);
 
-    let client: any = null;
+    let client: { id?: string; business_phone?: string | null; alert_phone?: string | null; is_super_admin?: boolean | null } | null = null;
     if (digits) {
-      client = (clients ?? []).find((c: any) => norm(c.business_phone) === digits) ?? null;
+      client = (clients ?? []).find((c) => norm((c as { business_phone?: string | null }).business_phone) === digits) ?? null;
       if (client) console.log("[submit-intake] matched by business_phone ->", client.id);
     }
     if (!client) {
-      client = (clients ?? []).find((c: any) => c.is_super_admin === true) ?? null;
+      client = (clients ?? []).find((c) => (c as { is_super_admin?: boolean | null }).is_super_admin === true) ?? null;
       if (client) console.log("[submit-intake] matched by super_admin fallback ->", client.id);
     }
     const clientId = client?.id ?? null;

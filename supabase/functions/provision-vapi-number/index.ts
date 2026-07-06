@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify(vapiBody),
     });
-    const data = await r.json().catch(() => ({} as any));
+    const data = await r.json().catch(() => ({} as Record<string, unknown>));
     if (!r.ok) {
       console.error("Vapi number error", r.status, data);
       const msg = String(data?.message ?? data?.error ?? "").toLowerCase();
@@ -75,8 +75,8 @@ Deno.serve(async (req) => {
       return json({ error: data?.message ?? "Vapi provisioning failed" }, 502);
     }
 
-    const phoneNumber: string | undefined = data.number;
-    const vapiId: string | undefined = data.id;
+    const phoneNumber: string | undefined = typeof data.number === "string" ? data.number : undefined;
+    const vapiId: string | undefined = typeof data.id === "string" ? data.id : undefined;
     if (!phoneNumber || !vapiId) {
       console.error("Vapi response missing fields", data);
       return json({ error: "Vapi did not return a number" }, 502);

@@ -32,11 +32,11 @@ Deno.serve(async (req) => {
     // If a booking was made during the call, fetch the appointment so we can
     // include the scheduled time in the owner SMS.
     let bookingLine: string | null = null;
-    if ((lead as any).appointment_id) {
+    if ((lead as { appointment_id?: string | null } | null)?.appointment_id) {
       const { data: appt } = await supabase
         .from("callcapture_appointments")
         .select("start_at, service")
-        .eq("id", (lead as any).appointment_id)
+        .eq("id", (lead as { appointment_id?: string | null } | null)?.appointment_id)
         .maybeSingle();
       if (appt?.start_at) {
         const when = new Date(appt.start_at).toLocaleString("en-US", {

@@ -49,7 +49,7 @@ export default function ConciergePage() {
   const section = sections[safeStep];
   const isReview = section.id === "review";
   const pct = ((safeStep + 1) / sections.length) * 100;
-  const phoneMissing = !(ctx.current as any)?.assigned_callcapture_number;
+  const phoneMissing = !ctx.current?.assigned_callcapture_number;
   const isPhoneStep = section.id === "phone_number";
   const mustCompletePhone = isPhoneStep && phoneMissing;
 

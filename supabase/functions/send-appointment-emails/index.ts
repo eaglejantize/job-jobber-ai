@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       results.customer = "no_email";
     }
     // Owner
-    const ownerEmail = client?.owner_email || (client as any)?.email;
+    const ownerEmail = client?.owner_email || (client as { email?: string | null } | null)?.email;
     if (ownerEmail) {
       const r = await tryInvokeEmail({
         templateName: "appointment-notification-owner",

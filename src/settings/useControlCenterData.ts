@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 
-export type ClientData = Record<string, any> & { id?: string };
+export type ClientData = Tables<"callcapture_clients"> & Record<string, unknown>;
 
 export function useControlCenterData() {
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ export function useControlCenterData() {
       .limit(1)
       .maybeSingle();
     if (row) {
-      setClientId((row as ClientData).id ?? null);
+      setClientId(row.id ?? null);
       setData(row as ClientData);
     }
     setLoading(false);

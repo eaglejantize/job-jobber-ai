@@ -93,13 +93,12 @@ export function TestCallButton({
         .select("id, step, status, detail, created_at")
         .eq("vapi_call_id", result.callId)
         .order("created_at", { ascending: true });
-
       if (!cancelled && data) {
         setEvents(data as DiagEvent[]);
 
         // If the webhook stamped the activation event, refresh client-scoped queries
         // so the onboarding checklist flips to "complete" without a page reload.
-        const hasPassed = data.some(
+        const hasPassed = (data as DiagEvent[]).some(
           (e) => e.step === "test_call_passed" && e.status === "ok",
         );
         if (hasPassed) {

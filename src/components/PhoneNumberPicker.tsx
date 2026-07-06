@@ -152,7 +152,7 @@ export default function PhoneNumberPicker({
     }
   }
 
-  function reportError(d: ErrorPayload, fallback: string) {
+  function reportError(d: ErrorPayload | null | undefined, fallback: string) {
     const map: Record<string, string> = {
       missing_secret: "Vektuor's phone provider isn't configured. Please contact support.",
       twilio_auth_failed: "Twilio authentication failed. Please contact support.",

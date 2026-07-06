@@ -36,7 +36,7 @@ function pick<T>(...vals: (T | undefined | null)[]): T | undefined {
   return undefined;
 }
 
-function isToolCall(body: any): boolean {
+function isToolCall(body: Record<string, unknown>): boolean {
   return !!(body?.toolCallId || body?.tool_call_id);
 }
 
@@ -45,8 +45,8 @@ function normalizePhone(p?: string) {
   return p.replace(/[^\d+]/g, "");
 }
 
-function extractIds(body: any) {
-  const m = body?.message ?? {};
+function extractIds(body: Record<string, unknown>) {
+  const m = (body.message as Record<string, unknown> | undefined) ?? {};
   const sd =
     m?.analysis?.structuredData ??
     m?.artifact?.structuredData ??
@@ -71,8 +71,8 @@ function extractIds(body: any) {
   };
 }
 
-function extractFromToolCall(body: any) {
-  const p = body?.parameters ?? body;
+function extractFromToolCall(body: Record<string, unknown>) {
+  const p = (body.parameters as Record<string, unknown> | undefined) ?? body;
   const ids = extractIds(body);
   return {
     name: pick<string>(p.name),
@@ -98,8 +98,8 @@ function extractFromToolCall(body: any) {
   };
 }
 
-function extractFromVapi(body: any) {
-  const m = body?.message ?? {};
+function extractFromVapi(body: Record<string, unknown>) {
+  const m = (body.message as Record<string, unknown> | undefined) ?? {};
   const sd =
     m?.analysis?.structuredData ??
     m?.artifact?.structuredData ??
@@ -295,7 +295,7 @@ serve(async (req) => {
             .gte("created_at", new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString())
             .limit(100);
 
-          const match = (existing ?? []).find((r: any) => {
+          const match = (existing ?? []).find((r) => {
             const rp = r?.raw_payload ?? {};
             return (
               rp?.toolCallId === dedupe_key ||
@@ -350,9 +350,9 @@ serve(async (req) => {
           if (insertError) {
             console.error("lead insert failed", {
               message: insertError.message,
-              code: (insertError as any).code,
-              details: (insertError as any).details,
-              hint: (insertError as any).hint,
+              code: (insertError as { code?: string }).code,
+              details: (insertError as { details?: unknown }).details,
+              hint: (insertError as { hint?: string }).hint,
             });
           } else {
             leadId = inserted?.id;

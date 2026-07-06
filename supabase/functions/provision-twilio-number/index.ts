@@ -75,7 +75,7 @@ async function parseBody(response: Response) {
   }
 }
 
-function voicePayload(client: Record<string, any>) {
+function voicePayload(client: Record<string, unknown>) {
   const saved = String(client.voice_id ?? "").trim();
   if (!saved || APP_VOICE_IDS.has(saved) || saved.startsWith("placeholder-")) {
     return { provider: "vapi", voiceId: "Elliot" };
@@ -83,12 +83,12 @@ function voicePayload(client: Record<string, any>) {
   return { provider: "11labs", voiceId: saved };
 }
 
-function buildSystemPrompt(c: Record<string, any>): string {
+function buildSystemPrompt(c: Record<string, unknown>): string {
   const businessName = c.business_name ?? "the business";
   const industry = c.industry ?? "service business";
   const tone = c.tone ?? "Friendly";
-  const questions = (c.intake_questions ?? []) as string[];
-  const services = (c.services ?? []) as string[];
+  const questions = Array.isArray(c.intake_questions) ? (c.intake_questions as string[]) : [];
+  const services = Array.isArray(c.services) ? (c.services as string[]) : [];
   const lines: string[] = [];
   lines.push(`You are a professional AI receptionist for ${c.include_business_name === false ? "a " + industry + " business" : businessName}.`);
   lines.push(`Industry: ${industry}. Tone: ${tone}. Speak naturally, warmly, and concisely.`);
@@ -111,7 +111,7 @@ function buildSystemPrompt(c: Record<string, any>): string {
   lines.push("Never invent pricing, availability, or promises. If unsure, say the team will follow up.");
   return lines.join("\n");
 }
-function buildGreeting(c: Record<string, any>): string {
+function buildGreeting(c: Record<string, unknown>): string {
   if (c.greeting) return c.greeting;
   const name = c.business_name ?? "our office";
   if (c.industry === "med_spa") return `Thank you for calling ${name}, your personal concierge is here. How may I assist you today?`;
@@ -130,13 +130,13 @@ async function findVapiPhoneNumber(apiKey: string, phoneNumber: string) {
   const list = await vapiFetch(apiKey, "/phone-number", { method: "GET" });
   if (!list.ok || !Array.isArray(list.body)) return null;
   const target = normalizePhone(phoneNumber);
-  return list.body.find((p: any) => {
+  return list.body.find((p: Record<string, unknown>) => {
     const n = normalizePhone(p?.number);
     return n === target || n.endsWith(target) || target.endsWith(n);
   }) ?? null;
 }
 
-async function upsertAssistant(client: Record<string, any>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
+async function upsertAssistant(client: Record<string, unknown>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const toolsUrl = `${supabaseUrl}/functions/v1/vapi-tools`;
   const tools = [
@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
     }
     const { data: fullClient } = await admin.from("callcapture_clients").select("*").eq("id", clientId).maybeSingle();
     if (!fullClient) return json({ error_code: "not_found", error: "Client not found" }, 404);
-    await logStep("tenant_verified", "ok", { business_name: (fullClient as any).business_name ?? null });
+    await logStep("tenant_verified", "ok", { business_name: (fullClient as { business_name?: string | null } | null)?.business_name ?? null });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
     // 1) Purchase number via Twilio connector gateway
     const purchaseBody = new URLSearchParams({
       PhoneNumber: phoneNumber,
-      FriendlyName: ((fullClient as any).business_name ?? "Vektuor").slice(0, 64),
+      FriendlyName: (((fullClient as { business_name?: string | null } | null)?.business_name ?? "Vektuor").slice(0, 64)),
     });
     const r = await retryFetch("twilio purchase", `${GATEWAY_URL}/IncomingPhoneNumbers.json`, {
       method: "POST",
@@ -337,13 +337,13 @@ Deno.serve(async (req) => {
     // 2) Create/update a PER-TENANT Vapi assistant with webhook configured.
     let assistantId: string | null = null;
     let assistantError: string | null = null;
-    const a = await upsertAssistant(fullClient as any, VAPI_API_KEY, webhookUrl, WEBHOOK_SECRET || undefined);
+    const a = await upsertAssistant(fullClient as Record<string, unknown>, VAPI_API_KEY, webhookUrl, WEBHOOK_SECRET || undefined);
     assistantId = a.id || null;
     assistantError = a.error;
     if (assistantError) {
-      await logStep("assistant_upsert", "error", { error: assistantError, voice_id: (fullClient as any).voice_id ?? null });
+      await logStep("assistant_upsert", "error", { error: assistantError, voice_id: (fullClient as { voice_id?: string | null } | null)?.voice_id ?? null });
     } else {
-      await logStep("assistant_upsert", "ok", { assistant_id: assistantId, voice: voicePayload(fullClient as any) });
+      await logStep("assistant_upsert", "ok", { assistant_id: assistantId, voice: voicePayload(fullClient as Record<string, unknown>) });
     }
 
     // 3) Register the Twilio number with Vapi (BYO Twilio) so Vapi answers inbound calls.
@@ -380,7 +380,7 @@ Deno.serve(async (req) => {
             number: phoneNumber,
             twilioAccountSid: TWILIO_ACCOUNT_SID,
             twilioAuthToken: TWILIO_AUTH_TOKEN,
-            name: ((fullClient as any).business_name ?? "Vektuor").slice(0, 40),
+            name: (((fullClient as { business_name?: string | null } | null)?.business_name ?? "Vektuor").slice(0, 40)),
             assistantId,
           }),
           });

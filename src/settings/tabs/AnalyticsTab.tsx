@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { UseControlCenterData } from "../useControlCenterData";
+import type { Tables } from "@/integrations/supabase/types";
+
+type CallRow = Tables<"callcapture_calls">;
+type AppointmentRow = Tables<"callcapture_appointments">;
 
 type Stats = {
   total: number;
@@ -26,14 +30,15 @@ export default function AnalyticsTab({ ctx }: { ctx: UseControlCenterData }) {
         .from("callcapture_appointments")
         .select("status")
         .eq("client_id", clientId);
-      const rows = calls || [];
+      const rows = (calls ?? []) as CallRow[];
       const total = rows.length;
-      const answered = rows.filter((r: any) => r.status !== "missed" && r.status !== "failed").length;
+      const answered = rows.filter((r) => r.status !== "missed" && r.status !== "failed").length;
       const missed = total - answered;
-      const durations = rows.map((r: any) => Number(r.duration_seconds) || 0);
+      const durations = rows.map((r) => Number(r.duration_seconds) || 0);
       const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
-      const apptsRequested = (appts || []).length;
-      const apptsBooked = (appts || []).filter((a: any) => a.status === "booked" || a.status === "confirmed").length;
+      const appointments = (appts ?? []) as AppointmentRow[];
+      const apptsRequested = appointments.length;
+      const apptsBooked = appointments.filter((a) => a.status === "booked" || a.status === "confirmed").length;
       setStats({ total, answered, missed, apptsRequested, apptsBooked, avgLengthSec: avg });
     })();
   }, [clientId]);

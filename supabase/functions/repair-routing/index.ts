@@ -62,7 +62,7 @@ async function parseBody(response: Response) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
-function voicePayload(client: Record<string, any>) {
+function voicePayload(client: Record<string, unknown>) {
   const saved = String(client.voice_id ?? "").trim();
   if (!saved || APP_VOICE_IDS.has(saved) || saved.startsWith("placeholder-")) {
     return { provider: "vapi", voiceId: "Elliot" };
@@ -70,7 +70,7 @@ function voicePayload(client: Record<string, any>) {
   return { provider: "11labs", voiceId: saved };
 }
 
-function buildSystemPrompt(c: Record<string, any>): string {
+function buildSystemPrompt(c: Record<string, unknown>): string {
   const businessName = c.business_name ?? "the business";
   const industry = c.industry ?? "service business";
   const tone = c.tone ?? "Friendly";
@@ -90,7 +90,7 @@ function buildSystemPrompt(c: Record<string, any>): string {
   lines.push("", "Never invent pricing, availability, or promises. If unsure, say the team will follow up.");
   return lines.join("\n");
 }
-function buildGreeting(c: Record<string, any>): string {
+function buildGreeting(c: Record<string, unknown>): string {
   if (c.greeting) return c.greeting;
   const name = c.business_name ?? "our office";
   if (c.industry === "med_spa") return `Thank you for calling ${name}, your personal concierge is here. How may I assist you today?`;
@@ -109,13 +109,13 @@ async function findVapiPhoneNumber(apiKey: string, phoneNumber: string) {
   const list = await vapiFetch(apiKey, "/phone-number", { method: "GET" });
   if (!list.ok || !Array.isArray(list.body)) return null;
   const target = normalizePhone(phoneNumber);
-  return list.body.find((p: any) => {
+  return list.body.find((p: Record<string, unknown>) => {
     const n = normalizePhone(p?.number);
     return n === target || n.endsWith(target) || target.endsWith(n);
   }) ?? null;
 }
 
-async function upsertAssistant(client: Record<string, any>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
+async function upsertAssistant(client: Record<string, unknown>, apiKey: string, webhookUrl: string, webhookSecret?: string) {
   const payload = {
     name: `Vektuor — ${client.business_name ?? "Tenant"}`.slice(0, 40),
     firstMessage: buildGreeting(client),

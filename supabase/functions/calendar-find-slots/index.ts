@@ -6,6 +6,15 @@ import {
   filterAvailable,
   resolveAuthForClient,
 } from "../_shared/google-calendar.ts";
+import type { Tables } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+
+type ClientRow = Tables<"callcapture_clients">;
+
+type FindSlotsRequest = {
+  client_id?: string;
+  days?: number;
+  max?: number;
+};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -13,7 +22,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as FindSlotsRequest;
     const clientId: string | undefined = body.client_id;
     const days: number = Math.min(Math.max(Number(body.days ?? 5), 1), 14);
     const max: number = Math.min(Math.max(Number(body.max ?? 6), 1), 20);
@@ -35,11 +44,11 @@ Deno.serve(async (req) => {
     const calendarId = client.google_calendar_id || "primary";
     const timezone = client.timezone || "America/New_York";
     const duration = client.default_job_duration_minutes || 60;
-    const hours = (client.business_hours as any) || { start: "08:00", end: "18:00" };
+    const hours = (client.business_hours as { start?: string; end?: string } | null) || { start: "08:00", end: "18:00" };
 
     const now = new Date();
     const timeMax = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-    const auth = await resolveAuthForClient(client as any);
+    const auth = await resolveAuthForClient(client as ClientRow);
     const busy = await freeBusy(auth, calendarId, now.toISOString(), timeMax.toISOString(), timezone);
     const candidates = generateCandidateSlots({
       fromIso: now.toISOString(),

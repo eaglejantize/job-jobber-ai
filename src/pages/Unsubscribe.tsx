@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 
 type State = "loading" | "valid" | "already" | "invalid" | "success" | "error";
 
+type UnsubscribeResponse = {
+  success?: boolean;
+  reason?: string;
+};
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
@@ -37,8 +42,9 @@ export default function Unsubscribe() {
     try {
       const { data, error } = await supabase.functions.invoke("handle-email-unsubscribe", { body: { token } });
       if (error) throw error;
-      if ((data as any)?.success) setState("success");
-      else if ((data as any)?.reason === "already_unsubscribed") setState("already");
+      const result = data as UnsubscribeResponse;
+      if (result.success) setState("success");
+      else if (result.reason === "already_unsubscribed") setState("already");
       else setState("error");
     } catch {
       setState("error");

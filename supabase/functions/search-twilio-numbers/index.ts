@@ -57,17 +57,21 @@ Deno.serve(async (req) => {
           },
         },
       );
-      const data = await r.json().catch(() => ({} as any));
+      const data = await r.json().catch(() => ({} as Record<string, unknown>));
       return { ok: r.ok, status: r.status, data };
     }
 
-    function mapNumbers(data: any) {
-      return (data?.available_phone_numbers ?? []).slice(0, 5).map((n: any) => ({
-        phone_number: n.phone_number,
-        friendly_name: n.friendly_name,
-        locality: n.locality ?? null,
-        region: n.region ?? null,
-      }));
+    function mapNumbers(data: Record<string, unknown>) {
+      const available = Array.isArray(data.available_phone_numbers) ? data.available_phone_numbers : [];
+      return available.slice(0, 5).map((n) => {
+        const item = n as Record<string, unknown>;
+        return {
+          phone_number: String(item.phone_number ?? ""),
+          friendly_name: typeof item.friendly_name === "string" ? item.friendly_name : undefined,
+          locality: typeof item.locality === "string" ? item.locality : null,
+          region: typeof item.region === "string" ? item.region : null,
+        };
+      });
     }
 
     // Primary lookup by area code (or region if no area code)
@@ -91,7 +95,7 @@ Deno.serve(async (req) => {
     if (numbers.length > 0) return json({ numbers, fallback_reason: null, nearby: [] });
 
     // Fallback 1: search by region (state) if we had one
-    let nearby: any[] = [];
+    let nearby: Array<{ phone_number: string; friendly_name?: string; locality: string | null; region: string | null }> = [];
     let fallback_reason: string | null = "no_numbers_in_area_code";
     if (region) {
       const byRegion = await search({ InRegion: region });

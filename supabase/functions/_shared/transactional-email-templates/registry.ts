@@ -13,7 +13,7 @@ export interface TemplateEntry<P = Record<string, unknown>> {
   to?: string
 }
 
-export const TEMPLATES: Record<string, TemplateEntry<any>> = {
+export const TEMPLATES: Record<string, TemplateEntry<Record<string, unknown>>> = {
   'appointment-confirmation-customer': appointmentCustomer,
   'appointment-notification-owner': appointmentOwner,
   'new-lead-owner': newLeadOwner,

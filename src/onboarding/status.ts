@@ -77,7 +77,29 @@ function nonEmpty(v: unknown): boolean {
   return true;
 }
 
-type Client = Record<string, any>;
+type Client = Record<string, unknown> & {
+  assigned_callcapture_number?: string | null;
+  number_status?: string | null;
+  webhook_status?: string | null;
+  vapi_phone_number_id?: string | null;
+  vapi_assistant_id?: string | null;
+  business_name?: string | null;
+  business_phone?: string | null;
+  business_hours_24_7?: boolean | null;
+  business_hours_schedule?: unknown;
+  services?: string[] | null;
+  faqs?: Array<{ q?: string; a?: string }> | null;
+  knowledge_base?: string | null;
+  google_calendar_connected_at?: string | null;
+  voice_id?: string | null;
+  voice_label?: string | null;
+  greeting?: string | null;
+  test_call_passed_at?: string | null;
+  first_test_call_id?: string | null;
+  google_place_id?: string | null;
+  google_category?: string | null;
+  website?: string | null;
+};
 
 function isPhoneReady(c: Client): boolean {
   if (!nonEmpty(c?.assigned_callcapture_number)) return false;

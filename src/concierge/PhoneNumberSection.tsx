@@ -9,11 +9,11 @@ import { toast } from "@/hooks/use-toast";
 export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
   const [replacing, setReplacing] = useState(false);
   const [repairing, setRepairing] = useState(false);
-  const assigned = (ctx.current as any)?.assigned_callcapture_number ?? null;
-  const status = (ctx.current as any)?.number_status ?? null;
-  const webhookStatus = (ctx.current as any)?.webhook_status ?? null;
-  const routingError = (ctx.current as any)?.last_vapi_sync_status ?? null;
-  const preferred = String((ctx.current as any)?.preferred_area_code ?? "");
+  const assigned = ctx.current?.assigned_callcapture_number ?? null;
+  const status = ctx.current?.number_status ?? null;
+  const webhookStatus = ctx.current?.webhook_status ?? null;
+  const routingError = ctx.current?.last_vapi_sync_status ?? null;
+  const preferred = String(ctx.current?.preferred_area_code ?? "");
   const [areaCode, setAreaCode] = useState(preferred);
 
   const showAssigned = assigned && !replacing;
@@ -53,7 +53,7 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
             const { data, error } = await supabase.functions.invoke("repair-routing", {
               body: { client_id: ctx.clientId },
             });
-            const d = (data ?? {}) as any;
+            const d = (data ?? {}) as { ok?: boolean; error?: string; status?: string };
             if (error || d?.error) {
               toast({
                 title: "Routing repair failed",

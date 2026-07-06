@@ -11,7 +11,7 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-async function handleFindSlots(supabase: any, clientId: string, args: any) {
+async function handleFindSlots(supabase: { from: unknown }, clientId: string, args: Record<string, unknown>) {
   const days = Math.min(Math.max(Number(args?.days ?? 5), 1), 14);
   const max = Math.min(Math.max(Number(args?.max ?? 6), 1), 10);
   const { data: client } = await supabase
@@ -22,7 +22,7 @@ async function handleFindSlots(supabase: any, clientId: string, args: any) {
   const calendarId = client.google_calendar_id || "primary";
   const timezone = client.timezone || "America/New_York";
   const duration = client.default_job_duration_minutes || 60;
-  const hours = (client.business_hours as any) || { start: "08:00", end: "18:00" };
+  const hours = (client.business_hours as { start?: string; end?: string } | null) || { start: "08:00", end: "18:00" };
   const now = new Date();
   const timeMax = new Date(now.getTime() + days * 86400000);
   const auth = await resolveAuthForClient(client);
@@ -40,7 +40,7 @@ async function handleFindSlots(supabase: any, clientId: string, args: any) {
   return { timezone, duration_minutes: duration, slots: readable };
 }
 
-async function handleBookSlot(supabase: any, clientId: string, vapiCallId: string | null, args: any) {
+async function handleBookSlot(supabase: { from: unknown }, clientId: string, vapiCallId: string | null, args: Record<string, unknown>) {
   const { start_iso, end_iso, customer_name, customer_phone, customer_email, customer_address, service, notes } = args ?? {};
   if (!start_iso || !end_iso) return { error: "start_iso and end_iso required" };
   const { data: client } = await supabase
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
       }
     }
     if (!clientId) {
-      return new Response(JSON.stringify({ results: toolCalls.map((tc: any) => ({ toolCallId: tc.id, result: "Tenant not resolved." })) }), {
+      return new Response(JSON.stringify({ results: toolCalls.map((tc: { id?: string }) => ({ toolCallId: tc.id ?? "", result: "Tenant not resolved." })) }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -130,9 +130,9 @@ Deno.serve(async (req) => {
     const results: Array<{ toolCallId: string; result: string }> = [];
     for (const tc of toolCalls) {
       const name = tc?.function?.name ?? tc?.name;
-      let args: any = tc?.function?.arguments ?? tc?.arguments ?? {};
+      let args: Record<string, unknown> = tc?.function?.arguments ?? tc?.arguments ?? {};
       if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
-      let out: any;
+      let out: unknown;
       try {
         if (name === "findSlots") out = await handleFindSlots(supabase, clientId, args);
         else if (name === "bookSlot") out = await handleBookSlot(supabase, clientId, vapiCallId, args);

@@ -11,6 +11,15 @@ import { findIndustryGroup } from "@/lib/industries";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
+type NotesField = { notes?: string };
+
+function notesValue(value: unknown): string {
+  if (value && typeof value === "object" && "notes" in value) {
+    return String((value as NotesField).notes ?? "");
+  }
+  return "";
+}
+
 export default function BusinessTab({ ctx }: { ctx: UseControlCenterData }) {
   const { data, update, save, saving } = ctx;
   const hours = (data.business_hours_schedule || {}) as Record<
@@ -140,7 +149,7 @@ export default function BusinessTab({ ctx }: { ctx: UseControlCenterData }) {
         {data.emergency_services && (
           <Textarea
             placeholder="When are emergency calls accepted? Any surcharge? Eligibility rules?"
-            value={(data.emergency_rules as any)?.notes || ""}
+            value={notesValue(data.emergency_rules)}
             onChange={(e) => update({ emergency_rules: { ...(data.emergency_rules || {}), notes: e.target.value } })}
           />
         )}
@@ -150,7 +159,7 @@ export default function BusinessTab({ ctx }: { ctx: UseControlCenterData }) {
         <h2 className="text-lg font-semibold">Holiday Hours</h2>
         <Textarea
           placeholder='e.g. "Closed Dec 25, Jan 1. Open 9-1 on Thanksgiving."'
-          value={(data.holiday_hours as any)?.notes || ""}
+          value={notesValue(data.holiday_hours)}
           onChange={(e) => update({ holiday_hours: { notes: e.target.value } })}
         />
       </section>

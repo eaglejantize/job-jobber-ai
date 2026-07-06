@@ -29,7 +29,6 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (cancelled) return;
-
       const row = data as Tables<"callcapture_clients"> | null;
       const normalized = deriveOnboardingState(row, row?.onboarding_state ?? null);
       const ready = isReadyToActivate(normalized).ready;

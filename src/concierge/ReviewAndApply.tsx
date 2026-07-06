@@ -40,8 +40,8 @@ export default function ReviewAndApply({
     return Object.keys(ctx.pending).map((key) => ({
       key,
       label: FIELD_LABELS[key] || key,
-      currentValue: (ctx.current as any)?.[key],
-      proposedValue: (ctx.pending as any)[key],
+      currentValue: ctx.current?.[key],
+      proposedValue: ctx.pending[key],
     }));
   }, [ctx.pending, ctx.current]);
 

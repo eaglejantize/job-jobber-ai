@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
     const cols = "id, client_id, name, phone, address, type, treatment, issue, summary, urgency, transcript, intake_answers, status, created_at";
 
-    const queries: Promise<any>[] = [
+    const queries: Promise<{ data: Array<{ id: string; created_at: string } & Record<string, unknown>> | null; error: Error | null }>[] = [
       admin.from("callcapture_leads").select(cols).is("client_id", null).order("created_at", { ascending: false }).limit(200),
       // Debug fallback: most recent leads regardless of client_id.
       admin.from("callcapture_leads").select(cols).order("created_at", { ascending: false }).limit(200),
@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     }
 
     const results = await Promise.all(queries);
-    const map = new Map<string, any>();
+    const map = new Map<string, { id: string; created_at: string } & Record<string, unknown>>();
     for (const r of results) {
       for (const row of r.data ?? []) {
         if (!map.has(row.id)) map.set(row.id, row);

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SECTIONS } from "./sections";
+import type { Tables } from "@/integrations/supabase/types";
 
 export type PendingMap = Record<string, unknown>;
+export type ConciergeClientRow = Tables<"callcapture_clients"> & Record<string, unknown>;
 
 export type ConciergePersisted = {
   step: number;
@@ -32,7 +34,7 @@ function normalizeConciergeState(saved: ConciergePersisted): ConciergePersisted 
   };
 }
 
-function needsPhoneNumberStep(row: Record<string, any>) {
+function needsPhoneNumberStep(row: ConciergeClientRow) {
   return !row?.is_super_admin && !row?.assigned_callcapture_number;
 }
 
@@ -44,7 +46,7 @@ function conciergeStatesEqual(a: ConciergePersisted | null | undefined, b: Conci
 export function useConcierge() {
   const [loading, setLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
-  const [current, setCurrent] = useState<Record<string, any>>({});
+  const [current, setCurrent] = useState<ConciergeClientRow | null>(null);
   const [pending, setPending] = useState<PendingMap>({});
   const [step, setStep] = useState(0);
   const [skipped, setSkipped] = useState<string[]>([]);
@@ -65,9 +67,9 @@ export function useConcierge() {
       .limit(1)
       .maybeSingle();
     if (row) {
-      setClientId((row as any).id);
-      setCurrent(row as Record<string, any>);
-      const saved = (row as any).concierge_state as ConciergePersisted | null;
+          setClientId(row.id);
+          setCurrent(row as ConciergeClientRow);
+          const saved = row.concierge_state as ConciergePersisted | null;
       if (saved && typeof saved === "object") {
         const normalized = normalizeConciergeState(saved);
         setPending(normalized.pending || {});
@@ -77,7 +79,7 @@ export function useConcierge() {
           await supabase
             .from("callcapture_clients")
             .update({ concierge_state: normalized } as never)
-            .eq("id", (row as any).id);
+                    .eq("id", row.id);
         }
       }
     }

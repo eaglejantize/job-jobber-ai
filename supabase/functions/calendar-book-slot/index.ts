@@ -1,6 +1,23 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createEvent, resolveAuthForClient } from "../_shared/google-calendar.ts";
+import type { Tables } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+
+type ClientRow = Tables<"callcapture_clients">;
+
+type BookingRequest = {
+  client_id?: string;
+  lead_id?: string | null;
+  vapi_call_id?: string | null;
+  start_iso?: string;
+  end_iso?: string;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_email?: string | null;
+  customer_address?: string | null;
+  service?: string | null;
+  notes?: string | null;
+};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -8,13 +25,13 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as BookingRequest;
     const {
       client_id, lead_id, vapi_call_id,
       start_iso, end_iso,
       customer_name, customer_phone, customer_email, customer_address,
       service, notes,
-    } = body as Record<string, any>;
+    } = body;
 
     if (!client_id || !start_iso || !end_iso) {
       return new Response(JSON.stringify({ error: "client_id, start_iso, end_iso required" }), {
@@ -33,7 +50,7 @@ Deno.serve(async (req) => {
     }
     const calendarId = client.google_calendar_id || "primary";
     const timezone = client.timezone || "America/New_York";
-    const auth = await resolveAuthForClient(client as any);
+    const auth = await resolveAuthForClient(client as ClientRow);
 
     const summary = `${service ?? "Service call"} — ${customer_name ?? "Customer"}`;
     const description = [

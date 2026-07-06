@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
         vapi_call_id: vapiCallId,
         step,
         status,
-        detail: detail ? (detail as any) : null,
+        detail: detail ?? null,
       });
     } catch (e) {
       console.error("diag insert failed", e);
@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
   if (!clientId && calledNumber) {
     const digits = normalize(calledNumber);
     const { data: all } = await supabase.from("callcapture_clients").select("id, assigned_callcapture_number, is_super_admin");
-    const hit = (all ?? []).find((c: any) => normalize(c.assigned_callcapture_number) === digits && !c.is_super_admin);
+    const hit = (all ?? []).find((c) => normalize((c as { assigned_callcapture_number?: string | null }).assigned_callcapture_number) === digits && !(c as { is_super_admin?: boolean | null }).is_super_admin);
     if (hit?.id) { clientId = hit.id; matchedBy = "assigned_callcapture_number"; }
   }
   if (!clientId && assistantId) {
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
         if (!clientId && numberFromVapi) {
           const digits = normalize(numberFromVapi);
           const { data: all } = await supabase.from("callcapture_clients").select("id, assigned_callcapture_number, is_super_admin");
-          const hit = (all ?? []).find((c: any) => normalize(c.assigned_callcapture_number) === digits);
+          const hit = (all ?? []).find((c) => normalize((c as { assigned_callcapture_number?: string | null }).assigned_callcapture_number) === digits);
           if (hit?.id) { clientId = hit.id; matchedBy = "vapi_api_phone_lookup"; }
         }
         if (clientId) {
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
       await logEvent(clientId, vapiCallId, "tenant_matched", "error", { reason: "resolved_to_super_admin_via_wide_match", matchedBy });
       clientId = null;
     } else {
-      businessId = (c as any)?.business_id ?? null;
+      businessId = (c as { business_id?: string | null } | null)?.business_id ?? null;
       if (c?.is_super_admin) {
         await logEvent(clientId, vapiCallId, "tenant_matched", "ok", { note: "super_admin_owner_match_allowed", matchedBy });
       }
@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
       caller_name: callerName,
       caller_phone: callerPhone,
       status: "live",
-      metadata: metaObj as any,
+      metadata: metaObj,
     }).select("id").single();
     callId = ins?.id ?? null;
     await logEvent(clientId, vapiCallId, "call_started", callId ? "ok" : "error", { error: insErr?.message });
@@ -259,17 +259,17 @@ Deno.serve(async (req) => {
     // call row's is_test flag. Requires a minimum duration so dropped/failed
     // calls don't flip the activation gate.
     try {
-      const isTestMeta = (metaObj as any)?.test_call === true;
+      const isTestMeta = (metaObj as { test_call?: boolean } | null)?.test_call === true;
       let isTestRow = false;
       if (!isTestMeta && callId) {
         const { data: cr } = await supabase
           .from("callcapture_calls").select("is_test").eq("id", callId).maybeSingle();
-        isTestRow = !!(cr as any)?.is_test;
+        isTestRow = !!(cr as { is_test?: boolean } | null)?.is_test;
       }
       if (clientId && (isTestMeta || isTestRow) && (duration ?? 0) >= 5) {
         const { data: cur } = await supabase
           .from("callcapture_clients").select("test_call_passed_at").eq("id", clientId).maybeSingle();
-        if (!(cur as any)?.test_call_passed_at) {
+        if (!(cur as { test_call_passed_at?: string | null } | null)?.test_call_passed_at) {
           await supabase.from("callcapture_clients")
             .update({ test_call_passed_at: new Date().toISOString() } as never)
             .eq("id", clientId);
@@ -281,7 +281,7 @@ Deno.serve(async (req) => {
     }
 
     // Extract lead fields from transcript via Lovable AI Gateway
-    let extracted: any = {};
+    let extracted: Record<string, unknown> = {};
     if (transcriptText) {
       try {
         const aiKey = Deno.env.get("LOVABLE_API_KEY");
@@ -393,7 +393,7 @@ Deno.serve(async (req) => {
           .from("callcapture_clients")
           .select("business_name, owner_email, email")
           .eq("id", clientId).maybeSingle();
-        const recipient = (tenant?.owner_email || (tenant as any)?.email || "").trim();
+        const recipient = (tenant?.owner_email || (tenant as { email?: string | null } | null)?.email || "").trim();
         if (!recipient) {
           await logEvent(clientId, vapiCallId, "owner_email_sent", "skipped", { reason: "no_owner_email" });
         } else {

@@ -13,16 +13,18 @@ type CallRow = {
   duration_seconds?: number | null;
   started_at?: string | null;
   recording_url?: string | null;
-  structured_data?: any;
-  raw_payload?: any;
+  structured_data?: unknown;
+  raw_payload?: unknown;
 };
+
+type TranscriptTurn = Tables<"callcapture_transcript_turns">;
 
 export default function TestingTab({ ctx }: { ctx: UseControlCenterData }) {
   const { clientId } = ctx;
   const [calls, setCalls] = useState<CallRow[]>([]);
   const [open, setOpen] = useState<CallRow | null>(null);
-  const [turns, setTurns] = useState<any[]>([]);
-  const [lead, setLead] = useState<any | null>(null);
+  const [turns, setTurns] = useState<TranscriptTurn[]>([]);
+  const [lead, setLead] = useState<unknown | null>(null);
 
   useEffect(() => {
     if (!clientId) return;
@@ -42,7 +44,7 @@ export default function TestingTab({ ctx }: { ctx: UseControlCenterData }) {
       .select("*")
       .eq("call_id", open.id)
       .order("created_at", { ascending: true })
-      .then(({ data }) => setTurns(data || []));
+      .then(({ data }) => setTurns((data as TranscriptTurn[]) || []));
     setLead(open.structured_data ?? null);
   }, [open]);
 
@@ -99,7 +101,7 @@ export default function TestingTab({ ctx }: { ctx: UseControlCenterData }) {
                   <p className="text-sm text-muted-foreground">No transcript captured.</p>
                 ) : (
                   <div className="space-y-1 text-sm">
-                    {turns.map((t: any) => (
+                    {turns.map((t) => (
                       <p key={t.id}>
                         <span className="font-semibold capitalize">{t.role}: </span>
                         {t.content}

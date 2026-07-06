@@ -5,17 +5,28 @@ import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 
 // Minimal typed wrapper — supabase.auth.oauth is beta and not in types yet.
+type AuthorizationDetails = {
+  redirect_url?: string;
+  redirect_to?: string;
+  client?: { name?: string | null } | null;
+};
+
+type AuthorizationResult = {
+  redirect_url?: string;
+  redirect_to?: string;
+};
+
 type OauthApi = {
-  getAuthorizationDetails: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-  approveAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
-  denyAuthorization: (id: string) => Promise<{ data: any; error: { message: string } | null }>;
+  getAuthorizationDetails: (id: string) => Promise<{ data: AuthorizationDetails | null; error: { message: string } | null }>;
+  approveAuthorization: (id: string) => Promise<{ data: AuthorizationResult | null; error: { message: string } | null }>;
+  denyAuthorization: (id: string) => Promise<{ data: AuthorizationResult | null; error: { message: string } | null }>;
 };
 const oauth = (supabase.auth as unknown as { oauth: OauthApi }).oauth;
 
 export default function OAuthConsent() {
   const [params] = useSearchParams();
   const authorizationId = params.get("authorization_id") ?? "";
-  const [details, setDetails] = useState<any>(null);
+  const [details, setDetails] = useState<AuthorizationDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 

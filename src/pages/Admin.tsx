@@ -50,6 +50,28 @@ type Client = {
   created_at: string;
 };
 
+type RepairRoutingResponse = {
+  ok?: boolean;
+  error?: string;
+  routing_error?: string;
+  assistant_id?: string;
+};
+
+type AppSettingsRow = {
+  bypass_billing?: boolean;
+  updated_at?: string;
+};
+
+type WebhookEventRow = {
+  id: string;
+  client_id: string | null;
+  vapi_call_id: string | null;
+  step: string;
+  status: string;
+  detail: unknown;
+  created_at: string;
+};
+
 type Tab = "overview" | "subscribers" | "diagnostics" | "create" | "settings";
 
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
@@ -397,12 +419,13 @@ function SubscribersTab({
                   setBusyId(c.id);
                   const { data, error } = await supabase.functions.invoke("repair-routing", { body: { client_id: c.id } });
                   setBusyId(null);
-                  const ok = !error && (data as any)?.ok;
+                  const result = data as RepairRoutingResponse | null;
+                  const ok = !error && !!result?.ok;
                   if (!ok) {
-                    const msg = error?.message || (data as any)?.error || (data as any)?.routing_error || "Unknown error";
+                    const msg = error?.message || result?.error || result?.routing_error || "Unknown error";
                     toast({ title: "Repair failed", description: msg, variant: "destructive" });
                   } else {
-                    toast({ title: "Routing repaired", description: `Assistant ${(data as any).assistant_id?.slice(0, 8)}…` });
+                    toast({ title: "Routing repaired", description: `Assistant ${result?.assistant_id?.slice(0, 8)}…` });
                   }
                 }}
               >
@@ -666,7 +689,8 @@ function BypassBillingCard() {
     setEnabled(next);
     setSaving(true);
     const { data: userData } = await supabase.auth.getUser();
-    const { data, error } = await (supabase.from("callcapture_app_settings" as never) as any)
+    const { data, error } = await supabase
+      .from("callcapture_app_settings")
       .update({
         bypass_billing: next,
         updated_at: new Date().toISOString(),
@@ -724,15 +748,7 @@ function BypassBillingCard() {
 
 /* ---------------- Diagnostics ---------------- */
 
-type DiagRow = {
-  id: string;
-  client_id: string | null;
-  vapi_call_id: string | null;
-  step: string;
-  status: string;
-  detail: any;
-  created_at: string;
-};
+type DiagRow = WebhookEventRow;
 
 function DiagnosticsTab() {
   const [rows, setRows] = useState<DiagRow[]>([]);
@@ -755,7 +771,7 @@ function DiagnosticsTab() {
         .select("id, business_name")
         .in("id", ids);
       const map: Record<string, string> = {};
-      (cs ?? []).forEach((c: any) => { map[c.id] = c.business_name ?? c.id; });
+      (cs ?? []).forEach((c: Pick<Client, "id" | "business_name">) => { map[c.id] = c.business_name ?? c.id; });
       setClientNames(map);
     }
     setLoading(false);
