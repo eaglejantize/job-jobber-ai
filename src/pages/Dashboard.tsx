@@ -8,6 +8,11 @@ import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import CallInbox from "@/components/dashboard/CallInbox";
 import ActiveCallPanel from "@/components/dashboard/ActiveCallPanel";
 import IntakePanel from "@/components/dashboard/IntakePanel";
+import CommandBar from "@/components/CommandBar";
+import CommandResultPanel from "@/components/CommandResultPanel";
+import { resolveCopilotContext } from "@/copilot/contextResolver";
+import { routeCommand } from "@/copilot/commandRouter";
+import type { AllowedActionRow, RouteCommandResult } from "@/copilot/types";
 import {
   useCalls, useCallDetail, useTechnicians, useDashboardStats,
 } from "@/hooks/useDashboardData";
@@ -17,7 +22,10 @@ export default function Dashboard() {
   const [params, setParams] = useSearchParams();
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientFetched, setClientFetched] = useState(false);
+  const [isCommandRunning, setIsCommandRunning] = useState(false);
+  const [commandResult, setCommandResult] = useState<RouteCommandResult | null>(null);
   const seenLeadsRef = useRef<Set<string>>(new Set());
+  const fieldCopilotEnabled = String(import.meta.env.VITE_ENABLE_FIELD_COPILOT ?? "").toLowerCase() === "true";
 
   useEffect(() => { document.title = "Vektuor · Live Ops"; }, []);
 
@@ -88,12 +96,92 @@ export default function Dashboard() {
 
   const systemLive = clientFetched && clientId !== null;
 
+  async function runCommand(commandText: string) {
+    if (!user) return;
+
+    setIsCommandRunning(true);
+    try {
+      const context = resolveCopilotContext({
+        calls,
+        currentCallId: selectedId,
+      });
+
+      const result = await routeCommand({
+        commandText,
+        userId: user.id,
+        clientId,
+        context,
+        fetchAllowedActions: async (actionKey, tenantClientId) => {
+          let query = supabase
+            .from("allowed_actions")
+            .select("action_key, role, client_id, is_enabled")
+            .eq("action_key", actionKey)
+            .eq("role", "authenticated");
+
+          if (tenantClientId) {
+            query = query.or(`client_id.eq.${tenantClientId},client_id.is.null`);
+          } else {
+            query = query.is("client_id", null);
+          }
+
+          const { data } = await query;
+          return ((data ?? []) as AllowedActionRow[]).filter((row) => row.role === "authenticated");
+        },
+        writeExecutionAudit: async (record) => {
+          const { data, error } = await supabase
+            .from("command_execution_log")
+            .insert({
+              user_id: record.userId,
+              client_id: record.clientId,
+              command_text: record.commandText,
+              intent_key: record.intentKey,
+              action_key: record.actionKey,
+              status: record.status,
+              policy_reason: record.policyReason,
+              result_summary: record.resultSummary,
+              context_snapshot: record.contextSnapshot,
+              error_message: record.errorMessage,
+            })
+            .select("id")
+            .maybeSingle();
+
+          return {
+            id: (data as { id?: string } | null)?.id ?? null,
+            error: error?.message ?? null,
+          };
+        },
+      });
+
+      if (result.status === "success" && result.navigationTargetCallId) {
+        setParams((existing) => {
+          const next = new URLSearchParams(existing);
+          next.set("call", result.navigationTargetCallId as string);
+          return next;
+        }, { replace: true });
+      }
+
+      setCommandResult(result);
+    } finally {
+      setIsCommandRunning(false);
+    }
+  }
+
   return (
     <Layout>
     <div className="vektuor-ops">
       <DashboardHeader today={stats.today} leads={stats.leads} active={stats.active} systemLive={systemLive} />
 
       <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-4 md:py-6">
+        {fieldCopilotEnabled ? (
+          <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-4 mb-4">
+            <div className="v-card p-4">
+              <h2 className="text-sm font-semibold mb-2">Business Assistant</h2>
+              <CommandBar isRunning={isCommandRunning} onRunCommand={runCommand} />
+            </div>
+            <CommandResultPanel isRunning={isCommandRunning} result={commandResult} />
+          </div>
+        ) : null}
+
         {!clientId && clientFetched ? (
           <div className="v-card p-8 text-center max-w-lg mx-auto mt-12">
             <h2 className="text-lg font-semibold mb-2">Set up your business</h2>
