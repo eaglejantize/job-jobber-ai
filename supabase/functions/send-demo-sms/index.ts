@@ -289,11 +289,20 @@ serve(async (req) => {
 
         // Basic idempotency: if dedupe key exists, try to find a recently inserted matching lead first
         if (dedupe_key) {
-          const { data: existing } = await supabase
+          let dedupeQuery = supabase
             .from("callcapture_leads")
             .select("id, raw_payload")
             .gte("created_at", new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString())
             .limit(100);
+
+          if (client_id) {
+            dedupeQuery = dedupeQuery.eq("client_id", client_id);
+          }
+          if (business_id) {
+            dedupeQuery = dedupeQuery.eq("business_id", business_id);
+          }
+
+          const { data: existing } = await dedupeQuery;
 
           const match = (existing ?? []).find((r) => {
             const rp = r?.raw_payload ?? {};

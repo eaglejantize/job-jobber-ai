@@ -14,6 +14,7 @@ export default function LeadInbox() {
   const { user, loading } = useAuth();
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [businessId, setBusinessId] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
 
   // Resolve current user's business_id (single-tenant assumption)
   useEffect(() => {
@@ -35,10 +36,21 @@ export default function LeadInbox() {
         console.error("Failed to fetch business id:", error);
         toast.error("Could not resolve your business profile.");
         setBusinessId(null);
+        setClientId(null);
         return;
       }
 
       setBusinessId((data as BusinessRow | null)?.id ?? null);
+
+      const { data: clientData } = await supabase
+        .from("callcapture_clients")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!active) return;
+      setClientId((clientData as { id?: string } | null)?.id ?? null);
     })();
 
     return () => {
@@ -81,8 +93,12 @@ export default function LeadInbox() {
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (businessId) {
+      if (businessId && clientId) {
+        query = query.or(`business_id.eq.${businessId},client_id.eq.${clientId}`);
+      } else if (businessId) {
         query = query.eq("business_id", businessId);
+      } else if (clientId) {
+        query = query.eq("client_id", clientId);
       }
 
       const { data, error } = await query;
@@ -101,7 +117,7 @@ export default function LeadInbox() {
     return () => {
       active = false;
     };
-  }, [user, businessId]);
+  }, [user, businessId, clientId]);
 
   useEffect(() => {
     if (!user) return;
@@ -116,7 +132,13 @@ export default function LeadInbox() {
           const lead = payload.new as Lead;
 
           // Client-side safety filter (RLS should still be the primary guard)
-          if (businessId && lead.business_id !== businessId) return;
+          if (businessId && clientId) {
+            if (lead.business_id !== businessId && lead.client_id !== clientId) return;
+          } else if (businessId && lead.business_id !== businessId) {
+            return;
+          } else if (clientId && lead.client_id !== clientId) {
+            return;
+          }
 
           setLeads((prev) => {
             if (!prev) return [lead];
@@ -132,7 +154,7 @@ export default function LeadInbox() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user, businessId]);
+  }, [user, businessId, clientId]);
 
   async function markContacted(id: string) {
     const prev = leads;

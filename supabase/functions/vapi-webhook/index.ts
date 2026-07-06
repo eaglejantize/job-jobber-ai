@@ -208,7 +208,10 @@ Deno.serve(async (req) => {
     callId = ins?.id ?? null;
     await logEvent(clientId, vapiCallId, "call_started", callId ? "ok" : "error", { error: insErr?.message });
   } else if (existing && !existing.client_id && clientId) {
-    await supabase.from("callcapture_calls").update({ client_id: clientId }).eq("id", existing.id);
+    await supabase
+      .from("callcapture_calls")
+      .update({ client_id: clientId, business_id: businessId })
+      .eq("id", existing.id);
   }
   if (!callId) {
     return new Response(JSON.stringify({ error: "could not create call" }), {
@@ -329,6 +332,7 @@ Deno.serve(async (req) => {
       } else {
         const { data: lead, error: leadErr } = await supabase.from("callcapture_leads").insert({
           client_id: clientId,
+          business_id: businessId,
           name: extracted.name ?? callerName,
           phone: extracted.phone ?? callerPhone,
           treatment: extracted.service ?? null,
