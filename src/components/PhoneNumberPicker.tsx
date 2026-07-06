@@ -4,7 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Phone, CheckCircle2, AlertTriangle, PhoneForwarded, Sparkles, Search, RefreshCw } from "lucide-react";
+import {
+  Loader2,
+  Phone,
+  CheckCircle2,
+  AlertTriangle,
+  PhoneForwarded,
+  Sparkles,
+  Search,
+  RefreshCw,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -18,6 +27,24 @@ type Available = {
   friendly_name?: string;
   locality?: string | null;
   region?: string | null;
+};
+
+type EnsureClientResult = {
+  ok: boolean;
+  clientId?: string;
+  message?: string;
+};
+
+type ErrorPayload = {
+  error_code?: string;
+  error?: string;
+  numbers?: Available[];
+  nearby?: Available[];
+  fallback_reason?: string | null;
+  phone_number?: string;
+  sid?: string;
+  status?: string;
+  message?: string;
 };
 
 export default function PhoneNumberPicker({
@@ -43,7 +70,7 @@ export default function PhoneNumberPicker({
   webhookStatus?: string | null;
   routingError?: string | null;
   onProvisioned: (phone: string, sid: string, status: string) => void;
-  onEnsureClient?: () => Promise<{ ok: boolean; clientId?: string; message?: string }>;
+  onEnsureClient?: () => Promise<EnsureClientResult>;
   initializing?: boolean;
   onRefresh?: () => Promise<void> | void;
   onRetryRepair?: () => Promise<void> | void;
@@ -97,9 +124,7 @@ export default function PhoneNumberPicker({
       setError(null);
       return result.clientId;
     }
-    setError(
-      "We need to finish initializing your workspace before connecting this number. Retry setup initialization.",
-    );
+    setError("We need to finish initializing your workspace before connecting this number. Retry setup initialization.");
     setInitError(result.message ?? "Unknown initialization error");
     return null;
   }
@@ -120,16 +145,14 @@ export default function PhoneNumberPicker({
         }
       } else {
         setInitError(result.message ?? "Unknown initialization error");
-        setError(
-          "We need to finish initializing your workspace before connecting this number. Retry setup initialization.",
-        );
+        setError("We need to finish initializing your workspace before connecting this number. Retry setup initialization.");
       }
     } finally {
       setRetrying(false);
     }
   }
 
-  function reportError(d: any, fallback: string) {
+  function reportError(d: ErrorPayload, fallback: string) {
     const map: Record<string, string> = {
       missing_secret: "Vektuor's phone provider isn't configured. Please contact support.",
       twilio_auth_failed: "Twilio authentication failed. Please contact support.",
@@ -139,7 +162,7 @@ export default function PhoneNumberPicker({
       not_found: "Account not found.",
       db_error: "Saved the number but the database update failed. Contact support.",
     };
-    const msg = map[d?.error_code] ?? d?.error ?? fallback;
+    const msg = map[d?.error_code ?? ""] ?? d?.error ?? fallback;
     setError(msg);
     toast({ title: "Phone setup", description: msg, variant: "destructive" });
   }
@@ -155,11 +178,10 @@ export default function PhoneNumberPicker({
     }
     setSearching(true);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        "search-twilio-numbers",
-        { body: { area_code: preferredAreaCode } },
-      );
-      const d = (data ?? {}) as any;
+      const { data, error: invokeError } = await supabase.functions.invoke("search-twilio-numbers", {
+        body: { area_code: preferredAreaCode },
+      });
+      const d: ErrorPayload = (data ?? {}) as ErrorPayload;
       if (invokeError || d?.error_code) {
         reportError(d, invokeError?.message ?? "Search failed");
         return;
@@ -170,8 +192,8 @@ export default function PhoneNumberPicker({
       if ((d.numbers ?? []).length === 0 && (d.nearby ?? []).length === 0) {
         setError("No numbers available right now. Try a different area code or use a fallback below.");
       }
-    } catch (e) {
-      reportError({}, (e as Error).message || "Search failed");
+    } catch (e: unknown) {
+      reportError({}, e instanceof Error ? e.message : "Search failed");
     } finally {
       setSearching(false);
     }
@@ -180,19 +202,22 @@ export default function PhoneNumberPicker({
   async function purchase(num: string) {
     const cid = await resolveClientId();
     if (!cid) {
-      setPendingRetry(() => () => purchase(num));
+      setPendingRetry(() => () => void purchase(num));
       return;
     }
     setPurchasing(num);
     setError(null);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        "provision-twilio-number",
-        { body: { phone_number: num, client_id: cid } },
-      );
-      const d = (data ?? {}) as any;
+      const { data, error: invokeError } = await supabase.functions.invoke("provision-twilio-number", {
+        body: { phone_number: num, client_id: cid },
+      });
+      const d: ErrorPayload = (data ?? {}) as ErrorPayload;
       if (invokeError || d?.error_code) {
         reportError(d, invokeError?.message ?? "Purchase failed");
+        return;
+      }
+      if (!d.phone_number || !d.sid) {
+        reportError({}, "Malformed provisioning response");
         return;
       }
       onProvisioned(d.phone_number, d.sid, d.status ?? "active");
@@ -200,8 +225,8 @@ export default function PhoneNumberPicker({
         title: d.status === "active" ? "Number active" : "Number reserved",
         description: d.message ?? "Your Vektuor number is set up.",
       });
-    } catch (e) {
-      reportError({}, (e as Error).message);
+    } catch (e: unknown) {
+      reportError({}, e instanceof Error ? e.message : "Purchase failed");
     } finally {
       setPurchasing(null);
     }
@@ -210,7 +235,7 @@ export default function PhoneNumberPicker({
   async function linkExisting(mode: "byo" | "forward" | "test") {
     const cid = await resolveClientId();
     if (!cid) {
-      setPendingRetry(() => () => linkExisting(mode));
+      setPendingRetry(() => () => void linkExisting(mode));
       return;
     }
     setBusyAction(mode);
@@ -218,19 +243,20 @@ export default function PhoneNumberPicker({
     try {
       const body: Record<string, unknown> = { mode, client_id: cid };
       if (mode !== "test") body.phone_number = byoPhone;
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        "link-existing-number",
-        { body },
-      );
-      const d = (data ?? {}) as any;
+      const { data, error: invokeError } = await supabase.functions.invoke("link-existing-number", { body });
+      const d: ErrorPayload = (data ?? {}) as ErrorPayload;
       if (invokeError || d?.error_code) {
         reportError(d, invokeError?.message ?? "Failed to link number");
         return;
       }
+      if (!d.phone_number) {
+        reportError({}, "Malformed link response");
+        return;
+      }
       onProvisioned(d.phone_number, "", d.status ?? "pending_forwarding");
-      toast({ title: "Number linked", description: d.message });
-    } catch (e) {
-      reportError({}, (e as Error).message);
+      toast({ title: "Number linked", description: d.message ?? "Number linked successfully." });
+    } catch (e: unknown) {
+      reportError({}, e instanceof Error ? e.message : "Failed to link number");
     } finally {
       setBusyAction(null);
     }
@@ -239,7 +265,8 @@ export default function PhoneNumberPicker({
   // Already provisioned view
   if (assignedNumber) {
     const isActive = numberStatus === "active" && webhookStatus === "configured";
-    const isPending = numberStatus === "provisioning" || numberStatus === "needs_configuration" || webhookStatus === "pending";
+    const isPending =
+      numberStatus === "provisioning" || numberStatus === "needs_configuration" || webhookStatus === "pending";
     const labelMap: Record<string, string> = {
       active: "Active",
       provisioning: "Configuring",
@@ -247,15 +274,19 @@ export default function PhoneNumberPicker({
       pending_forwarding: "Pending Forwarding",
       test: "Test Number",
     };
-    const statusText = isActive
-      ? "Configured"
-      : labelMap[numberStatus ?? ""] ?? "Reserved";
+    const statusText = isActive ? "Configured" : labelMap[numberStatus ?? ""] ?? "Reserved";
     const detail = isActive
       ? "Inbound calls are routed to your AI receptionist."
       : routingError || "Routing is still being configured. If this does not clear shortly, retry routing setup.";
     return (
       <div className="space-y-3">
-        <div className={isActive ? "rounded-xl border border-primary/30 bg-primary/5 p-4" : "rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"}>
+        <div
+          className={
+            isActive
+              ? "rounded-xl border border-primary/30 bg-primary/5 p-4"
+              : "rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
+          }
+        >
           <div className="flex items-start gap-3">
             {isActive ? (
               <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
@@ -268,9 +299,7 @@ export default function PhoneNumberPicker({
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Your Vektuor number</p>
               <p className="text-xl font-semibold mt-1">{formatUS(assignedNumber)}</p>
               <div className="mt-2">
-                <Badge variant={isActive ? "default" : "secondary"}>
-                  {statusText}
-                </Badge>
+                <Badge variant={isActive ? "default" : "secondary"}>{statusText}</Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-2 break-words">{detail}</p>
               {!isActive && (
@@ -281,7 +310,13 @@ export default function PhoneNumberPicker({
                     </Button>
                   )}
                   {onRetryRepair && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => onRetryRepair()} disabled={retryingRepair}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onRetryRepair()}
+                      disabled={retryingRepair}
+                    >
                       {retryingRepair ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                       Retry routing
                     </Button>
@@ -296,27 +331,15 @@ export default function PhoneNumberPicker({
   }
 
   const numberRow = (n: Available) => (
-    <div
-      key={n.phone_number}
-      className="flex items-center justify-between rounded-lg border bg-muted/30 p-3"
-    >
+    <div key={n.phone_number} className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
       <div>
         <p className="font-medium">{formatUS(n.phone_number)}</p>
         <p className="text-xs text-muted-foreground">
           {[n.locality, n.region].filter(Boolean).join(", ") || n.friendly_name || "US Local"}
         </p>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        onClick={() => purchase(n.phone_number)}
-        disabled={purchasing === n.phone_number}
-      >
-        {purchasing === n.phone_number ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          "Choose"
-        )}
+      <Button type="button" size="sm" onClick={() => void purchase(n.phone_number)} disabled={purchasing === n.phone_number}>
+        {purchasing === n.phone_number ? <Loader2 className="h-4 w-4 animate-spin" /> : "Choose"}
       </Button>
     </div>
   );
@@ -325,9 +348,17 @@ export default function PhoneNumberPicker({
     <div className="space-y-4">
       <Tabs defaultValue="new" className="w-full">
         <TabsList className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-          <TabsTrigger value="new"><Sparkles className="h-3 w-3 mr-1" />New number</TabsTrigger>
-          <TabsTrigger value="byo"><Phone className="h-3 w-3 mr-1" />I have one</TabsTrigger>
-          <TabsTrigger value="forward"><PhoneForwarded className="h-3 w-3 mr-1" />Forward</TabsTrigger>
+          <TabsTrigger value="new">
+            <Sparkles className="h-3 w-3 mr-1" />
+            New number
+          </TabsTrigger>
+          <TabsTrigger value="byo">
+            <Phone className="h-3 w-3 mr-1" />I have one
+          </TabsTrigger>
+          <TabsTrigger value="forward">
+            <PhoneForwarded className="h-3 w-3 mr-1" />
+            Forward
+          </TabsTrigger>
           <TabsTrigger value="test">Test number</TabsTrigger>
         </TabsList>
 
@@ -340,14 +371,12 @@ export default function PhoneNumberPicker({
                 maxLength={3}
                 placeholder="e.g. 305"
                 value={preferredAreaCode}
-                onChange={(e) =>
-                  onAreaCodeChange(e.target.value.replace(/\D/g, "").slice(0, 3))
-                }
+                onChange={(e) => onAreaCodeChange(e.target.value.replace(/\D/g, "").slice(0, 3))}
               />
             </div>
             <Button
               type="button"
-              onClick={searchNumbers}
+              onClick={() => void searchNumbers()}
               disabled={searching || preferredAreaCode.length !== 3}
               className="bg-cta hover:opacity-90"
             >
@@ -358,9 +387,7 @@ export default function PhoneNumberPicker({
 
           {numbers.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Available in {preferredAreaCode}
-              </p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Available in {preferredAreaCode}</p>
               {numbers.map(numberRow)}
             </div>
           )}
@@ -373,21 +400,18 @@ export default function PhoneNumberPicker({
               {nearby.map(numberRow)}
             </div>
           )}
+
+          {fallbackReason && <p className="text-xs text-muted-foreground">Fallback reason: {fallbackReason}</p>}
         </TabsContent>
 
         <TabsContent value="byo" className="space-y-3 pt-3">
           <p className="text-sm text-muted-foreground">
             Already have a business number you'd like to keep? Enter it below and connect it later.
           </p>
-          <Input
-            type="tel"
-            placeholder="(305) 555-1234"
-            value={byoPhone}
-            onChange={(e) => setByoPhone(e.target.value)}
-          />
+          <Input type="tel" placeholder="(305) 555-1234" value={byoPhone} onChange={(e) => setByoPhone(e.target.value)} />
           <Button
             type="button"
-            onClick={() => linkExisting("byo")}
+            onClick={() => void linkExisting("byo")}
             disabled={busyAction === "byo" || byoPhone.replace(/\D/g, "").length < 10}
           >
             {busyAction === "byo" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -397,8 +421,8 @@ export default function PhoneNumberPicker({
 
         <TabsContent value="forward" className="space-y-3 pt-3">
           <p className="text-sm text-muted-foreground">
-            Keep your existing number and forward unanswered calls to Vektuor.
-            We'll show you carrier-specific forwarding steps after this.
+            Keep your existing number and forward unanswered calls to Vektuor. We'll show you carrier-specific forwarding
+            steps after this.
           </p>
           <Input
             type="tel"
@@ -408,7 +432,7 @@ export default function PhoneNumberPicker({
           />
           <Button
             type="button"
-            onClick={() => linkExisting("forward")}
+            onClick={() => void linkExisting("forward")}
             disabled={busyAction === "forward" || byoPhone.replace(/\D/g, "").length < 10}
           >
             {busyAction === "forward" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -418,14 +442,9 @@ export default function PhoneNumberPicker({
 
         <TabsContent value="test" className="space-y-3 pt-3">
           <p className="text-sm text-muted-foreground">
-            Use Vektuor's shared test number for 7 days to demo the AI flow before
-            connecting a real number.
+            Use Vektuor's shared test number for 7 days to demo the AI flow before connecting a real number.
           </p>
-          <Button
-            type="button"
-            onClick={() => linkExisting("test")}
-            disabled={busyAction === "test"}
-          >
+          <Button type="button" onClick={() => void linkExisting("test")} disabled={busyAction === "test"}>
             {busyAction === "test" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Use a temporary test number
           </Button>
@@ -445,7 +464,7 @@ export default function PhoneNumberPicker({
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={retryInitialization}
+                  onClick={() => void retryInitialization()}
                   disabled={retrying || initializing}
                 >
                   {retrying || initializing ? (
@@ -456,9 +475,7 @@ export default function PhoneNumberPicker({
                   Retry Setup Initialization
                 </Button>
               </div>
-              <p className="pl-6 text-xs text-muted-foreground break-words">
-                Details: {initError}
-              </p>
+              <p className="pl-6 text-xs text-muted-foreground break-words">Details: {initError}</p>
             </>
           )}
         </div>
