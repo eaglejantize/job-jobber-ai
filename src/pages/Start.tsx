@@ -81,7 +81,7 @@ export default function Start() {
   useEffect(() => {
     if (!isStripeReturn) return;
     const t = setTimeout(() => {
-      navigate(`/home${location.search}`, { replace: true });
+      navigate(`/dashboard${location.search}`, { replace: true });
     }, 2000);
     return () => clearTimeout(t);
   }, [isStripeReturn, navigate, location.search]);
