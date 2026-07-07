@@ -23,7 +23,6 @@ import OAuthConsent from "./pages/OAuthConsent.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import { RequireAuth, RedirectIfAuthed } from "./components/route-guards";
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
-import OnboardingGate from "./components/OnboardingGate";
 import { Navigate } from "react-router-dom";
 
 const queryClient = new QueryClient();
@@ -45,9 +44,9 @@ const App = () => (
           <Route path="/onboarding" element={<Navigate to="/settings" replace />} />
           <Route path="/settings/concierge" element={<Navigate to="/settings" replace />} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
-          <Route path="/dashboard" element={<RequireAuth><OnboardingGate><Dashboard /></OnboardingGate></RequireAuth>} />
-          <Route path="/home" element={<RequireAuth><OnboardingGate><Home /></OnboardingGate></RequireAuth>} />
-          <Route path="/leads" element={<RequireAuth><OnboardingGate><LeadInbox /></OnboardingGate></RequireAuth>} />
+          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/home" element={<RequireAuth><Home /></RequireAuth>} />
+          <Route path="/leads" element={<RequireAuth><LeadInbox /></RequireAuth>} />
           <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
           <Route path="/support" element={<Support />} />
           <Route path="/trust" element={<Trust />} />

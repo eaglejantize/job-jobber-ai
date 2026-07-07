@@ -48,8 +48,8 @@ export default function SiteNav() {
         <div className="hidden md:flex items-center gap-3">
           <ThemeToggle />
           {user ? (
-            <Button onClick={() => navigate("/dashboard")} className="rounded-xl">
-              Dashboard
+            <Button onClick={() => navigate("/home")} className="rounded-xl">
+              Home
             </Button>
           ) : (
             <>
@@ -98,10 +98,10 @@ export default function SiteNav() {
             ))}
             {user ? (
               <Button
-                onClick={() => { setOpen(false); navigate("/dashboard"); }}
+                onClick={() => { setOpen(false); navigate("/home"); }}
                 className="rounded-xl mt-2"
               >
-                Dashboard
+                Home
               </Button>
             ) : (
               <>

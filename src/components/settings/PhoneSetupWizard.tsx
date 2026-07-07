@@ -104,7 +104,7 @@ export default function PhoneSetupWizard({ clientId, onSaved }: { clientId: stri
     if (error) { toast.error(error.message); return; }
     toast.success("Your agent is live!");
     onSaved?.();
-    navigate("/dashboard");
+    navigate("/home");
   }
 
   return (

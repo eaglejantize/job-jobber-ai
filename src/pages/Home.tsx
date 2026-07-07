@@ -160,11 +160,8 @@ export default function Home() {
 
       if (cancelled) return;
       setClient(data as Client | null);
-      // First-time users: send to Business Lookup onboarding.
-      if (!data || !data.business_name) {
-        navigate("/onboarding", { replace: true });
-        return;
-      }
+      // First-time users see the Home page with a "finish setup" prompt —
+      // never auto-redirect away from Home.
       const isActive = (data?.payment_status ?? "").toLowerCase() === "active";
       const justArrived = params.get("checkout") === "success" || Date.now() - startedAt < 1000;
       if (!isActive && (justArrived || attempts > 0) && attempts < maxAttempts) {

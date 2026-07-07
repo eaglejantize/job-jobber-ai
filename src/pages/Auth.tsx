@@ -20,7 +20,7 @@ export default function Auth() {
   const [resetSentTo, setResetSentTo] = useState<string | null>(null);
 
   const nextParam = params.get("next");
-  const nextTarget = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard";
+  const nextTarget = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/home";
 
   useEffect(() => {
     if (user) navigate(nextTarget, { replace: true });

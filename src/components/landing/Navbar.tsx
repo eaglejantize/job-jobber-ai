@@ -39,8 +39,8 @@ export default function Navbar() {
         </nav>
         <div className="hidden md:flex items-center gap-2">
           {user ? (
-            <Button asChild className="bg-navy hover:bg-navy-deep text-white rounded-xl">
-              <Link to="/dashboard">Dashboard</Link>
+            <Button asChild className="rounded-xl">
+              <Link to="/home">Home</Link>
             </Button>
           ) : (
             <>
@@ -86,11 +86,11 @@ export default function Navbar() {
             <Button
               onClick={() => {
                 setOpen(false);
-                navigate(user ? "/dashboard" : "/auth");
+                navigate(user ? "/home" : "/auth");
               }}
-              className="mt-2 bg-navy hover:bg-navy-deep text-white rounded-xl"
+              className="mt-2 rounded-xl"
             >
-              {user ? "Dashboard" : "Start Free Trial"}
+              {user ? "Home" : "Start Free Trial"}
             </Button>
           </div>
         </div>
