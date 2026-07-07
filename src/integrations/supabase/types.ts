@@ -416,14 +416,6 @@ export type Database = {
           voice_id: string | null
           voice_label: string | null
           voice_speed: string
-          selected_voice_catalog_id: string | null
-          voice_provider: string | null
-          voice_provider_voice_id: string | null
-          voice_provider_agent_id: string | null
-          voice_sync_status: string
-          voice_last_sync_at: string | null
-          voice_last_sync_error: string | null
-          voice_phone_number_snapshot: string | null
           voicemail_enabled: boolean | null
           voicemail_fallback: boolean
           warranty_terms: string | null
@@ -533,14 +525,6 @@ export type Database = {
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
-          selected_voice_catalog_id?: string | null
-          voice_provider?: string | null
-          voice_provider_voice_id?: string | null
-          voice_provider_agent_id?: string | null
-          voice_sync_status?: string
-          voice_last_sync_at?: string | null
-          voice_last_sync_error?: string | null
-          voice_phone_number_snapshot?: string | null
           voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
           warranty_terms?: string | null
@@ -650,14 +634,6 @@ export type Database = {
           voice_id?: string | null
           voice_label?: string | null
           voice_speed?: string
-          selected_voice_catalog_id?: string | null
-          voice_provider?: string | null
-          voice_provider_voice_id?: string | null
-          voice_provider_agent_id?: string | null
-          voice_sync_status?: string
-          voice_last_sync_at?: string | null
-          voice_last_sync_error?: string | null
-          voice_phone_number_snapshot?: string | null
           voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
           warranty_terms?: string | null
@@ -665,14 +641,6 @@ export type Database = {
           webhook_status?: string | null
           webhook_urls?: Json | null
           website?: string | null
-          selected_voice_catalog_id?: string | null
-          voice_provider?: string | null
-          voice_provider_voice_id?: string | null
-          voice_provider_agent_id?: string | null
-          voice_sync_status?: string
-          voice_last_sync_at?: string | null
-          voice_last_sync_error?: string | null
-          voice_phone_number_snapshot?: string | null
         }
         Relationships: []
       }
@@ -921,63 +889,6 @@ export type Database = {
           phone?: string | null
           request_type?: string
           user_id?: string | null
-        }
-        Relationships: []
-      }
-      callcapture_voice_catalog: {
-        Row: {
-          created_at: string
-          customer_category: string
-          description: string | null
-          id: string
-          is_active: boolean
-          label: string
-          local_preview_url: string | null
-          metadata: Json
-          persona: string
-          preview_source: string
-          provider: string
-          provider_preview_url: string | null
-          provider_voice_id: string
-          sort_order: number
-          updated_at: string
-          verified_active: boolean
-        }
-        Insert: {
-          created_at?: string
-          customer_category: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          label: string
-          local_preview_url?: string | null
-          metadata?: Json
-          persona: string
-          preview_source?: string
-          provider: string
-          provider_preview_url?: string | null
-          provider_voice_id: string
-          sort_order?: number
-          updated_at?: string
-          verified_active?: boolean
-        }
-        Update: {
-          created_at?: string
-          customer_category?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          label?: string
-          local_preview_url?: string | null
-          metadata?: Json
-          persona?: string
-          preview_source?: string
-          provider?: string
-          provider_preview_url?: string | null
-          provider_voice_id?: string
-          sort_order?: number
-          updated_at?: string
-          verified_active?: boolean
         }
         Relationships: []
       }
