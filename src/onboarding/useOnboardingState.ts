@@ -43,7 +43,7 @@ export function useOnboardingState() {
       setClientId(row.id);
       setClient(row);
       const saved = (row.onboarding_state ?? null) as OnboardingState | null;
-      const normalized = deriveOnboardingState(row, saved);
+      const normalized = deriveOnboardingState(row as any, saved);
       setState(normalized);
       if (!statesEqual(saved, normalized)) {
         await supabase
@@ -89,7 +89,7 @@ export function useOnboardingState() {
       .select("*")
       .eq("id", clientId)
       .maybeSingle();
-    const latestState = deriveOnboardingState(latest ?? client, state);
+    const latestState = deriveOnboardingState((latest ?? client) as any, state);
     setClient((latest as ClientRow | null) ?? client);
     setState(latestState);
     const readiness = isReadyToActivate(latestState);
