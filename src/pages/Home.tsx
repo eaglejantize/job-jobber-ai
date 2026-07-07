@@ -15,6 +15,7 @@ type Client = {
   setup_status: string;
   payment_status: string;
   subscription_status: string | null;
+  is_super_admin?: boolean | null;
   alert_phone: string;
   business_name: string;
   assigned_callcapture_number?: string | null;
@@ -46,6 +47,40 @@ function timeAgo(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+function normalizeState(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function setupIsIncomplete(status: string): boolean {
+  const normalized = normalizeState(status);
+  return normalized !== "live" && normalized !== "ready" && normalized !== "active";
+}
+
+function requiresPayment(status: string, subscriptionStatus: string | null | undefined): boolean {
+  const payment = normalizeState(status);
+  const subscription = normalizeState(subscriptionStatus);
+  return [
+    "pending",
+    "unpaid",
+    "expired",
+    "past_due",
+    "canceled",
+    "cancelled",
+    "incomplete",
+    "incomplete_expired",
+    "suspended",
+  ].includes(payment)
+    || [
+      "unpaid",
+      "expired",
+      "past_due",
+      "canceled",
+      "cancelled",
+      "incomplete",
+      "incomplete_expired",
+    ].includes(subscription);
 }
 
 export default function Home() {
@@ -133,7 +168,7 @@ export default function Home() {
     const fetchClient = async () => {
       let { data } = await supabase
         .from("callcapture_clients")
-        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
+        .select("id, setup_status, payment_status, subscription_status, is_super_admin, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -142,7 +177,7 @@ export default function Home() {
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
-          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
+          .select("id, setup_status, payment_status, subscription_status, is_super_admin, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -194,10 +229,19 @@ export default function Home() {
   if (loading) return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
   if (!user) return <Navigate to="/auth" replace />;
 
+  const status: string = client?.setup_status
+    ?? (!configFetched ? "Not Started" : hasConfig ? "Live" : "Not Started");
+  const isSuperAdmin = Boolean(client?.is_super_admin);
+  const setupIncomplete = setupIsIncomplete(status);
+  const paymentNeeded =
+    requiresPayment(client?.payment_status ?? "", client?.subscription_status)
+    || (businessExists === false && client === null);
+  const completeSignupTarget = setupIncomplete && !paymentNeeded ? "/settings" : "/start";
+
   // Tenant has signed up + paid but the webhook hasn't created their business
   // row yet (or they haven't paid). Show a "finalizing" screen instead of an
   // empty dashboard. Only triggers when there's also no legacy client row.
-  if (businessExists === false && client === null) {
+  if (businessExists === false && client === null && !isSuperAdmin) {
     const justPaid = params.get("checkout") === "success";
     return (
       <Layout>
@@ -214,8 +258,8 @@ export default function Home() {
             </p>
             {!justPaid && (
               <div className="mt-6">
-                <Button asChild className="bg-cta hover:opacity-90 shadow-glow">
-                  <Link to="/signup">Complete signup</Link>
+                <Button className="bg-cta hover:opacity-90 shadow-glow" onClick={() => navigate(completeSignupTarget)}>
+                  Complete signup
                 </Button>
               </div>
             )}
@@ -226,8 +270,6 @@ export default function Home() {
   }
 
   const paymentActive = (client?.payment_status ?? "").toLowerCase() === "active";
-  const status: string = client?.setup_status
-    ?? (!configFetched ? "Not Started" : hasConfig ? "Live" : "Not Started");
 
   const statusColor = status === "Live" || status === "Ready"
     ? "bg-primary text-primary-foreground"
