@@ -175,7 +175,7 @@ export default function Start() {
           title: "Trial activated",
           description: "30 days free — no payment required.",
         });
-        navigate("/dashboard", { replace: true });
+        navigate("/home", { replace: true });
         return;
       }
 

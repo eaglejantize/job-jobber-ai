@@ -24,7 +24,7 @@ export function RedirectIfAuthed({ children }: { children: ReactNode }) {
   if (loading) return <FullPageLoader />;
   if (user) {
     const next = params.get("next");
-    const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
     return <Navigate to={safe} replace />;
   }
   return <>{children}</>;

@@ -90,7 +90,7 @@ export default function ConciergePage() {
   async function saveAndExit() {
     await ctx.persist();
     toast({ title: "Progress saved", description: "You can pick up where you left off." });
-    navigate("/dashboard");
+    navigate("/home");
   }
   async function applyChanges() {
     setApplying(true);

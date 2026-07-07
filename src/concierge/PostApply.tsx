@@ -42,7 +42,7 @@ export default function PostApply({ clientId }: { clientId: string | null }) {
 
   async function goLive() {
     await sync();
-    navigate("/dashboard");
+    navigate("/home");
   }
 
   const reqRows = REQUIRED_FOR_ACTIVATION;
