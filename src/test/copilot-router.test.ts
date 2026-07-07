@@ -189,21 +189,33 @@ describe("copilot command router", () => {
       currentCallId: "call-1",
     });
 
-    const persistJobNote = vi.fn(async () => ({ success: true, error: null }));
+    const executeMutatingAction = vi.fn(async () => ({
+      status: "success" as const,
+      message: "Job note added.",
+      details: "customer requested shoe covers",
+      policyReason: "Mutate action executed with confirmed single-use token.",
+      auditLogId: "audit-mutate-2",
+      auditLogError: null,
+    }));
+
     const first = await routeCommand({
       commandText: "add job note: customer requested shoe covers",
       userId: "user-1",
       clientId: "client-1",
       context,
+      issueConfirmationToken: async () => ({
+        tokenId: "server-token-1",
+        expiresAt: "2026-07-07T00:10:00.000Z",
+        error: null,
+      }),
       fetchAllowedActions: async () => allowAllRows(),
       writeExecutionAudit: async () => ({ id: "audit-mutate-1", error: null }),
-      mutationAdapters: { persistJobNote },
     });
 
     expect(first.status).toBe("blocked");
     expect(first.requiresConfirmation).toBe(true);
-    expect(first.confirmationToken).toBeTruthy();
-    expect(persistJobNote).toHaveBeenCalledTimes(0);
+    expect(first.confirmationToken).toBe("server-token-1");
+    expect(executeMutatingAction).toHaveBeenCalledTimes(0);
 
     const second = await routeCommand({
       commandText: "add job note: customer requested shoe covers",
@@ -211,14 +223,14 @@ describe("copilot command router", () => {
       clientId: "client-1",
       context,
       confirmationToken: first.confirmationToken,
+      executeMutatingAction,
       fetchAllowedActions: async () => allowAllRows(),
       writeExecutionAudit: async () => ({ id: "audit-mutate-2", error: null }),
-      mutationAdapters: { persistJobNote },
     });
 
     expect(second.status).toBe("success");
     expect(second.intentKey).toBe("add_job_note");
-    expect(persistJobNote).toHaveBeenCalledTimes(1);
+    expect(executeMutatingAction).toHaveBeenCalledTimes(1);
   });
 
   it("blocks add job note when confirmation token is invalid", async () => {
@@ -227,21 +239,29 @@ describe("copilot command router", () => {
       currentCallId: "call-1",
     });
 
-    const persistJobNote = vi.fn(async () => ({ success: true, error: null }));
+    const executeMutatingAction = vi.fn(async () => ({
+      status: "blocked" as const,
+      message: "Confirmation failed. Please run the command again.",
+      details: undefined,
+      policyReason: "Confirmation token is invalid, expired, or already used.",
+      auditLogId: null,
+      auditLogError: null,
+    }));
+
     const result = await routeCommand({
       commandText: "add job note: use side entrance",
       userId: "user-1",
       clientId: "client-1",
       context,
       confirmationToken: "invalid-token",
+      executeMutatingAction,
       fetchAllowedActions: async () => allowAllRows(),
       writeExecutionAudit: async () => ({ id: "audit-mutate-invalid", error: null }),
-      mutationAdapters: { persistJobNote },
     });
 
     expect(result.status).toBe("blocked");
-    expect(result.policyReason).toContain("invalid or expired");
-    expect(persistJobNote).toHaveBeenCalledTimes(0);
+    expect(result.policyReason).toContain("invalid");
+    expect(executeMutatingAction).toHaveBeenCalledTimes(1);
   });
 
   it("audits both confirmation request and confirmed mutate execution", async () => {
@@ -249,7 +269,14 @@ describe("copilot command router", () => {
       id: "audit-mutate-series",
       error: null,
     }));
-    const persistJobNote = vi.fn(async () => ({ success: true, error: null }));
+    const executeMutatingAction = vi.fn(async () => ({
+      status: "success" as const,
+      message: "Job note added.",
+      details: "customer has a gate code",
+      policyReason: "Mutate action executed with confirmed single-use token.",
+      auditLogId: "audit-mutate-series-server",
+      auditLogError: null,
+    }));
     const context = resolveCopilotContext({
       calls: makeCalls(),
       currentCallId: "call-1",
@@ -260,9 +287,13 @@ describe("copilot command router", () => {
       userId: "user-1",
       clientId: "client-1",
       context,
+      issueConfirmationToken: async () => ({
+        tokenId: "server-token-2",
+        expiresAt: "2026-07-07T00:10:00.000Z",
+        error: null,
+      }),
       fetchAllowedActions: async () => allowAllRows(),
       writeExecutionAudit,
-      mutationAdapters: { persistJobNote },
     });
 
     await routeCommand({
@@ -271,13 +302,13 @@ describe("copilot command router", () => {
       clientId: "client-1",
       context,
       confirmationToken: first.confirmationToken,
+      executeMutatingAction,
       fetchAllowedActions: async () => allowAllRows(),
       writeExecutionAudit,
-      mutationAdapters: { persistJobNote },
     });
 
-    expect(writeExecutionAudit).toHaveBeenCalledTimes(2);
+    expect(writeExecutionAudit).toHaveBeenCalledTimes(1);
     expect(writeExecutionAudit.mock.calls[0][0].status).toBe("blocked");
-    expect(writeExecutionAudit.mock.calls[1][0].status).toBe("success");
+    expect(executeMutatingAction).toHaveBeenCalledTimes(1);
   });
 });

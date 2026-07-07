@@ -47,6 +47,46 @@ export type FetchAllowedActions = (
   clientId: string | null,
 ) => Promise<AllowedActionRow[]>;
 
+export type IssueConfirmationTokenInput = {
+  actionKey: CopilotActionKey;
+  commandText: string;
+  userId: string;
+  clientId: string | null;
+  context: CopilotContext;
+};
+
+export type IssueConfirmationTokenResult = {
+  tokenId: string;
+  expiresAt: string;
+  error?: string | null;
+};
+
+export type IssueConfirmationToken = (
+  input: IssueConfirmationTokenInput,
+) => Promise<IssueConfirmationTokenResult>;
+
+export type ExecuteMutatingActionInput = {
+  tokenId: string;
+  actionKey: CopilotActionKey;
+  commandText: string;
+  userId: string;
+  clientId: string | null;
+  context: CopilotContext;
+};
+
+export type ExecuteMutatingActionResult = {
+  status: CopilotExecutionStatus;
+  message: string;
+  details?: string;
+  policyReason: string | null;
+  auditLogId: string | null;
+  auditLogError: string | null;
+};
+
+export type ExecuteMutatingAction = (
+  input: ExecuteMutatingActionInput,
+) => Promise<ExecuteMutatingActionResult>;
+
 export type CopilotActionExecutionInput = {
   context: CopilotContext;
   commandText: string;
@@ -92,6 +132,8 @@ export type RouteCommandInput = {
   fetchAllowedActions?: FetchAllowedActions;
   writeExecutionAudit?: WriteExecutionAudit;
   mutationAdapters?: CopilotActionExecutionInput["mutationAdapters"];
+  issueConfirmationToken?: IssueConfirmationToken;
+  executeMutatingAction?: ExecuteMutatingAction;
 };
 
 export type RouteCommandResult = {
@@ -104,6 +146,7 @@ export type RouteCommandResult = {
   navigationTargetCallId?: string;
   requiresConfirmation?: boolean;
   confirmationToken?: string;
+  confirmationExpiresAt?: string;
   auditLogId: string | null;
   auditLogError: string | null;
 };

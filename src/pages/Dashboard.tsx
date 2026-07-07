@@ -34,7 +34,7 @@ export default function Dashboard() {
   const [clientFetched, setClientFetched] = useState(false);
   const [isCommandRunning, setIsCommandRunning] = useState(false);
   const [commandResult, setCommandResult] = useState<RouteCommandResult | null>(null);
-  const [pendingConfirmation, setPendingConfirmation] = useState<{ commandText: string; token: string } | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ commandText: string; tokenId: string } | null>(null);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const seenLeadsRef = useRef<Set<string>>(new Set());
   const fieldCopilotEnabled = String(import.meta.env.VITE_ENABLE_FIELD_COPILOT ?? "").toLowerCase() === "true";
@@ -118,48 +118,6 @@ export default function Dashboard() {
         currentCallId: selectedId,
       });
 
-      const persistJobNote = async (input: { callId: string; noteText: string; userId: string }) => {
-        const { data: callRow, error: selectError } = await supabase
-          .from("callcapture_calls")
-          .select("metadata")
-          .eq("id", input.callId)
-          .maybeSingle();
-
-        if (selectError) {
-          return { success: false, error: selectError.message };
-        }
-
-        const metadata = (callRow as { metadata?: Record<string, unknown> | null } | null)?.metadata ?? {};
-        const existingNotes = Array.isArray(metadata.assistant_job_notes) ? metadata.assistant_job_notes : [];
-        const updatedMetadata = {
-          ...metadata,
-          assistant_job_notes: [
-            ...existingNotes,
-            {
-              text: input.noteText,
-              author_user_id: input.userId,
-              created_at: new Date().toISOString(),
-            },
-          ],
-        };
-
-        let query = supabase
-          .from("callcapture_calls")
-          .update({ metadata: updatedMetadata })
-          .eq("id", input.callId);
-
-        if (clientId) {
-          query = query.eq("client_id", clientId);
-        }
-
-        const { error: updateError } = await query;
-        if (updateError) {
-          return { success: false, error: updateError.message };
-        }
-
-        return { success: true, error: null };
-      };
-
       const result = await routeCommand({
         commandText,
         userId: user.id,
@@ -205,15 +163,92 @@ export default function Dashboard() {
             error: error?.message ?? null,
           };
         },
-        mutationAdapters: {
-          persistJobNote,
+        issueConfirmationToken: async (request) => {
+          const { data, error } = await supabase.functions.invoke("copilot-command-execute", {
+            body: {
+              mode: "issue_token",
+              action_key: request.actionKey,
+              command_text: request.commandText,
+              client_id: request.clientId,
+              call_id: request.context.currentCallId,
+            },
+          });
+
+          if (error) {
+            return {
+              tokenId: "",
+              expiresAt: "",
+              error: error.message,
+            };
+          }
+
+          const payload = (data as {
+            ok?: boolean;
+            token_id?: string;
+            expires_at?: string;
+            error?: string;
+          } | null) ?? null;
+
+          if (!payload?.ok || !payload.token_id || !payload.expires_at) {
+            return {
+              tokenId: "",
+              expiresAt: "",
+              error: payload?.error ?? "Failed to issue confirmation token.",
+            };
+          }
+
+          return {
+            tokenId: payload.token_id,
+            expiresAt: payload.expires_at,
+            error: null,
+          };
+        },
+        executeMutatingAction: async (request) => {
+          const { data, error } = await supabase.functions.invoke("copilot-command-execute", {
+            body: {
+              mode: "confirm_execute",
+              token_id: request.tokenId,
+              action_key: request.actionKey,
+              command_text: request.commandText,
+              client_id: request.clientId,
+              call_id: request.context.currentCallId,
+            },
+          });
+
+          if (error) {
+            return {
+              status: "error",
+              message: "Command execution failed.",
+              policyReason: "Failed to reach secure command execution service.",
+              auditLogId: null,
+              auditLogError: error.message,
+            };
+          }
+
+          const payload = (data as {
+            status?: "success" | "blocked" | "error";
+            message?: string;
+            details?: string;
+            policy_reason?: string | null;
+            audit_log_id?: string | null;
+            audit_log_error?: string | null;
+          } | null) ?? null;
+
+          return {
+            status: payload?.status ?? "error",
+            message: payload?.message ?? "Command execution failed.",
+            details: payload?.details,
+            policyReason: payload?.policy_reason ?? null,
+            auditLogId: payload?.audit_log_id ?? null,
+            auditLogError: payload?.audit_log_error ?? null,
+          };
         },
       });
 
       if (result.requiresConfirmation && result.confirmationToken) {
         setPendingConfirmation({
           commandText,
-          token: result.confirmationToken,
+          tokenId: result.confirmationToken,
         });
         setConfirmationOpen(true);
       }
@@ -235,7 +270,7 @@ export default function Dashboard() {
   async function confirmPendingCommand() {
     if (!pendingConfirmation) return;
     setConfirmationOpen(false);
-    await runCommand(pendingConfirmation.commandText, pendingConfirmation.token);
+    await runCommand(pendingConfirmation.commandText, pendingConfirmation.tokenId);
     setPendingConfirmation(null);
   }
 
