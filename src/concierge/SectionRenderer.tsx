@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import IndustryCombobox from "@/settings/IndustryCombobox";
+import { findIndustryGroup } from "@/lib/industries";
 import VoicePicker from "@/components/VoicePicker";
 import { TestCallButton } from "@/components/TestCallButton";
 import ActionBar from "./ActionBar";
@@ -94,6 +95,25 @@ export default function SectionRenderer({
               />
             </div>
           ))}
+          <div className="space-y-2">
+            <Label>
+              Industry{isPending(ctx, "industry") && <Suggested />}
+            </Label>
+            <IndustryCombobox
+              value={String(getValue(ctx, "industry") ?? "")}
+              onChange={(industry, group) => {
+                set("industry", industry);
+                set("business_category_group", group);
+              }}
+            />
+            {(() => {
+              const ind = String(getValue(ctx, "industry") ?? "");
+              const g = findIndustryGroup(ind);
+              return g ? (
+                <p className="text-xs text-muted-foreground">Group: {g.label}</p>
+              ) : null;
+            })()}
+          </div>
         </div>
       );
 
