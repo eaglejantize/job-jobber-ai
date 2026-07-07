@@ -125,7 +125,7 @@ export default function Dashboard() {
         context,
         confirmationToken: confirmationToken ?? null,
         fetchAllowedActions: async (actionKey, tenantClientId) => {
-          let query = supabase
+          let query = (supabase as any)
             .from("allowed_actions")
             .select("action_key, role, client_id, is_enabled")
             .eq("action_key", actionKey)
@@ -138,10 +138,10 @@ export default function Dashboard() {
           }
 
           const { data } = await query;
-          return ((data ?? []) as AllowedActionRow[]).filter((row) => row.role === "authenticated");
+          return ((data ?? []) as unknown as AllowedActionRow[]).filter((row) => row.role === "authenticated");
         },
         writeExecutionAudit: async (record) => {
-          const { data, error } = await supabase
+          const { data, error } = await (supabase as any)
             .from("command_execution_log")
             .insert({
               user_id: record.userId,
