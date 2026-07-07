@@ -35,7 +35,7 @@ export default function IntegrationsTab({ ctx }: { ctx: UseControlCenterData }) 
     { id: "zapier", name: "Zapier", description: "Connect to 6,000+ apps.", icon: Zap, status: "coming_soon" },
   ];
 
-  const webhooks: string[] = data.webhook_urls || [];
+  const webhooks: string[] = (data.webhook_urls as unknown as string[]) || [];
 
   async function connectCalendar() {
     setConnectingCal(true);

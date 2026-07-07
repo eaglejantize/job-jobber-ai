@@ -32,7 +32,7 @@ export default function AnalyticsTab({ ctx }: { ctx: UseControlCenterData }) {
         .eq("client_id", clientId);
       const rows = (calls ?? []) as CallRow[];
       const total = rows.length;
-      const answered = rows.filter((r) => r.status !== "missed" && r.status !== "failed").length;
+      const answered = rows.filter((r) => (r.status as string) !== "missed" && (r.status as string) !== "failed").length;
       const missed = total - answered;
       const durations = rows.map((r) => Number(r.duration_seconds) || 0);
       const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;

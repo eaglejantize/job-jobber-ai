@@ -150,7 +150,7 @@ export default function BusinessTab({ ctx }: { ctx: UseControlCenterData }) {
           <Textarea
             placeholder="When are emergency calls accepted? Any surcharge? Eligibility rules?"
             value={notesValue(data.emergency_rules)}
-            onChange={(e) => update({ emergency_rules: { ...(data.emergency_rules || {}), notes: e.target.value } })}
+            onChange={(e) => update({ emergency_rules: { ...((data.emergency_rules as Record<string, unknown>) || {}), notes: e.target.value } })}
           />
         )}
       </section>

@@ -8,7 +8,7 @@ export function useControlCenterData() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [clientId, setClientId] = useState<string | null>(null);
-  const [data, setData] = useState<ClientData>({});
+  const [data, setData] = useState<ClientData>({} as ClientData);
 
   const load = useCallback(async () => {
     setLoading(true);

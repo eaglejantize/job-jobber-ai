@@ -12,7 +12,7 @@ type Faq = { q: string; a: string };
 export default function KnowledgeTab({ ctx }: { ctx: UseControlCenterData }) {
   const { data, update, save, saving } = ctx;
   const services: string[] = data.services || [];
-  const faqs: Faq[] = data.faqs || [];
+  const faqs: Faq[] = (data.faqs as unknown as Faq[]) || [];
   const brands: string[] = data.brands_serviced || [];
 
   async function onSave() {
