@@ -5,10 +5,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { questionsForIndustry, UNIVERSAL_QUESTIONS } from "@/lib/intakeQuestions";
-import { industryLabel } from "@/lib/industries";
+import { INDUSTRIES, industryLabel } from "@/lib/industries";
 import VoicePicker from "@/components/VoicePicker";
 import { TestCallButton } from "@/components/TestCallButton";
 import ServanaHqSettings from "@/components/settings/ServanaHqSettings";
@@ -79,6 +86,7 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
     if (!c) return;
     setSaving(true);
     const { error } = await supabase.from("callcapture_clients").update({
+      industry: c.industry,
       greeting: c.greeting,
       include_business_name: c.include_business_name,
       human_pause: c.human_pause,
@@ -114,6 +122,30 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
       <div className="rounded-lg border border-border bg-secondary/30 px-4 py-2 text-xs">
         Current industry: <span className="font-semibold text-foreground">{industryLabel(c.industry) ?? "—"}</span>
       </div>
+
+      {/* Industry */}
+      <section className="space-y-3">
+        <h3 className="text-base font-semibold">Industry</h3>
+        <p className="text-xs text-muted-foreground">Select the industry used for prompts and defaults.</p>
+        <div className="max-w-sm">
+          <Select
+            value={c.industry ?? undefined}
+            onValueChange={(value) => update("industry", value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select your industry" />
+            </SelectTrigger>
+            <SelectContent>
+              {INDUSTRIES.map((industry) => (
+                <SelectItem key={industry.value} value={industry.value}>
+                  {industry.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </section>
+
       {/* Greeting */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
