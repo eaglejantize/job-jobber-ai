@@ -71,8 +71,8 @@ describe("Voice System Acceptance Tests", () => {
 
     it("should detect provider voice mismatch between preview and live", () => {
       // Scenario: Voice was changed in Vapi, but client state hasn't synced
-      const catalogedVoiceId = "vapi-sarah-001";
-      const actualVapiVoiceId = "vapi-john-002"; // Mismatch!
+      const catalogedVoiceId: string = "vapi-sarah-001";
+      const actualVapiVoiceId: string = "vapi-john-002"; // Mismatch!
 
       // Mismatch detection
       const mismatchDetected = catalogedVoiceId !== actualVapiVoiceId;
@@ -321,12 +321,12 @@ describe("Voice System Acceptance Tests", () => {
       const selectedVoice = catalog[0];
 
       // Step 2: System stores selection and marks pending
-      let clientData = {
+      let clientData: any = {
         selected_voice_catalog_id: selectedVoice.id,
         voice_label: selectedVoice.label,
         voice_provider: selectedVoice.provider,
         voice_provider_voice_id: selectedVoice.provider_voice_id,
-        voice_sync_status: "pending" as const,
+        voice_sync_status: "pending",
         voice_last_sync_at: null as string | null,
         voice_last_sync_error: null as string | null,
       };
@@ -376,10 +376,10 @@ describe("Voice System Acceptance Tests", () => {
       };
 
       // Initial selection
-      let clientData = {
+      let clientData: any = {
         selected_voice_catalog_id: selectedVoice.id,
         voice_provider_voice_id: selectedVoice.provider_voice_id,
-        voice_sync_status: "pending" as const,
+        voice_sync_status: "pending",
         voice_last_sync_error: null as string | null,
       };
 

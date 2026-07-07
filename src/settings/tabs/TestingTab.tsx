@@ -105,7 +105,7 @@ export default function TestingTab({ ctx }: { ctx: UseControlCenterData }) {
                     {turns.map((t) => (
                       <p key={t.id}>
                         <span className="font-semibold capitalize">{t.role}: </span>
-                        {t.content}
+                        {t.text}
                       </p>
                     ))}
                   </div>
