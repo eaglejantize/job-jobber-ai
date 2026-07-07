@@ -111,7 +111,7 @@ export default function LeadInbox() {
         return;
       }
 
-      setLeads((data ?? []) as Lead[]);
+      setLeads((data ?? []) as unknown as Lead[]);
     })();
 
     return () => {
