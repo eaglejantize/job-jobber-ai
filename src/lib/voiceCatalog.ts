@@ -44,17 +44,11 @@ function toLegacyFallback(): VoiceCatalogOption[] {
 }
 
 export async function loadCuratedVoices(): Promise<{ voices: VoiceCatalogOption[]; source: "catalog" | "legacy" }> {
-  const { data, error } = await (supabase
-    .from("callcapture_voice_catalog" as never) as {
-      select: (columns: string) => {
-        eq: (column: string, value: boolean) => {
-          order: (column: string, opts: { ascending: boolean }) => Promise<{ data: VoiceCatalogOption[] | null; error: { message: string } | null }>;
-        };
-      };
-    })
+  const { data, error } = await ((supabase as any)
+    .from("callcapture_voice_catalog"))
     .select("id, customer_category, label, persona, provider, provider_voice_id, provider_preview_url, local_preview_url, preview_source, description, verified_active, is_active, sort_order")
     .eq("is_active", true)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true }) as { data: VoiceCatalogOption[] | null; error: { message: string } | null };
 
   if (error || !data || data.length === 0) {
     return { voices: toLegacyFallback(), source: "legacy" };

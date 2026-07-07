@@ -168,8 +168,7 @@ export default function Home() {
     const startedAt = Date.now();
 
     const fetchClient = async () => {
-      let { data } = await supabase
-        .from("callcapture_clients")
+      let { data } = await (supabase.from("callcapture_clients") as any)
         .select("id, setup_status, payment_status, subscription_status, is_super_admin, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
@@ -177,8 +176,7 @@ export default function Home() {
         .maybeSingle();
 
       if (!data && user.email) {
-        const { data: byEmail } = await supabase
-          .from("callcapture_clients")
+        const { data: byEmail } = await (supabase.from("callcapture_clients") as any)
           .select("id, setup_status, payment_status, subscription_status, is_super_admin, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })

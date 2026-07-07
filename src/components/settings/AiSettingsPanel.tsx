@@ -50,11 +50,11 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("callcapture_clients")
+      const { data } = await (supabase.from("callcapture_clients") as any)
         .select("id, business_name, industry, greeting, include_business_name, human_pause, voice_id, voice_label, selected_voice_catalog_id, voice_provider, voice_provider_voice_id, voice_sync_status, voice_last_sync_error, intake_questions, tone")
         .eq("id", clientId).maybeSingle();
       if (data) {
-        const row = data as ClientRow;
+        const row = data as unknown as ClientRow;
         if (!row.intake_questions || row.intake_questions.length === 0) {
           row.intake_questions = questionsForIndustry(row.industry);
         }
@@ -85,7 +85,7 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
   async function save() {
     if (!c) return;
     setSaving(true);
-    const { error } = await supabase.from("callcapture_clients").update({
+    const { error } = await (supabase.from("callcapture_clients") as any).update({
       industry: c.industry,
       greeting: c.greeting,
       include_business_name: c.include_business_name,
@@ -97,7 +97,7 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
       voice_provider_voice_id: c.voice_provider_voice_id,
       voice_sync_status: "pending",
       voice_last_sync_error: null,
-      intake_questions: c.intake_questions as never,
+      intake_questions: c.intake_questions,
       tone: c.tone,
     }).eq("id", c.id);
     setSaving(false);

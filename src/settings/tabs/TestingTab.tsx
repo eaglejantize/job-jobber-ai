@@ -4,6 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { TestCallButton } from "@/components/TestCallButton";
 import { supabase } from "@/integrations/supabase/client";
 import { UseControlCenterData } from "../useControlCenterData";
+import type { Tables } from "@/integrations/supabase/types";
 
 type CallRow = {
   id: string;
@@ -104,7 +105,7 @@ export default function TestingTab({ ctx }: { ctx: UseControlCenterData }) {
                     {turns.map((t) => (
                       <p key={t.id}>
                         <span className="font-semibold capitalize">{t.role}: </span>
-                        {t.content}
+                        {t.text}
                       </p>
                     ))}
                   </div>

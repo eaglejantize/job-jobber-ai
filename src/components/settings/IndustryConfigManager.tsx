@@ -77,15 +77,15 @@ export default function IndustryConfigManager() {
   async function loadDefinitions() {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("callcapture_industry_definitions")
         .select("*")
         .order("sort_order", { ascending: true });
 
       if (error) throw error;
-      setDefinitions((data as IndustryDefinition[]) ?? []);
+      setDefinitions((data as unknown as IndustryDefinition[]) ?? []);
       if (!selectedDef && data && data.length > 0) {
-        setSelectedDef(data[0] as IndustryDefinition);
+        setSelectedDef(data[0] as unknown as IndustryDefinition);
       }
     } catch (err) {
       toast({
@@ -100,14 +100,14 @@ export default function IndustryConfigManager() {
 
   async function loadWorkflows(defId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("callcapture_industry_workflows")
         .select("*")
         .eq("industry_definition_id", defId)
         .order("is_default", { ascending: false });
 
       if (error) throw error;
-      setWorkflows((data as IndustryWorkflow[]) ?? []);
+      setWorkflows((data as unknown as IndustryWorkflow[]) ?? []);
     } catch (err) {
       toast({
         title: "Failed to load workflows",
@@ -179,13 +179,13 @@ export default function IndustryConfigManager() {
       };
 
       const { data, error } = editingDef
-        ? await supabase
+        ? await (supabase as any)
             .from("callcapture_industry_definitions")
             .update(payload)
             .eq("id", editingDef.id)
             .select()
             .single()
-        : await supabase.from("callcapture_industry_definitions").insert(payload).select().single();
+        : await (supabase as any).from("callcapture_industry_definitions").insert(payload).select().single();
 
       if (error) throw error;
 
@@ -260,11 +260,11 @@ export default function IndustryConfigManager() {
       };
 
       const { error } = editingWorkflow
-        ? await supabase
+        ? await (supabase as any)
             .from("callcapture_industry_workflows")
             .update(payload)
             .eq("id", editingWorkflow.id)
-        : await supabase.from("callcapture_industry_workflows").insert(payload);
+        : await (supabase as any).from("callcapture_industry_workflows").insert(payload);
 
       if (error) throw error;
 

@@ -606,7 +606,7 @@ export default function SectionRenderer({
           <Label>Diagnostic / service fee (USD){isPending(ctx, "diagnostic_fee") && <Suggested />}</Label>
           <Input
             type="number"
-            value={v ?? ""}
+            value={(v as number | string | null | undefined) ?? ""}
             onChange={(e) => set("diagnostic_fee", e.target.value ? Number(e.target.value) : null)}
             placeholder="89"
           />
