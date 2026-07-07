@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate, Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Navigate, Link, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Phone, Loader2, Settings as SettingsIcon, ArrowRight, Inbox } from "lucide-react";
@@ -9,12 +9,19 @@ import { toast } from "@/hooks/use-toast";
 import CallDemoButton from "@/components/CallDemoButton";
 import { Badge } from "@/components/ui/badge";
 import { getVoiceById, getVoiceByLabel } from "@/lib/voices";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import {
+  resolvePostAuthNavigationTarget,
+  resolvePostAuthRoute,
+} from "@/lib/resolvePostAuthRoute";
 
 type Client = {
   id: string;
   setup_status: string;
   payment_status: string;
   subscription_status: string | null;
+  is_super_admin?: boolean | null;
+  onboarding_completed_at?: string | null;
   alert_phone: string;
   business_name: string;
   assigned_callcapture_number?: string | null;
@@ -50,8 +57,10 @@ function timeAgo(iso: string): string {
 
 export default function Home() {
   const { user, loading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [params, setParams] = useSearchParams();
   const [client, setClient] = useState<Client | null>(null);
+  const [clientResolved, setClientResolved] = useState(false);
   const [businessExists, setBusinessExists] = useState<boolean | null>(null);
   const [hasConfig, setHasConfig] = useState(false);
   const [configFetched, setConfigFetched] = useState(false);
@@ -59,6 +68,7 @@ export default function Home() {
   const [polling, setPolling] = useState(false);
   const toastedRef = useRef(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (params.get("checkout") === "success" && !toastedRef.current) {
@@ -133,7 +143,7 @@ export default function Home() {
     const fetchClient = async () => {
       let { data } = await supabase
         .from("callcapture_clients")
-        .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
+        .select("id, setup_status, payment_status, subscription_status, is_super_admin, onboarding_completed_at, alert_phone, business_name, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -142,7 +152,7 @@ export default function Home() {
       if (!data && user.email) {
         const { data: byEmail } = await supabase
           .from("callcapture_clients")
-          .select("id, setup_status, payment_status, subscription_status, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
+          .select("id, setup_status, payment_status, subscription_status, is_super_admin, onboarding_completed_at, alert_phone, business_name, user_id, assigned_callcapture_number, number_status, business_phone, voice_id, voice_label, voice_sync_status, voice_last_sync_error, ai_personality, rings_before_answer")
           .ilike("email", user.email)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -160,6 +170,7 @@ export default function Home() {
 
       if (cancelled) return;
       setClient(data as Client | null);
+      setClientResolved(true);
       // First-time users see the Home page with a "finish setup" prompt —
       // never auto-redirect away from Home.
       const isActive = (data?.payment_status ?? "").toLowerCase() === "active";
@@ -191,13 +202,138 @@ export default function Home() {
     return () => { supabase.removeChannel(channel); };
   }, [client?.id]);
 
-  if (loading) return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
+  const status: string = client?.setup_status
+    ?? (!configFetched ? "Not Started" : hasConfig ? "Live" : "Not Started");
+
+  const routeDecision = resolvePostAuthRoute({
+    isSuperAdmin: isAdmin || client?.is_super_admin,
+    isAdminTest: false,
+    hasClient: Boolean(client),
+    hasBusiness: businessExists === true,
+    paymentStatus: client?.payment_status,
+    subscriptionStatus: client?.subscription_status,
+    setupStatus: status,
+    onboardingCompletedAt: client?.onboarding_completed_at,
+  });
+
+  const resolvedTarget = resolvePostAuthNavigationTarget(routeDecision, location.pathname);
+  const paymentState = (client?.payment_status ?? "").toLowerCase();
+  const subscriptionState = (client?.subscription_status ?? "").toLowerCase();
+  const shouldShowBillingGate =
+    clientResolved
+    && businessExists !== null
+    && routeDecision.reasonCode === "billing_required"
+    && location.pathname === "/home";
+
+  useEffect(() => {
+    if (!clientResolved || businessExists === null) return;
+
+    console.info("[post-auth-route:resolved]", {
+      role: routeDecision.role,
+      isAdminTest: false,
+      paymentStatus: paymentState,
+      subscriptionStatus: subscriptionState,
+      setupStatus: status,
+      setupComplete: routeDecision.setupComplete,
+      destination: routeDecision.destination,
+      chosenDestination: resolvedTarget,
+      reasonCode: routeDecision.reasonCode,
+      pathname: location.pathname,
+    });
+
+    if (routeDecision.destination === location.pathname && resolvedTarget !== location.pathname) {
+      console.warn("[post-auth-route:no-op]", {
+        role: routeDecision.role,
+        paymentStatus: paymentState,
+        subscriptionStatus: subscriptionState,
+        setupStatus: status,
+        setupComplete: routeDecision.setupComplete,
+        destination: routeDecision.destination,
+        chosenDestination: resolvedTarget,
+        reasonCode: routeDecision.reasonCode,
+      });
+    }
+  }, [
+    businessExists,
+    clientResolved,
+    location.pathname,
+    paymentState,
+    resolvedTarget,
+    routeDecision.destination,
+    routeDecision.reasonCode,
+    routeDecision.role,
+    routeDecision.setupComplete,
+    status,
+    subscriptionState,
+  ]);
+
+  useEffect(() => {
+    if (!clientResolved || businessExists === null) return;
+    if (location.pathname !== "/home") return;
+    if (routeDecision.reasonCode !== "setup_incomplete") return;
+    if (resolvedTarget === location.pathname) return;
+
+    console.info("[post-auth-route:redirect]", {
+      role: routeDecision.role,
+      paymentStatus: paymentState,
+      subscriptionStatus: subscriptionState,
+      setupStatus: status,
+      setupComplete: routeDecision.setupComplete,
+      destination: resolvedTarget,
+      reasonCode: routeDecision.reasonCode,
+    });
+
+    navigate(resolvedTarget, { replace: true });
+  }, [
+    businessExists,
+    clientResolved,
+    location.pathname,
+    navigate,
+    paymentState,
+    resolvedTarget,
+    routeDecision.reasonCode,
+    routeDecision.role,
+    routeDecision.setupComplete,
+    status,
+    subscriptionState,
+  ]);
+
+  function handleCompleteSignup() {
+    console.info("[post-auth-route:cta]", {
+      role: routeDecision.role,
+      isAdminTest: false,
+      paymentStatus: paymentState,
+      subscriptionStatus: subscriptionState,
+      setupStatus: status,
+      setupComplete: routeDecision.setupComplete,
+      destination: resolvedTarget,
+      reasonCode: routeDecision.reasonCode,
+      pathname: location.pathname,
+    });
+
+    if (routeDecision.destination === location.pathname && resolvedTarget !== location.pathname) {
+      console.warn("[post-auth-route:cta-no-op]", {
+        role: routeDecision.role,
+        paymentStatus: paymentState,
+        subscriptionStatus: subscriptionState,
+        setupStatus: status,
+        setupComplete: routeDecision.setupComplete,
+        destination: routeDecision.destination,
+        chosenDestination: resolvedTarget,
+        reasonCode: routeDecision.reasonCode,
+      });
+    }
+
+    navigate(resolvedTarget);
+  }
+
+  if (loading || adminLoading) return <Layout><div className="container py-20 text-muted-foreground">Loading…</div></Layout>;
   if (!user) return <Navigate to="/auth" replace />;
 
   // Tenant has signed up + paid but the webhook hasn't created their business
   // row yet (or they haven't paid). Show a "finalizing" screen instead of an
   // empty dashboard. Only triggers when there's also no legacy client row.
-  if (businessExists === false && client === null) {
+  if (shouldShowBillingGate) {
     const justPaid = params.get("checkout") === "success";
     return (
       <Layout>
@@ -214,8 +350,8 @@ export default function Home() {
             </p>
             {!justPaid && (
               <div className="mt-6">
-                <Button asChild className="bg-cta hover:opacity-90 shadow-glow">
-                  <Link to="/signup">Complete signup</Link>
+                <Button className="bg-cta hover:opacity-90 shadow-glow" onClick={handleCompleteSignup}>
+                  Complete signup
                 </Button>
               </div>
             )}
@@ -226,8 +362,6 @@ export default function Home() {
   }
 
   const paymentActive = (client?.payment_status ?? "").toLowerCase() === "active";
-  const status: string = client?.setup_status
-    ?? (!configFetched ? "Not Started" : hasConfig ? "Live" : "Not Started");
 
   const statusColor = status === "Live" || status === "Ready"
     ? "bg-primary text-primary-foreground"
