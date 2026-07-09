@@ -79,6 +79,7 @@ function nonEmpty(v: unknown): boolean {
 
 type Client = Record<string, unknown> & {
   assigned_callcapture_number?: string | null;
+  phone_mode?: string | null;
   number_status?: string | null;
   webhook_status?: string | null;
   vapi_phone_number_id?: string | null;
@@ -112,6 +113,17 @@ function isPhoneReady(c: Client): boolean {
   return true;
 }
 
+function isPhoneModeValidForOnboarding(mode: unknown): boolean {
+  if (typeof mode !== "string") return false;
+  return ["byo", "forward", "test", "existing", "new", "ai_first", "forward_first", "ai_only"].includes(mode.trim().toLowerCase());
+}
+
+function isPhoneReadyForOnboarding(c: Client): boolean {
+  if (isPhoneReady(c)) return true;
+  if (!nonEmpty(c?.assigned_callcapture_number)) return false;
+  return isPhoneModeValidForOnboarding(c?.phone_mode);
+}
+
 function derived(c: Client): Record<ItemId, ItemStatus> {
   const has = (k: string) => nonEmpty(c?.[k]);
   const businessOk = has("business_name") && has("business_phone");
@@ -127,7 +139,7 @@ function derived(c: Client): Record<ItemId, ItemStatus> {
   const aiOk = hasVoice && has("greeting") && !voiceNeedsAttention;
   const testCallOk = !!c?.test_call_passed_at || nonEmpty(c?.first_test_call_id);
   const gbpOk = has("google_place_id") || has("google_category");
-  const phoneNumberOk = isPhoneReady(c);
+  const phoneNumberOk = isPhoneReadyForOnboarding(c);
 
   return {
     business_info:

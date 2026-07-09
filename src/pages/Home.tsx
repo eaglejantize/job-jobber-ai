@@ -94,8 +94,6 @@ export default function Home() {
   const [polling, setPolling] = useState(false);
   const toastedRef = useRef(false);
   const navigate = useNavigate();
-  const shouldShowSubscriptionGate = false;
-  const shouldForceSetupRedirect = false;
 
   useEffect(() => {
     if (params.get("checkout") === "success" && !toastedRef.current) {
@@ -233,13 +231,15 @@ export default function Home() {
     ?? (!configFetched ? "Not Started" : hasConfig ? "Live" : "Not Started");
   const isSuperAdmin = Boolean(client?.is_super_admin);
   const setupIncomplete = setupIsIncomplete(status);
-  const paymentNeeded = false;
-  const completeSignupTarget = "/home";
+  const paymentNeeded =
+    requiresPayment(client?.payment_status ?? "", client?.subscription_status)
+    || (businessExists === false && client === null);
+  const completeSignupTarget = setupIncomplete && !paymentNeeded ? "/settings" : "/start";
 
   // Tenant has signed up + paid but the webhook hasn't created their business
   // row yet (or they haven't paid). Show a "finalizing" screen instead of an
   // empty dashboard. Only triggers when there's also no legacy client row.
-  if (shouldShowSubscriptionGate && businessExists === false && client === null && !isSuperAdmin) {
+  if (businessExists === false && client === null && !isSuperAdmin) {
     const justPaid = params.get("checkout") === "success";
     return (
       <Layout>
@@ -305,7 +305,7 @@ export default function Home() {
       : `${rings} ${rings === 1 ? "ring" : "rings"}`;
 
   const setupComplete = status === "Live" || status === "Ready";
-  const setupPath = shouldForceSetupRedirect ? "/settings/concierge" : "/home";
+  const setupPath = "/settings";
 
   return (
     <Layout>
@@ -376,7 +376,7 @@ export default function Home() {
               Test My AI{"\u00a0"}
             </CallDemoButton>
             <Button asChild variant="outline">
-              <Link to={setupPath}>
+              <Link to={status === "Payment Pending" ? "/start" : setupPath}>
                 <SettingsIcon className="h-4 w-4" />
                 {setupComplete
                   ? "Edit Setup"

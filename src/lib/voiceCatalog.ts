@@ -33,7 +33,7 @@ function toLegacyFallback(): VoiceCatalogOption[] {
     label: v.label,
     persona: v.persona,
     provider: "vapi",
-    provider_voice_id: "Elliot",
+    provider_voice_id: v.voiceId,
     preview_url: v.previewUrl,
     preview_source: "local",
     description: v.description,
