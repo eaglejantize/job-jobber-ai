@@ -239,7 +239,7 @@ export default function AiReceptionistTab({ ctx }: { ctx: UseControlCenterData }
         <h2 className="text-lg font-semibold">Live Greeting Preview</h2>
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground mb-2">
-            Voice: <strong>{VOICES.find((v) => v.id === data.voice_id)?.label || "—"}</strong>
+            Voice: <strong>{data.voice_label || VOICES.find((v) => v.id === data.voice_id)?.label || "—"}</strong>
           </p>
           <p className="italic">"{data.greeting || "Your greeting will appear here."}"</p>
         </div>
