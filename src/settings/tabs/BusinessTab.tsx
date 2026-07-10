@@ -61,7 +61,13 @@ export default function BusinessTab({ ctx }: { ctx: UseControlCenterData }) {
         <div className="grid md:grid-cols-2 gap-4">
           <Field label="Business Name" value={data.business_name} onChange={(v) => update({ business_name: v })} />
           <Field label="Owner Name" value={data.owner_name} onChange={(v) => update({ owner_name: v })} />
-          <Field label="Business Phone" type="tel" value={data.business_phone} onChange={(v) => update({ business_phone: v })} />
+          <Field
+            label="Business Phone Number"
+            hint="Your existing public phone number. Separate from the Vektuor AI number configured in Phone Setup."
+            type="tel"
+            value={data.business_phone}
+            onChange={(v) => update({ business_phone: v })}
+          />
           <Field label="Business Email" type="email" value={data.business_email || data.email} onChange={(v) => update({ business_email: v })} />
           <Field label="Business Address" value={data.address} onChange={(v) => update({ address: v })} />
           <Field label="Website" value={data.website} onChange={(v) => update({ website: v })} />
@@ -174,11 +180,12 @@ export default function BusinessTab({ ctx }: { ctx: UseControlCenterData }) {
   );
 }
 
-function Field({ label, value, onChange, type = "text" }: { label: string; value?: string; onChange: (v: string) => void; type?: string }) {
+function Field({ label, value, onChange, type = "text", hint }: { label: string; value?: string; onChange: (v: string) => void; type?: string; hint?: string }) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <Input type={type} value={value || ""} onChange={(e) => onChange(e.target.value)} />
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

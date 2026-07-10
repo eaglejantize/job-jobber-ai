@@ -201,6 +201,16 @@ Deno.serve(async (req) => {
 
     const resolvedVoice = await resolveVoiceForClient(admin, client)
 
+    if (!resolvedVoice.provider || !resolvedVoice.providerVoiceId) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: `Voice resolution incomplete (provider=${resolvedVoice.provider ?? 'null'}, voiceId=${resolvedVoice.providerVoiceId ?? 'null'}). Refusing to update Vapi assistant with a fallback voice.`,
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     const systemPrompt = buildPrompt(client)
     let firstMessage = (client.greeting as string | null) ?? ''
     if (!firstMessage) {

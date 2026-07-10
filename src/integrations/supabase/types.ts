@@ -388,6 +388,7 @@ export type Database = {
           rings_before_answer: number
           scheduling_enabled: boolean | null
           scheduling_mode: string | null
+          selected_voice_catalog_id: string | null
           servanahq_enabled: boolean
           servanahq_tenant_id: string | null
           service_area: Json | null
@@ -415,7 +416,14 @@ export type Database = {
           vapi_phone_number_id: string | null
           voice_id: string | null
           voice_label: string | null
+          voice_last_sync_at: string | null
+          voice_last_sync_error: string | null
+          voice_phone_number_snapshot: string | null
+          voice_provider: string | null
+          voice_provider_agent_id: string | null
+          voice_provider_voice_id: string | null
           voice_speed: string
+          voice_sync_status: string | null
           voicemail_enabled: boolean | null
           voicemail_fallback: boolean
           warranty_terms: string | null
@@ -497,6 +505,7 @@ export type Database = {
           rings_before_answer?: number
           scheduling_enabled?: boolean | null
           scheduling_mode?: string | null
+          selected_voice_catalog_id?: string | null
           servanahq_enabled?: boolean
           servanahq_tenant_id?: string | null
           service_area?: Json | null
@@ -524,7 +533,14 @@ export type Database = {
           vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          voice_last_sync_at?: string | null
+          voice_last_sync_error?: string | null
+          voice_phone_number_snapshot?: string | null
+          voice_provider?: string | null
+          voice_provider_agent_id?: string | null
+          voice_provider_voice_id?: string | null
           voice_speed?: string
+          voice_sync_status?: string | null
           voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
           warranty_terms?: string | null
@@ -606,6 +622,7 @@ export type Database = {
           rings_before_answer?: number
           scheduling_enabled?: boolean | null
           scheduling_mode?: string | null
+          selected_voice_catalog_id?: string | null
           servanahq_enabled?: boolean
           servanahq_tenant_id?: string | null
           service_area?: Json | null
@@ -633,7 +650,14 @@ export type Database = {
           vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          voice_last_sync_at?: string | null
+          voice_last_sync_error?: string | null
+          voice_phone_number_snapshot?: string | null
+          voice_provider?: string | null
+          voice_provider_agent_id?: string | null
+          voice_provider_voice_id?: string | null
           voice_speed?: string
+          voice_sync_status?: string | null
           voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
           warranty_terms?: string | null
@@ -642,7 +666,15 @@ export type Database = {
           webhook_urls?: Json | null
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "callcapture_clients_selected_voice_catalog_id_fkey"
+            columns: ["selected_voice_catalog_id"]
+            isOneToOne: false
+            referencedRelation: "callcapture_voice_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       callcapture_dispatch: {
         Row: {
@@ -964,6 +996,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      callcapture_voice_catalog: {
+        Row: {
+          accent: string | null
+          best_use: string | null
+          created_at: string
+          customer_category: string
+          description: string | null
+          id: string
+          is_active: boolean
+          label: string
+          local_preview_url: string | null
+          pace: string | null
+          persona: string
+          preview_source: string
+          provider: string
+          provider_preview_url: string | null
+          provider_voice_id: string
+          sort_order: number
+          tone: string | null
+          updated_at: string
+          verified_active: boolean
+        }
+        Insert: {
+          accent?: string | null
+          best_use?: string | null
+          created_at?: string
+          customer_category?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          label: string
+          local_preview_url?: string | null
+          pace?: string | null
+          persona?: string
+          preview_source?: string
+          provider: string
+          provider_preview_url?: string | null
+          provider_voice_id: string
+          sort_order?: number
+          tone?: string | null
+          updated_at?: string
+          verified_active?: boolean
+        }
+        Update: {
+          accent?: string | null
+          best_use?: string | null
+          created_at?: string
+          customer_category?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string
+          local_preview_url?: string | null
+          pace?: string | null
+          persona?: string
+          preview_source?: string
+          provider?: string
+          provider_preview_url?: string | null
+          provider_voice_id?: string
+          sort_order?: number
+          tone?: string | null
+          updated_at?: string
+          verified_active?: boolean
+        }
+        Relationships: []
       }
       callcapture_webhook_events: {
         Row: {

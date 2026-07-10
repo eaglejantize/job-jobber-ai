@@ -13,6 +13,10 @@ export type VoiceCatalogOption = {
   preview_url: string | null;
   preview_source: "provider" | "local";
   description: string | null;
+  accent?: string | null;
+  tone?: string | null;
+  pace?: string | null;
+  best_use?: string | null;
   verified_active: boolean;
   is_active: boolean;
   sort_order: number;
@@ -43,21 +47,65 @@ function toLegacyFallback(): VoiceCatalogOption[] {
   }));
 }
 
-export async function loadCuratedVoices(): Promise<{ voices: VoiceCatalogOption[]; source: "catalog" | "legacy" }> {
-  const { data, error } = await ((supabase as any)
-    .from("callcapture_voice_catalog"))
-    .select("id, customer_category, label, persona, provider, provider_voice_id, provider_preview_url, local_preview_url, preview_source, description, verified_active, is_active, sort_order")
+export async function loadCuratedVoices(): Promise<{
+  voices: VoiceCatalogOption[];
+  source: "catalog" | "legacy";
+  error?: string;
+}> {
+  const { data, error } = await supabase
+    .from("callcapture_voice_catalog")
+    .select(
+      "id, customer_category, label, persona, provider, provider_voice_id, provider_preview_url, local_preview_url, preview_source, description, accent, tone, pace, best_use, verified_active, is_active, sort_order",
+    )
     .eq("is_active", true)
-    .order("sort_order", { ascending: true }) as { data: VoiceCatalogOption[] | null; error: { message: string } | null };
+    .order("sort_order", { ascending: true });
 
-  if (error || !data || data.length === 0) {
+  if (error) {
+    return { voices: toLegacyFallback(), source: "legacy", error: error.message };
+  }
+  if (!data || data.length === 0) {
     return { voices: toLegacyFallback(), source: "legacy" };
   }
 
-  const normalized = data.map((row) => ({
-    ...row,
-    preview_url: row.preview_source === "provider" ? (row as { provider_preview_url?: string | null }).provider_preview_url ?? null : (row as { local_preview_url?: string | null }).local_preview_url ?? null,
-  }));
+  const normalized: VoiceCatalogOption[] = data.map((row) => {
+    const r = row as unknown as {
+      id: string;
+      customer_category: string;
+      label: string;
+      persona: string;
+      provider: string;
+      provider_voice_id: string;
+      provider_preview_url: string | null;
+      local_preview_url: string | null;
+      preview_source: "provider" | "local";
+      description: string | null;
+      accent: string | null;
+      tone: string | null;
+      pace: string | null;
+      best_use: string | null;
+      verified_active: boolean;
+      is_active: boolean;
+      sort_order: number;
+    };
+    return {
+      id: r.id,
+      customer_category: r.customer_category,
+      label: r.label,
+      persona: r.persona,
+      provider: r.provider,
+      provider_voice_id: r.provider_voice_id,
+      preview_url: r.preview_source === "provider" ? r.provider_preview_url : r.local_preview_url,
+      preview_source: r.preview_source,
+      description: r.description,
+      accent: r.accent,
+      tone: r.tone,
+      pace: r.pace,
+      best_use: r.best_use,
+      verified_active: r.verified_active,
+      is_active: r.is_active,
+      sort_order: r.sort_order,
+    };
+  });
 
   return { voices: normalized, source: "catalog" };
 }
