@@ -43,12 +43,15 @@ export function useOnboardingState() {
       setClientId(row.id);
       setClient(row);
       const saved = (row.onboarding_state ?? null) as OnboardingState | null;
-      const normalized = deriveOnboardingState(row as any, saved);
+      const normalized = deriveOnboardingState(
+        row as unknown as Record<string, unknown>,
+        saved,
+      );
       setState(normalized);
       if (!statesEqual(saved, normalized)) {
         await supabase
           .from("callcapture_clients")
-          .update({ onboarding_state: normalized } as never)
+          .update({ onboarding_state: normalized as unknown as Record<string, unknown> })
           .eq("id", row.id);
       }
     }
@@ -76,7 +79,7 @@ export function useOnboardingState() {
       setState(next);
       await supabase
         .from("callcapture_clients")
-        .update({ onboarding_state: next } as never)
+        .update({ onboarding_state: next as unknown as Record<string, unknown> })
         .eq("id", clientId);
     },
     [clientId, state],
@@ -89,7 +92,10 @@ export function useOnboardingState() {
       .select("*")
       .eq("id", clientId)
       .maybeSingle();
-    const latestState = deriveOnboardingState((latest ?? client) as any, state);
+    const latestState = deriveOnboardingState(
+      (latest ?? client) as unknown as Record<string, unknown>,
+      state,
+    );
     setClient((latest as ClientRow | null) ?? client);
     setState(latestState);
     const readiness = isReadyToActivate(latestState);
@@ -103,10 +109,10 @@ export function useOnboardingState() {
     await supabase
       .from("callcapture_clients")
       .update({
-        onboarding_state: next,
+        onboarding_state: next as unknown as Record<string, unknown>,
         launched_at: new Date().toISOString(),
         onboarding_completed_at: new Date().toISOString(),
-      } as never)
+      })
       .eq("id", clientId);
     return true;
   }, [clientId, client, state]);
