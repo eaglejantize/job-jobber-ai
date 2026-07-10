@@ -1011,8 +1011,10 @@ export type Database = {
           pace: string | null
           persona: string
           preview_source: string
+          preview_verified: boolean
           provider: string
           provider_preview_url: string | null
+          provider_verified: boolean
           provider_voice_id: string
           sort_order: number
           tone: string | null
@@ -1032,8 +1034,10 @@ export type Database = {
           pace?: string | null
           persona?: string
           preview_source?: string
+          preview_verified?: boolean
           provider: string
           provider_preview_url?: string | null
+          provider_verified?: boolean
           provider_voice_id: string
           sort_order?: number
           tone?: string | null
@@ -1053,8 +1057,10 @@ export type Database = {
           pace?: string | null
           persona?: string
           preview_source?: string
+          preview_verified?: boolean
           provider?: string
           provider_preview_url?: string | null
+          provider_verified?: boolean
           provider_voice_id?: string
           sort_order?: number
           tone?: string | null
