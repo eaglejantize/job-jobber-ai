@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -37,6 +37,8 @@ export default function VoiceVerificationRunner() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const rawPreRef = useRef<HTMLPreElement>(null);
+  const rawDetailsRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -106,13 +108,56 @@ export default function VoiceVerificationRunner() {
   const fullJson = typeof result?.body === "string" ? result.body : JSON.stringify(result?.body ?? null, null, 2);
 
   async function copyJson() {
+    // 1) Try async Clipboard API (works on same-origin / published site).
     try {
-      await navigator.clipboard.writeText(fullJson);
-      setCopyMsg("Copied to clipboard.");
-    } catch {
-      setCopyMsg("Copy failed.");
-    }
-    setTimeout(() => setCopyMsg(null), 2000);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(fullJson);
+        setCopyMsg("Copied to clipboard.");
+        setTimeout(() => setCopyMsg(null), 2500);
+        return;
+      }
+    } catch { /* fall through */ }
+
+    // 2) Fallback: hidden textarea + execCommand("copy").
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = fullJson;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "0";
+      ta.style.left = "0";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      if (ok) {
+        setCopyMsg("Copied to clipboard.");
+        setTimeout(() => setCopyMsg(null), 2500);
+        return;
+      }
+    } catch { /* fall through */ }
+
+    // 3) Last resort: select the Raw Verification Response block.
+    try {
+      if (rawDetailsRef.current) rawDetailsRef.current.open = true;
+      const pre = rawPreRef.current;
+      if (pre) {
+        const range = document.createRange();
+        range.selectNodeContents(pre);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        pre.scrollIntoView({ behavior: "smooth", block: "center" });
+        setCopyMsg("Clipboard blocked in preview — text selected, press Ctrl/Cmd+C, or use Download JSON.");
+        setTimeout(() => setCopyMsg(null), 5000);
+        return;
+      }
+    } catch { /* fall through */ }
+
+    setCopyMsg("Copy failed — use Download JSON.");
+    setTimeout(() => setCopyMsg(null), 4000);
   }
 
   function downloadJson() {
@@ -277,9 +322,9 @@ export default function VoiceVerificationRunner() {
             </div>
           )}
 
-          <details className="text-xs">
+          <details ref={rawDetailsRef} className="text-xs">
             <summary className="cursor-pointer text-slate-400 hover:text-white">Raw Verification Response</summary>
-            <pre className="mt-2 whitespace-pre-wrap text-slate-300 font-mono border border-slate-700 rounded-md p-3 bg-slate-900/40">
+            <pre ref={rawPreRef} className="mt-2 whitespace-pre-wrap text-slate-300 font-mono border border-slate-700 rounded-md p-3 bg-slate-900/40">
               {fullJson}
             </pre>
           </details>
