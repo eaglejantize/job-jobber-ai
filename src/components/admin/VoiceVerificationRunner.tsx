@@ -35,6 +35,7 @@ export default function VoiceVerificationRunner() {
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [hasSession, setHasSession] = useState(false);
   const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<RunResult | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
 
   useEffect(() => {
