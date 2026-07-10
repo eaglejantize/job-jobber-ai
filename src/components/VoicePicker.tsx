@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, VolumeX } from "lucide-react";
 import {
   loadCuratedVoices,
   selectionFromOption,
@@ -18,13 +18,15 @@ type Props = {
 export default function VoicePicker({ value, onChange }: Props) {
   const [voices, setVoices] = useState<VoiceCatalogOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const { voices: list } = await loadCuratedVoices();
+      const { voices: list, error } = await loadCuratedVoices();
       if (cancelled) return;
       setVoices(list);
+      setLoadError(error ?? null);
       setLoading(false);
     })();
     return () => {
@@ -48,8 +50,20 @@ export default function VoicePicker({ value, onChange }: Props) {
     );
   }
 
+  if (voices.length === 0) {
+    return (
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+        Voice catalog is empty{loadError ? `: ${loadError}` : ""}. Please contact support — no fallback voice will be selected.
+      </div>
+    );
+  }
+
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Voices below are provider-verified with Vapi. Audio preview is not yet enabled — listen tests will be added in the next update.
+      </p>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {voices.map((v) => {
         const selected = selectedId === v.id;
         return (
@@ -63,24 +77,23 @@ export default function VoicePicker({ value, onChange }: Props) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="font-semibold leading-tight">{v.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{v.persona} · {v.customer_category}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{v.persona}</p>
               </div>
-              {v.verified_active && (
+              {v.provider_verified && (
                 <Badge variant={selected ? "default" : "secondary"} className="shrink-0">
-                  Verified
+                  Provider-verified
                 </Badge>
               )}
             </div>
             <p className="text-sm text-muted-foreground flex-1">{v.description ?? "No description available."}</p>
-            {v.preview_url ? (
-              <audio controls preload="none" className="w-full h-8">
-                <source src={v.preview_url} />
-              </audio>
-            ) : (
-              <span className="inline-flex w-full items-center justify-center rounded-md border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
-                Preview unavailable
-              </span>
-            )}
+            <button
+              type="button"
+              disabled
+              title="Audio preview will be enabled once wired to Vapi. Voices are provider-verified but not yet audibly reviewed."
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border bg-muted px-2 py-1 text-xs text-muted-foreground cursor-not-allowed"
+            >
+              <VolumeX className="h-3.5 w-3.5" /> Preview coming soon
+            </button>
             <Button
               type="button"
               size="sm"
@@ -93,6 +106,7 @@ export default function VoicePicker({ value, onChange }: Props) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
