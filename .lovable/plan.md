@@ -1,81 +1,72 @@
-## Vapi-native only voice verification
+# Plan: Temporary Vapi Voice Verification Runner
 
-Rework `supabase/functions/verify-voice-catalog/index.ts` to verify a fixed candidate list of Vapi-native voices without any external provider dependency, without hitting non-existent `/voice` or `/voice-library` endpoints, and without inventing preview URLs.
+Add a temporary, super-admin-only UI action that invokes the existing `verify-voice-catalog` edge function using the authenticated Supabase browser client (so the session JWT is auto-forwarded), then renders the full JSON result. No backend/secret changes.
 
-### Scope guardrails (unchanged)
-- Do not seed `callcapture_voice_catalog`.
-- Do not touch tenant assistants.
-- Do not modify phone setup, publish, or add secrets.
-- Do not request `ELEVENLABS_API_KEY`.
-- Wait for explicit approval before any seeding.
+## Scope
 
-### Candidate list (hardcoded, Vapi-native only)
-All candidates use `provider: "vapi"`:
-`Emma, Nico, Sagar, Kai, Neil, Clara, Godfrey, Layla, Sid, Naina, Elliot`
+- Frontend only. No changes to `verify-voice-catalog/index.ts` (server-side super-admin check stays authoritative).
+- No catalog inserts, no tenant assistant edits, no phone-setup changes, no publish.
 
-No ElevenLabs, PlayHT, Cartesia, Azure. No retired legacy IDs. No enumeration call.
+## Where it goes
 
-### Provider-lookup definition (Vapi has no list endpoint)
-For each candidate:
-1. `PATCH /assistant/{scratchId}` with `{ voice: { provider: "vapi", voiceId: "<Name>" } }`.
-2. Require 2xx.
-3. `GET /assistant/{scratchId}` and require the returned `voice.provider === "vapi"` and `voice.voiceId === "<Name>"` (case-insensitive compare, exact-string reported).
-4. Both must pass → `provider_lookup = pass`. Otherwise `fail` with the exact Vapi error body (redacted).
+`src/pages/Admin.tsx` is already gated by `ProtectedAdminRoute` (checks `is_super_admin` via `useIsAdmin`). Add a new "Voice Verification (temporary)" section there.
 
-### Preview verification
-Vapi does not expose per-voice preview URLs programmatically for its native voices, so use a controlled scratch mechanism:
+## New component
 
-- After a successful PATCH + re-read for a candidate, call Vapi's `/call` API in `type: "outboundPhoneCall"` mode? **No** — that would place a real phone call and is out of scope.
-- Instead, use Vapi's **`POST /call` with `type: "webCall"`** against the scratch assistant. A webCall returns a `webCallUrl` and, in the transcript/artifact webhook, an audio recording. That requires a live browser, so it is not usable inside an edge function.
+`src/components/admin/VoiceVerificationRunner.tsx`
 
-Because there is no legitimate, headless, per-voice audio artifact endpoint on Vapi for native voices, the honest preview method is:
+Behavior:
 
-- `preview_method = "scratch_assistant_configured"` — meaning the scratch assistant is provably configured with the exact voiceId (verified by the re-read step). No fake preview URL will be fabricated; `preview_url` stays `null`.
-- `preview_playback` will be reported as `"skipped_no_programmatic_source"` with a note that a human-audible preview requires either (a) placing an outbound test call, or (b) opening a webCall against the scratch assistant in the browser — both explicitly out of scope for this verifier per current instructions.
+1. On mount, read current session/user via `supabase.auth.getSession()` and `supabase.auth.getUser()`. Show:
+   - signed-in email
+   - whether a session/access token exists
+   - a warning banner if email !== `eaglejantize@gmail.com` (informational only — server enforces auth)
+2. Button: **"Run Vapi Voice Verification"**.
+3. On click:
+   - Re-check `supabase.auth.getSession()`. If none: show `"You must sign in again before running verification."` and stop.
+   - Call `supabase.functions.invoke("verify-voice-catalog", { body: {} })`. This forwards the current user JWT as `Authorization: Bearer <token>` automatically.
+   - Also capture HTTP status. Because `functions.invoke` doesn't expose status directly on success, use a parallel raw `fetch` variant when `invoke` returns an error, so we can display the raw status + response body for 401/403 cases:
+     - Build URL from `import.meta.env.VITE_SUPABASE_URL` + `/functions/v1/verify-voice-catalog`.
+     - Send `Authorization: Bearer ${session.access_token}` and `apikey: <publishable key>`.
+     - Read `res.status`, `res.headers`, and `await res.text()` (parse JSON when possible).
+   - Prefer the raw `fetch` path for full fidelity (status + body always available); fall back to `invoke` only if needed. Both use the same forwarded JWT.
+4. Render results:
+   - **HTTP status**
+   - **Diagnostics block** (session present, user email, access token present, Authorization header sent yes/no) — token value itself never displayed; only presence booleans and last-4 chars.
+   - **Verification table** from `rows[]`: columns display_name, provider, provider_voice_id, scratch_patch, assistant_reread, preview_method, preview_playback, verified_active, failure_reason.
+   - **Safety cleanup block** from `safety` (scratch_assistant_id, restore_attempted/restored/restore_verified, delete_attempted/deleted, reasons).
+   - **Totals**: `candidates_tested`, `verified`, `passed_min_12`.
+   - **Complete JSON response** in a collapsible `<pre>`.
+5. Error handling:
+   - For non-2xx: show status + response body verbatim, but run it through a small `redactSecrets()` helper that masks Bearer tokens, JWT-shaped strings, and any `apikey`/`authorization` header values.
+   - For network errors: show the thrown message (redacted).
 
-If the user wants human-audible previews confirmed inside this run, we would need approval to either:
-- allow the verifier to trigger one outbound test call per voice to a designated test number, or
-- ship a small UI tool that starts a webCall against the scratch assistant per voice.
+## Redaction helper (client-side, mirrors server)
 
-Either path is added only after explicit approval — this plan does not include them.
+Regexes for `Bearer\s+[A-Za-z0-9._~+/=-]+`, JWT triple-segment pattern, and any string longer than 40 chars matching `[A-Za-z0-9._-]+` in header/body dumps → replaced with `[REDACTED]`.
 
-### Scratch assistant safety (unchanged)
-- Create dedicated `voice-verify-<ts>` scratch assistant seeded with a known-good Vapi-native voice (first candidate that PATCH-succeeds; if none, abort with clear reason and still attempt delete).
-- Record `originalVoice`.
-- In `finally`: PATCH back to `originalVoice`, GET to verify, then DELETE. Report `restore_attempted`, `restored`, `restore_verified`, `delete_attempted`, `deleted`.
-- Sequential candidates, 150 ms pause, `MAX_CANDIDATES = 40` (list is 11).
+## Admin page integration
 
-### Response shape
-```json
-{
-  "candidates_tested": 11,
-  "verified": <n>,
-  "passed_min_12": false,
-  "rows": [{
-    "display_name": "Emma",
-    "provider": "vapi",
-    "provider_voice_id": "Emma",
-    "scratch_patch": "pass|fail",
-    "assistant_reread": "pass|fail|skipped",
-    "preview_method": "scratch_assistant_configured",
-    "preview_playback": "skipped_no_programmatic_source",
-    "verified_active": false,
-    "failure_reason": ""
-  }],
-  "safety": { "scratch_assistant_id", "seed_voice", "restore_attempted", "restored", "restore_verified", "delete_attempted", "deleted", "reasons": [] }
-}
-```
+In `src/pages/Admin.tsx`, add a new card/section labeled **"Voice Verification (temporary)"** with a short note: "Temporary diagnostic — remove after voice catalog is approved." Render `<VoiceVerificationRunner />` inside it.
 
-`verified_active` requires `scratch_patch = pass` AND `assistant_reread = pass`. Since no honest audible preview is produced in this run, **no voice will be marked production-ready from this run alone** — the user gets an accurate PATCH/re-read matrix and can then approve a preview mechanism.
+## Files touched
 
-If `verified < 12`, stop; report count and blockers; propose no fill-ins.
+- Add: `src/components/admin/VoiceVerificationRunner.tsx`
+- Edit: `src/pages/Admin.tsx` (import + render one section)
 
-### Execution steps after approval
-1. Overwrite `supabase/functions/verify-voice-catalog/index.ts` with the new logic (no enumeration, hardcoded list, no preview URL fabrication).
-2. Deploy `verify-voice-catalog`.
-3. `POST` it as the signed-in super-admin with empty body.
-4. Return the verification table + safety block.
-5. Ask the user which preview mechanism to authorize (outbound test call vs. in-browser webCall tool) before anything is marked production-ready or seeded.
+Nothing else changes. No edge function edits, no migrations, no secrets, no publish.
 
-### Out of scope
-Seeding catalog, tenant edits, other functions, UI changes, publish, external providers, adding secrets.
+## Post-implementation manual verification (user performs)
+
+1. Sign out of preview.
+2. Sign back in as `eaglejantize@gmail.com`.
+3. Hard refresh `/admin`.
+4. Click **"Run Vapi Voice Verification"**.
+5. Return the complete JSON result.
+
+If still 401, the diagnostics block will report:
+- `getSession()` returned a session? (bool)
+- authenticated user email
+- access token present? (bool, last-4 only)
+- Authorization bearer header sent? (bool)
+- server response body (redacted) — which will indicate whether the server rejected at JWT validation (`Unauthorized`) or super-admin check (`Forbidden — super admin only`).
