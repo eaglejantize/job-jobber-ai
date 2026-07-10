@@ -227,26 +227,19 @@ Deno.serve(async (req) => {
 
     const body = (await req.json().catch(() => ({}))) as { candidates?: Candidate[]; listOnly?: boolean }
 
-    // Enumerate Vapi native voices
-    const voiceList = await vapi('/voice')
-    if (!voiceList.ok) {
-      return json({ error: 'Vapi /voice failed', status: voiceList.status, body: redact(voiceList.body) }, 502)
+    // Vapi voice-library is the enumeration source. It returns entries for
+    // every provider Vapi accepts (vapi native, 11labs, playht, etc). There
+    // is no separate /voice endpoint.
+    const libResp = await vapi('/voice-library?limit=500').catch(() => ({ ok: false, status: 0, body: null }))
+    if (!libResp.ok) {
+      return json({ error: 'Vapi /voice-library failed', status: libResp.status, body: redact(libResp.body) }, 502)
     }
-    const rawList = Array.isArray(voiceList.body)
-      ? (voiceList.body as unknown[])
-      : ((voiceList.body as { voices?: unknown[]; data?: unknown[] })?.voices
-          ?? (voiceList.body as { data?: unknown[] })?.data
+    const libRaw = Array.isArray(libResp.body)
+      ? (libResp.body as unknown[])
+      : ((libResp.body as { data?: unknown[]; results?: unknown[] })?.data
+          ?? (libResp.body as { results?: unknown[] })?.results
           ?? [])
-
-    // Vapi voice-library (ElevenLabs / PlayHT / etc)
-    const libResp = await vapi('/voice-library?limit=200').catch(() => ({ ok: false, status: 0, body: null }))
-    const libRaw = libResp.ok
-      ? (Array.isArray(libResp.body)
-          ? (libResp.body as unknown[])
-          : ((libResp.body as { data?: unknown[]; results?: unknown[] })?.data
-              ?? (libResp.body as { results?: unknown[] })?.results
-              ?? []))
-      : []
+    const rawList: unknown[] = []
 
     type Avail = { provider: string; provider_voice_id: string; preview_url: string | null; name: string }
     const availableIndex = new Map<string, Avail>()
@@ -284,7 +277,8 @@ Deno.serve(async (req) => {
         name: String(v.name ?? v.displayName ?? id),
       }
       availableIndex.set(key, entry)
-      if (provider === '11labs' || provider === 'elevenlabs') elevenLabs.push(entry)
+      if (provider === 'vapi') vapiNative.push(entry)
+      else if (provider === '11labs' || provider === 'elevenlabs') elevenLabs.push(entry)
       else otherProviders.push(entry)
     }
 
