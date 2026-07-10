@@ -50,7 +50,7 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await (supabase.from("callcapture_clients") as any)
+      const { data } = await supabase.from("callcapture_clients")
         .select("id, business_name, industry, greeting, include_business_name, human_pause, voice_id, voice_label, selected_voice_catalog_id, voice_provider, voice_provider_voice_id, voice_sync_status, voice_last_sync_error, intake_questions, tone")
         .eq("id", clientId).maybeSingle();
       if (data) {
@@ -85,7 +85,7 @@ export default function AiSettingsPanel({ clientId }: { clientId: string }) {
   async function save() {
     if (!c) return;
     setSaving(true);
-    const { error } = await (supabase.from("callcapture_clients") as any).update({
+    const { error } = await supabase.from("callcapture_clients").update({
       industry: c.industry,
       greeting: c.greeting,
       include_business_name: c.include_business_name,
