@@ -39,7 +39,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import LeadCard, { type Lead } from "@/components/LeadCard";
 import { Switch } from "@/components/ui/switch";
 import IndustryConfigManager from "@/components/settings/IndustryConfigManager";
-import VoiceVerificationRunner from "@/components/admin/VoiceVerificationRunner";
 
 type Client = {
   id: string;
@@ -196,10 +195,7 @@ export default function Admin() {
           ) : tab === "subscribers" ? (
             <SubscribersTab clients={clients} onChange={refresh} onDelete={setPendingDelete} />
           ) : tab === "diagnostics" ? (
-            <div className="space-y-6">
-              <VoiceVerificationRunner />
-              <DiagnosticsTab />
-            </div>
+            <DiagnosticsTab />
           ) : tab === "create" ? (
             <CreateTestAccountTab onCreated={refresh} />
           ) : tab === "industry-config" ? (
