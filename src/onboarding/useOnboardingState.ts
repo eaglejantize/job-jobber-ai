@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
 import {
   deriveOnboardingState,
   ItemId,
@@ -51,7 +51,7 @@ export function useOnboardingState() {
       if (!statesEqual(saved, normalized)) {
         await supabase
           .from("callcapture_clients")
-          .update({ onboarding_state: normalized as unknown as Record<string, unknown> })
+          .update({ onboarding_state: normalized as unknown as Json })
           .eq("id", row.id);
       }
     }
@@ -79,7 +79,7 @@ export function useOnboardingState() {
       setState(next);
       await supabase
         .from("callcapture_clients")
-        .update({ onboarding_state: next as unknown as Record<string, unknown> })
+        .update({ onboarding_state: next as unknown as Json })
         .eq("id", clientId);
     },
     [clientId, state],
@@ -109,7 +109,7 @@ export function useOnboardingState() {
     await supabase
       .from("callcapture_clients")
       .update({
-        onboarding_state: next as unknown as Record<string, unknown>,
+        onboarding_state: next as unknown as Json,
         launched_at: new Date().toISOString(),
         onboarding_completed_at: new Date().toISOString(),
       })
