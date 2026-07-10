@@ -171,6 +171,29 @@ export default function VoiceVerificationRunner() {
 
       {result && (
         <div className="space-y-4">
+          {copyMsg && (
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 p-2 text-xs">
+              {copyMsg}
+            </div>
+          )}
+
+          {result.ok && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={copyJson}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-700 text-white text-xs font-medium hover:bg-slate-600"
+              >
+                Copy Full JSON
+              </button>
+              <button
+                onClick={downloadJson}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-700 text-white text-xs font-medium hover:bg-slate-600"
+              >
+                Download JSON
+              </button>
+            </div>
+          )}
+
           {result.error && (
             <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-3 text-sm">
               {result.error}
@@ -196,26 +219,55 @@ export default function VoiceVerificationRunner() {
           )}
 
           {rows.length > 0 && (
-            <div className="overflow-auto rounded-md border border-slate-700">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-900/60 text-slate-400 uppercase">
-                  <tr>
-                    {["display_name","provider","provider_voice_id","scratch_patch","assistant_reread","preview_method","preview_playback","verified_active","failure_reason"].map(h => (
-                      <th key={h} className="text-left px-2 py-2 whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700 text-slate-200 font-mono">
-                  {rows.map((r, i) => (
-                    <tr key={i}>
-                      {["display_name","provider","provider_voice_id","scratch_patch","assistant_reread","preview_method","preview_playback","verified_active","failure_reason"].map(k => (
-                        <td key={k} className="px-2 py-1.5 align-top">{String((r as Record<string, unknown>)[k] ?? "")}</td>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs border border-slate-700 rounded-md p-3 bg-slate-900/40">
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">Candidates tested</div>
+                  <div className="font-mono text-white text-sm">{b.candidates_tested ?? rows.length}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">Passed</div>
+                  <div className="font-mono text-emerald-400 text-sm">{b.verified ?? rows.filter(r => r.verified_active).length}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">Failed</div>
+                  <div className="font-mono text-red-400 text-sm">{(b.candidates_tested ?? rows.length) - (b.verified ?? rows.filter(r => r.verified_active).length)}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">Passed ≥ 12</div>
+                  <div className="font-mono text-white text-sm">{String(b.passed_min_12)}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">Scratch restored</div>
+                  <div className="font-mono text-white text-sm">{String(b.safety?.restored ?? "—")}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">Scratch deleted</div>
+                  <div className="font-mono text-white text-sm">{String(b.safety?.deleted ?? "—")}</div>
+                </div>
+              </div>
+
+              <div className="overflow-auto rounded-md border border-slate-700">
+                <table className="w-full min-w-[900px] text-xs">
+                  <thead className="bg-slate-900/60 text-slate-400 uppercase">
+                    <tr>
+                      {["display_name","provider","provider_voice_id","scratch_patch","assistant_reread","preview_method","preview_playback","verified_active","failure_reason"].map(h => (
+                        <th key={h} className="text-left px-2 py-2 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700 text-slate-200 font-mono">
+                    {rows.map((r, i) => (
+                      <tr key={i}>
+                        {["display_name","provider","provider_voice_id","scratch_patch","assistant_reread","preview_method","preview_playback","verified_active","failure_reason"].map(k => (
+                          <td key={k} className="px-2 py-1.5 align-top">{String((r as Record<string, unknown>)[k] ?? "")}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
 
           {b.safety && (
@@ -225,19 +277,10 @@ export default function VoiceVerificationRunner() {
             </div>
           )}
 
-          {(b.candidates_tested !== undefined || b.verified !== undefined) && (
-            <div className="text-xs border border-slate-700 rounded-md p-3 bg-slate-900/40 space-y-0.5 font-mono text-slate-200">
-              <div>candidates_tested: {String(b.candidates_tested ?? "—")}</div>
-              <div>verified: {String(b.verified ?? "—")}</div>
-              <div>passed_min_12: {String(b.passed_min_12 ?? "—")}</div>
-              {b.note && <div className="text-slate-400 mt-1">note: {b.note}</div>}
-            </div>
-          )}
-
           <details className="text-xs">
-            <summary className="cursor-pointer text-slate-400 hover:text-white">Complete JSON response</summary>
+            <summary className="cursor-pointer text-slate-400 hover:text-white">Raw Verification Response</summary>
             <pre className="mt-2 whitespace-pre-wrap text-slate-300 font-mono border border-slate-700 rounded-md p-3 bg-slate-900/40">
-              {redact(typeof result.body === "string" ? result.body : JSON.stringify(result.body, null, 2))}
+              {fullJson}
             </pre>
           </details>
         </div>
