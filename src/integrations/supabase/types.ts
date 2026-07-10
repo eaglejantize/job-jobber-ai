@@ -416,10 +416,14 @@ export type Database = {
           vapi_phone_number_id: string | null
           voice_id: string | null
           voice_label: string | null
+          voice_last_sync_at: string | null
+          voice_last_sync_error: string | null
+          voice_phone_number_snapshot: string | null
           voice_provider: string | null
           voice_provider_agent_id: string | null
           voice_provider_voice_id: string | null
           voice_speed: string
+          voice_sync_status: string | null
           voicemail_enabled: boolean | null
           voicemail_fallback: boolean
           warranty_terms: string | null
@@ -529,10 +533,14 @@ export type Database = {
           vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          voice_last_sync_at?: string | null
+          voice_last_sync_error?: string | null
+          voice_phone_number_snapshot?: string | null
           voice_provider?: string | null
           voice_provider_agent_id?: string | null
           voice_provider_voice_id?: string | null
           voice_speed?: string
+          voice_sync_status?: string | null
           voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
           warranty_terms?: string | null
@@ -642,10 +650,14 @@ export type Database = {
           vapi_phone_number_id?: string | null
           voice_id?: string | null
           voice_label?: string | null
+          voice_last_sync_at?: string | null
+          voice_last_sync_error?: string | null
+          voice_phone_number_snapshot?: string | null
           voice_provider?: string | null
           voice_provider_agent_id?: string | null
           voice_provider_voice_id?: string | null
           voice_speed?: string
+          voice_sync_status?: string | null
           voicemail_enabled?: boolean | null
           voicemail_fallback?: boolean
           warranty_terms?: string | null
