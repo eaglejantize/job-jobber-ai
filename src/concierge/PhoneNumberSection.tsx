@@ -5,6 +5,7 @@ import type { UseConcierge } from "./useConcierge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { derivePhoneLifecycle, describePhoneLifecycle } from "@/onboarding/status";
 
 export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
   const [replacing, setReplacing] = useState(false);
@@ -17,12 +18,39 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
   const [areaCode, setAreaCode] = useState(preferred);
 
   const showAssigned = assigned && !replacing;
+  const lifecycle = derivePhoneLifecycle(
+    ctx.current as unknown as Record<string, unknown> | null | undefined,
+  );
+  const lifecycleTone: Record<typeof lifecycle.state, string> = {
+    not_started: "border-amber-500/30 bg-amber-500/10",
+    configured: "border-sky-500/30 bg-sky-500/10",
+    pending_provisioning: "border-sky-500/30 bg-sky-500/10",
+    ready: "border-emerald-500/30 bg-emerald-500/10",
+    error: "border-destructive/40 bg-destructive/10",
+  };
 
   return (
     <div className="space-y-3">
+      {assigned && (
+        <div className={`rounded-lg border p-3 text-sm text-foreground ${lifecycleTone[lifecycle.state]}`}>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="font-medium">
+                Vektuor AI Phone Number — <span className="uppercase text-xs tracking-wide">{lifecycle.state.replace(/_/g, " ")}</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{describePhoneLifecycle(lifecycle)}</p>
+              {lifecycle.state !== "ready" && lifecycle.missing.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Pending: {lifecycle.missing.join(", ")}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {!showAssigned && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-foreground">
-          Choose one of the options below to connect a business phone number before continuing setup.
+          Choose one of the options below to connect a Vektuor AI phone number for call capture. This is separate from your existing Business Phone Number.
         </div>
       )}
       {showAssigned && (
@@ -77,7 +105,7 @@ export default function PhoneNumberSection({ ctx }: { ctx: UseConcierge }) {
               .update({
                 assigned_callcapture_number: phone,
                 number_status: newStatus,
-              } as never)
+              })
               .eq("id", ctx.clientId);
           }
           setReplacing(false);
