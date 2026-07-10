@@ -64,31 +64,38 @@ Deno.serve(async (req) => {
     const { data: row, error: rowErr } = await (admin.from("callcapture_voice_catalog") as {
       select: (columns: string) => {
         eq: (column: string, value: string) => {
-          maybeSingle: () => Promise<{ data: { id: string; provider_voice_id: string } | null; error: { message: string } | null }>;
+          maybeSingle: () => Promise<{ data: { id: string; provider_voice_id: string; provider: string; provider_verified: boolean } | null; error: { message: string } | null }>;
         };
       };
     })
-      .select("id, provider_voice_id")
+      .select("id, provider_voice_id, provider, provider_verified")
       .eq("id", voiceCatalogId)
       .maybeSingle();
 
     if (rowErr || !row) return json({ error: rowErr?.message ?? "Voice catalog row not found" }, 404);
 
-    const listResp = await fetch("https://api.vapi.ai/voice", {
-      headers: { Authorization: `Bearer ${vapiKey}` },
-    });
-    const listRaw = await listResp.json().catch(() => ({}));
-    if (!listResp.ok) return json({ error: `Provider lookup failed: ${listResp.status}` }, 502);
+    // Vapi's /voice endpoint only lists custom cloned voices and 404s for
+    // native voices (Emma, Nico, etc.). Native voices are verified via the
+    // seed migration's `provider_verified` flag. Only hit the listing API
+    // for non-vapi providers or custom voice lookups.
+    let verified = row.provider === "vapi" ? row.provider_verified === true : false;
+    let preview: string | null = null;
 
-    const list = Array.isArray(listRaw) ? listRaw : ((listRaw as { voices?: unknown[]; data?: unknown[] }).voices ?? (listRaw as { data?: unknown[] }).data ?? []);
-    const matched = list.find((v) => {
-      const voice = v as { id?: string; voiceId?: string; voice_id?: string };
-      const id = String(voice.id ?? voice.voiceId ?? voice.voice_id ?? "");
-      return id === row.provider_voice_id;
-    }) as { previewUrl?: string; preview_url?: string } | undefined;
-
-    const verified = !!matched;
-    const preview = matched ? String(matched.previewUrl ?? matched.preview_url ?? "") || null : null;
+    if (row.provider !== "vapi") {
+      const listResp = await fetch("https://api.vapi.ai/voice", {
+        headers: { Authorization: `Bearer ${vapiKey}` },
+      });
+      const listRaw = await listResp.json().catch(() => ({}));
+      if (!listResp.ok) return json({ error: `Provider lookup failed: ${listResp.status}` }, 502);
+      const list = Array.isArray(listRaw) ? listRaw : ((listRaw as { voices?: unknown[]; data?: unknown[] }).voices ?? (listRaw as { data?: unknown[] }).data ?? []);
+      const matched = list.find((v) => {
+        const voice = v as { id?: string; voiceId?: string; voice_id?: string };
+        const id = String(voice.id ?? voice.voiceId ?? voice.voice_id ?? "");
+        return id === row.provider_voice_id;
+      }) as { previewUrl?: string; preview_url?: string } | undefined;
+      verified = !!matched;
+      preview = matched ? String(matched.previewUrl ?? matched.preview_url ?? "") || null : null;
+    }
 
     const { error: updErr } = await (admin.from("callcapture_voice_catalog") as {
       update: (payload: Record<string, unknown>) => {
