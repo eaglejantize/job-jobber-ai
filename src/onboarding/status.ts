@@ -10,6 +10,21 @@ export type ItemStatus =
   | "needs_attention"
   | "skipped";
 
+// Detailed lifecycle for the phone number path. Used by the UI to explain
+// exactly what is pending; the checklist ItemStatus is derived from this.
+export type PhoneLifecycle =
+  | "not_started"
+  | "configured"
+  | "pending_provisioning"
+  | "ready"
+  | "error";
+
+export type PhoneLifecycleInfo = {
+  state: PhoneLifecycle;
+  missing: string[];
+  errorMessage: string | null;
+};
+
 export type ItemId =
   | "business_info"
   | "services"
@@ -110,6 +125,72 @@ function isPhoneReady(c: Client): boolean {
   if (!nonEmpty(c?.vapi_phone_number_id)) return false;
   if (!nonEmpty(c?.vapi_assistant_id)) return false;
   return true;
+}
+
+// Derive an explicit phone lifecycle state so the UI can tell the user
+// exactly what is pending or which requirement failed. Never traps the
+// user: `configured` and `pending_provisioning` are valid intermediate
+// states that allow save-and-continue.
+export function derivePhoneLifecycle(c: Client | null | undefined): PhoneLifecycleInfo {
+  const client = (c ?? {}) as Client;
+  const hasNumber = nonEmpty(client.assigned_callcapture_number);
+  const numberStatus = String(client.number_status ?? "");
+  const webhookStatus = String(client.webhook_status ?? "");
+  const vapiPhoneId = client.vapi_phone_number_id;
+  const vapiAssistantId = client.vapi_assistant_id;
+  const lastSyncStatus = String((client as Record<string, unknown>).last_vapi_sync_status ?? "");
+
+  if (!hasNumber) {
+    return { state: "not_started", missing: ["assigned_callcapture_number"], errorMessage: null };
+  }
+
+  if (numberStatus === "error" || lastSyncStatus.startsWith("error:") || webhookStatus === "failed") {
+    return {
+      state: "error",
+      missing: [],
+      errorMessage:
+        numberStatus === "error"
+          ? "Number provisioning failed"
+          : webhookStatus === "failed"
+          ? "Webhook configuration failed"
+          : lastSyncStatus.replace(/^error:\s*/, ""),
+    };
+  }
+
+  const missing: string[] = [];
+  if (numberStatus !== "active") missing.push("number_status=active");
+  if (webhookStatus !== "configured") missing.push("webhook_status=configured");
+  if (!nonEmpty(vapiPhoneId)) missing.push("vapi_phone_number_id");
+  if (!nonEmpty(vapiAssistantId)) missing.push("vapi_assistant_id");
+
+  if (missing.length === 0) {
+    return { state: "ready", missing: [], errorMessage: null };
+  }
+
+  // Number is present but provider linkage is still coming up.
+  if (numberStatus === "pending" || !nonEmpty(vapiPhoneId) || webhookStatus === "pending") {
+    return { state: "pending_provisioning", missing, errorMessage: null };
+  }
+
+  // Number saved locally but no provider work has succeeded yet.
+  return { state: "configured", missing, errorMessage: null };
+}
+
+export function describePhoneLifecycle(info: PhoneLifecycleInfo): string {
+  switch (info.state) {
+    case "not_started":
+      return "No Vektuor AI phone number selected yet.";
+    case "configured":
+      return "Number saved. Waiting for provider setup to start.";
+    case "pending_provisioning":
+      return "Provisioning your number and connecting the AI assistant. This usually takes under a minute.";
+    case "ready":
+      return "Number is live and ready to receive calls.";
+    case "error":
+      return info.errorMessage
+        ? `Setup failed: ${info.errorMessage}. Use Repair routing to retry.`
+        : "Setup failed. Use Repair routing to retry.";
+  }
 }
 
 function derived(c: Client): Record<ItemId, ItemStatus> {
