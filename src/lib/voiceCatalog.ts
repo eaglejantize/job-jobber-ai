@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { VOICES } from "@/lib/voices";
 
 export type VoiceSyncStatus = "synced" | "failed" | "pending";
 
@@ -18,6 +17,8 @@ export type VoiceCatalogOption = {
   pace?: string | null;
   best_use?: string | null;
   verified_active: boolean;
+  provider_verified: boolean;
+  preview_verified: boolean;
   is_active: boolean;
   sort_order: number;
 };
@@ -30,41 +31,24 @@ export type VoiceSelection = {
   voice_label: string;
 };
 
-function toLegacyFallback(): VoiceCatalogOption[] {
-  return VOICES.map((v, idx) => ({
-    id: `legacy-${v.id}`,
-    customer_category: "legacy",
-    label: v.label,
-    persona: v.persona,
-    provider: "vapi",
-    provider_voice_id: "Elliot",
-    preview_url: v.previewUrl,
-    preview_source: "local",
-    description: v.description,
-    verified_active: false,
-    is_active: true,
-    sort_order: idx + 1000,
-  }));
-}
-
 export async function loadCuratedVoices(): Promise<{
   voices: VoiceCatalogOption[];
-  source: "catalog" | "legacy";
+  source: "catalog";
   error?: string;
 }> {
   const { data, error } = await supabase
     .from("callcapture_voice_catalog")
     .select(
-      "id, customer_category, label, persona, provider, provider_voice_id, provider_preview_url, local_preview_url, preview_source, description, accent, tone, pace, best_use, verified_active, is_active, sort_order",
+      "id, customer_category, label, persona, provider, provider_voice_id, provider_preview_url, local_preview_url, preview_source, description, accent, tone, pace, best_use, verified_active, provider_verified, preview_verified, is_active, sort_order",
     )
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
   if (error) {
-    return { voices: toLegacyFallback(), source: "legacy", error: error.message };
+    return { voices: [], source: "catalog", error: error.message };
   }
   if (!data || data.length === 0) {
-    return { voices: toLegacyFallback(), source: "legacy" };
+    return { voices: [], source: "catalog" };
   }
 
   const normalized: VoiceCatalogOption[] = data.map((row) => {
@@ -84,6 +68,8 @@ export async function loadCuratedVoices(): Promise<{
       pace: string | null;
       best_use: string | null;
       verified_active: boolean;
+      provider_verified: boolean;
+      preview_verified: boolean;
       is_active: boolean;
       sort_order: number;
     };
@@ -102,6 +88,8 @@ export async function loadCuratedVoices(): Promise<{
       pace: r.pace,
       best_use: r.best_use,
       verified_active: r.verified_active,
+      provider_verified: r.provider_verified,
+      preview_verified: r.preview_verified,
       is_active: r.is_active,
       sort_order: r.sort_order,
     };
@@ -112,7 +100,7 @@ export async function loadCuratedVoices(): Promise<{
 
 export function selectionFromOption(option: VoiceCatalogOption): VoiceSelection {
   return {
-    selected_voice_catalog_id: option.id.startsWith("legacy-") ? null : option.id,
+    selected_voice_catalog_id: option.id,
     voice_provider: option.provider,
     voice_provider_voice_id: option.provider_voice_id,
     voice_id: option.provider_voice_id,
