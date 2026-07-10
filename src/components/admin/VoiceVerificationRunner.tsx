@@ -103,6 +103,30 @@ export default function VoiceVerificationRunner() {
     }
   }
 
+  const fullJson = typeof result?.body === "string" ? result.body : JSON.stringify(result?.body ?? null, null, 2);
+
+  async function copyJson() {
+    try {
+      await navigator.clipboard.writeText(fullJson);
+      setCopyMsg("Copied to clipboard.");
+    } catch {
+      setCopyMsg("Copy failed.");
+    }
+    setTimeout(() => setCopyMsg(null), 2000);
+  }
+
+  function downloadJson() {
+    const blob = new Blob([fullJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vapi-voice-verification.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   const emailMismatch = sessionEmail && sessionEmail.toLowerCase() !== EXPECTED_EMAIL;
 
   const b = (result?.body ?? {}) as {
